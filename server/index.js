@@ -83,7 +83,7 @@ const server = http.createServer(async (req, res) => {
 const wss = new WebSocketServer({ noServer: true });
 server.on("upgrade", (req, sock, head) => {
   const u = new URL(req.url, "http://x");
-  if (u.pathname === "/rpc" && u.searchParams.get("token") !== TOKEN) { sock.destroy(); return; }
+  if (u.pathname === "/rpc" && u.searchParams.get("token") !== TOKEN) { log("rpc rejected: bad token"); sock.destroy(); return; }
   wss.handleUpgrade(req, sock, head, (ws) => {
     if (u.pathname === "/rpc") {
       rpcSock = ws; log("rpc bridge connected");
