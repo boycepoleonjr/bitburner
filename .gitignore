@@ -1,0 +1,7 @@
+node_modules/
+.bb-token
+backups/
+game/data/telemetry.txt
+game/agent/jobs/
+game/agent/rpc-config.txt
+.DS_Store

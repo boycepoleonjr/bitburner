@@ -1,0 +1,229 @@
+// predictor.js (agent/predictor.txt) — self-calibrating milestone ETA predictor. Runs in the page (no game RAM).
+// Load: eval(bb.read('agent/predictor.txt'))  -> window.__pred2
+//
+// Decomposition of "when will metric X reach target T?":
+//   1. STATE     x(t)            telemetry value now (money, hacking exp, faction rep)
+//   2. TARGET    T               levels are converted to exp with the skill formula
+//   3. RATE      dx/dt           estimated by several competing MODELS (slopes over 5/15/45m, quadratic, income, ledger)
+//   4. GROWTH    d²x/dt²         captured by the quadratic model
+//   5. BREAKS    installs, frozen-tab gaps -> data is split into continuous RUNS; nothing is fit across a break
+//   6. ERROR     ln(actual/pred) per model, per metric kind, per horizon bucket -> bias + spread
+//   7. LEARNING  walk-forward BACKTEST over all telemetry + every LIVE prediction resolved later.
+//                Calibration = pick the lowest-spread model per (kind,bucket), correct its bias, size the 80% band.
+//                Recalibrates automatically when new telemetry/outcomes arrive (every check-in, if >2h old).
+(() => {
+  const TELE = "/data/telemetry.txt", LOG = "/data/pred2.txt", CAL = "/data/pred-calib.txt";
+  const GAP = 3 * 60000, Z80 = 1.2816, HALF_H = 12;
+  const BUCKETS = [["<20m", 20], ["20-60m", 60], ["1-3h", 180], [">3h", Infinity]];
+  const bucketOf = (ms) => BUCKETS.find(([, m]) => ms / 6e4 < m)[0];
+  const parse = (txt) => (txt || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+  const f = (e) => 32 * Math.log(e + 534.6) - 200;
+  const expFor = (L, m) => Math.exp((L / m + 200) / 32) - 534.6;
+  const fitM = (recs) => { let lo = 0, hi = Infinity; for (const r of recs.slice(-30)) { const v = f(r.exp.hacking); if (v <= 0 || r.lvl.hacking <= 1) continue; lo = Math.max(lo, r.lvl.hacking / v); hi = Math.min(hi, (r.lvl.hacking + 1) / v); } return lo > 0 ? (hi < Infinity && lo <= hi ? (lo + hi) / 2 : lo) : null; };
+
+  // ---- data: continuous runs (same install, no gap > 3 min)
+  const runs = () => {
+    const recs = parse(bb.read(TELE)), out = []; let cur = [];
+    for (const r of recs) {
+      const p = cur[cur.length - 1];
+      if (p && (Math.abs(r.lastAug - p.lastAug) > 5000 || r.t - p.t > GAP)) { out.push(cur); cur = []; }
+      cur.push(r);
+    }
+    if (cur.length) out.push(cur);
+    return out;
+  };
+  // metric accessors
+  const getter = (spec) => spec.kind === "money" ? (r) => r.money : spec.kind === "level" ? (r) => r.exp[spec.skill || "hacking"] : (r) => (r.rep || {})[spec.faction];
+
+  // ---- models: each returns predicted duration (ms) to reach target T from history h (ending now) or null
+  const lsq = (pts) => { const n = pts.length; if (n < 3) return null; const mt = pts.reduce((a, p) => a + p[0], 0) / n, my = pts.reduce((a, p) => a + p[1], 0) / n; let num = 0, den = 0; for (const [t, y] of pts) { num += (t - mt) * (y - my); den += (t - mt) ** 2; } return den ? num / den : null; };
+  const win = (h, get, mins) => { const t1 = h[h.length - 1].t; const pts = []; for (let i = h.length - 1; i >= 0 && h[i].t >= t1 - mins * 6e4; i--) { const y = get(h[i]); if (y != null) pts.push([h[i].t - t1, y]); } return pts; };
+  const slopeModel = (mins) => (h, get, T) => { const s = lsq(win(h, get, mins)), v = get(h[h.length - 1]); return s > 0 ? (T - v) / s : null; };
+  const quad = (h, get, T) => {
+    const pts = win(h, get, 45); if (pts.length < 8) return null;
+    // least squares y = a + b t + c t^2 (t in minutes)
+    let S = [0, 0, 0, 0, 0], Y = [0, 0, 0];
+    for (const [ms, y] of pts) { const t = ms / 6e4; const p = [1, t, t * t, t ** 3, t ** 4]; for (let k = 0; k < 5; k++) S[k] += p[k]; Y[0] += y; Y[1] += y * t; Y[2] += y * t * t; }
+    const M = [[S[0], S[1], S[2]], [S[1], S[2], S[3]], [S[2], S[3], S[4]]];
+    const det = (m) => m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+    const D = det(M); if (!D) return null;
+    const col = (i) => M.map((row, r) => row.map((v, c) => (c === i ? Y[r] : v)));
+    const a = det(col(0)) / D, b = det(col(1)) / D, c = det(col(2)) / D;
+    const v = get(h[h.length - 1]);
+    // solve c t^2 + b t + (v - T) = 0 from "now" (t=0, using observed v, local slope b)
+    if (b <= 0 && c <= 0) return null;
+    if (Math.abs(c) < 1e-12) return b > 0 ? ((T - v) / b) * 6e4 : null;
+    const disc = b * b - 4 * c * (v - T); if (disc < 0) return null;
+    const roots = [(-b + Math.sqrt(disc)) / (2 * c), (-b - Math.sqrt(disc)) / (2 * c)].filter((x) => x > 0);
+    return roots.length ? Math.min(...roots) * 6e4 : null;
+  };
+  const incomeModel = (h, get, T) => { const last = h.slice(-10), inc = last.reduce((a, r) => a + (r.income || 0), 0) / last.length / 1e3; const v = get(h[h.length - 1]); return inc > 0 ? (T - v) / inc : null; };
+  const ledgerModel = (h, get, T) => {
+    const E = (r) => r.src ? Object.entries(r.src).reduce((a, [k, x]) => a + (x > 0 ? x : 0) + (k === "servers" || k === "hacknet_expenses" ? x : 0), 0) : null;
+    const s = lsq(win(h, E, 45)), v = get(h[h.length - 1]); return s > 0 ? (T - v) / s : null;
+  };
+  // planned-spend model (money only): net earning rate from the ledger (fallback 45m slope), then walk the autopilot's
+  // purchase queue: every purchase whose trigger level is below the target fires first and knocks its cost off.
+  const LEDGER_E = (r) => r.src ? Object.entries(r.src).reduce((a, [k, x]) => a + (x > 0 ? x : 0) + (k === "servers" || k === "hacknet_expenses" ? x : 0), 0) : null;
+  const plannedModel = (h, get, T) => {
+    const now = h[h.length - 1]; if (!now.plan) return null;
+    let rate = lsq(win(h, LEDGER_E, 45)); if (!(rate > 0)) rate = lsq(win(h, get, 45)); if (!(rate > 0)) return null;
+    let m = get(now), t = 0;
+    for (const p of now.plan.filter((p) => p.thr < T * 0.999).sort((a, b) => a.thr - b.thr)) {
+      if (m < p.thr) { t += (p.thr - m) / rate; m = p.thr; }
+      m -= p.cost;
+    }
+    return m >= T ? t : t + (T - m) / rate;
+  };
+  const MODELS = { s5: slopeModel(5), s15: slopeModel(15), s45: slopeModel(45), quad, income: incomeModel, ledger: ledgerModel, planned: plannedModel };
+  const modelsFor = (kind) => kind === "money" ? Object.keys(MODELS) : ["s5", "s15", "s45", "quad"];
+  const runModels = (h, spec, T) => { const get = getter(spec), out = {}; for (const m of modelsFor(spec.kind)) { try { const d = MODELS[m](h, get, T); if (d && isFinite(d) && d > 0 && d < 7 * 864e5) out[m] = d; } catch {} }
+    const vals = Object.values(out); if (vals.length >= 2) { const s = [...vals].sort((a, b) => a - b), k = s.length; out.med = k % 2 ? s[(k - 1) / 2] : (s[k / 2 - 1] + s[k / 2]) / 2; }
+    return out; };
+  const median = (xs) => { const s = [...xs].sort((a, b) => a - b); const n = s.length; return n ? (n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2) : null; };
+
+  // ---- walk-forward backtest over all runs
+  const backtest = () => {
+    const samples = [];
+    for (const run of runs()) {
+      if (run.length < 50) continue;
+      for (let i = 45; i < run.length - 5; i += 3) {
+        const h = run.slice(0, i + 1), now = run[i];
+        const targets = [];
+        for (const k of [1.25, 2, 5]) targets.push({ spec: { kind: "money" }, T: now.money * k, need: now.money > 1e5 });
+        const m = fitM(h);
+        if (m) for (const d of [3, 10, 30]) targets.push({ spec: { kind: "level", skill: "hacking" }, T: expFor(now.lvl.hacking + d, m), need: true });
+        const wf = now.work && now.work.type === "FACTION" ? now.work.name : null;
+        if (wf && (now.rep || {})[wf] > 100) for (const k of [1.2, 1.5, 2.5]) targets.push({ spec: { kind: "rep", faction: wf }, T: now.rep[wf] * k, need: true });
+        for (const tg of targets) {
+          if (!tg.need) continue;
+          const get = getter(tg.spec);
+          let j = i + 1; while (j < run.length && !(get(run[j]) >= tg.T)) j++;
+          if (j >= run.length) continue; // censored: not reached within this run
+          const preds = runModels(h, tg.spec, tg.T); if (!Object.keys(preds).length) continue;
+          samples.push({ kind: tg.spec.kind, t: now.t, actual: run[j].t - now.t, preds, src: "bt" });
+        }
+      }
+    }
+    return samples;
+  };
+
+  // ---- calibration from samples (backtest + live, live weighted x3)
+  // table[kind|bucket] = models sorted by weighted log-error spread, each with bias (mean ln(actual/pred)) and sd
+  const buildTable = (samples, now) => {
+    const cells = {};
+    for (const s0 of samples) {
+      const w = s0.w0 * Math.pow(0.5, (now - s0.t) / (HALF_H * 3.6e6));
+      const b = bucketOf(median(Object.values(s0.preds)));
+      for (const key of [`${s0.kind}|${b}`, `${s0.kind}|all`]) {
+        const c = (cells[key] = cells[key] || {});
+        for (const [m, p] of Object.entries(s0.preds)) { const e = Math.log(s0.actual / p), ape = Math.abs(p - s0.actual) / s0.actual; const st = (c[m] = c[m] || { n: 0, W: 0, sum: 0, sq: 0, ape: 0, hit25: 0 }); st.n++; st.W += w; st.sum += w * e; st.sq += w * e * e; st.ape += w * ape; st.hit25 += ape <= 0.25 ? w : 0; }
+      }
+    }
+    const table = {};
+    for (const [key, c] of Object.entries(cells)) {
+      const rows = Object.entries(c).filter(([, st]) => st.n >= 5 && st.W > 0).map(([m, st]) => {
+        const bias = st.sum / st.W, sd = Math.sqrt(Math.max(st.sq / st.W - bias * bias, 1e-4));
+        return { m, n: st.n, bias: +bias.toFixed(3), sd: +sd.toFixed(3), mapeRaw: +(100 * st.ape / st.W).toFixed(1), hit25Raw: +(st.hit25 / st.W).toFixed(2) };
+      }).sort((a, b) => a.sd - b.sd);
+      if (rows.length) table[key] = { best: rows[0], models: rows };
+    }
+    return table;
+  };
+  const applyCal = (table, kind, preds, policy) => {
+    const b = bucketOf(median(Object.values(preds)));
+    const pol = policy && policy[kind];
+    if (pol && pol.use === "median") { const d = median(Object.values(preds)); return { model: "med", b, d, lo: d * Math.exp(-pol.q80), hi: d * Math.exp(pol.q80) }; }
+    const cell = table && (table[`${kind}|${b}`] || table[`${kind}|all`]);
+    const pick = cell && cell.models.find((r) => preds[r.m] != null);
+    if (!pick) { const d = median(Object.values(preds)); return { model: "median(uncal)", b, d, lo: Math.min(...Object.values(preds)), hi: Math.max(...Object.values(preds)) }; }
+    const d = preds[pick.m] * Math.exp(pick.bias), w = pol ? pol.q80 : Z80 * pick.sd;
+    return { model: pick.m, b, d, lo: d * Math.exp(-w), hi: d * Math.exp(w) };
+  };
+  const allSamples = () => [...backtest().map((s) => ({ ...s, w0: 1 })), ...liveSamples().map((s) => ({ ...s, w0: 3 }))];
+  const calibrate = () => {
+    const S = allSamples(), table = buildTable(S, Date.now());
+    // meta-policy learned from the honest walk-forward score: per kind, use whichever of {calibrated pick, plain median}
+    // had lower out-of-sample error, and size the band from the empirical 80th percentile of its |ln(actual/pred)|
+    const wf = evaluate({ raw: true }), policy = {};
+    const q = (xs, p) => { const s = [...xs].sort((a, b) => a - b); return s.length ? s[Math.min(s.length - 1, Math.floor(p * s.length))] : null; };
+    for (const [k, o] of Object.entries(wf)) { const useRaw = o.rawApe < o.ape; const errs = (useRaw ? o.rle : o.le).slice(-300); policy[k] = { use: useRaw ? "median" : "calibrated", q80: +(q(errs, 0.8) || 0.5).toFixed(3), n: o.n }; }
+    const cal = { t: Date.now(), nBacktest: S.filter((s) => s.src === "bt").length, nLive: S.filter((s) => s.src === "live").length, table, policy };
+    bb.write(CAL, JSON.stringify(cal), "w");
+    return cal;
+  };
+  // honest out-of-sample score: walk forward in time, calibrate only on samples whose outcome was known before each prediction
+  const evaluate = (opts = {}) => {
+    const S = allSamples().sort((a, b) => a.t - b.t), out = {};
+    let table = null, lastBuild = 0;
+    for (let i = 0; i < S.length; i++) {
+      const s0 = S[i];
+      if (!table || s0.t - lastBuild > 30 * 6e4) { table = buildTable(S.filter((x) => x.t + x.actual <= s0.t), s0.t); lastBuild = s0.t; }
+      const c = applyCal(table, s0.kind, s0.preds), raw = median(Object.values(s0.preds));
+      const o = (out[s0.kind] = out[s0.kind] || { n: 0, inBand: 0, w25: 0, ape: 0, rawW25: 0, rawApe: 0 });
+      o.n++; o.inBand += s0.actual >= c.lo && s0.actual <= c.hi ? 1 : 0;
+      const ape = Math.abs(c.d - s0.actual) / s0.actual, rape = Math.abs(raw - s0.actual) / s0.actual;
+      o.w25 += ape <= 0.25 ? 1 : 0; o.ape += ape; o.rawW25 += rape <= 0.25 ? 1 : 0; o.rawApe += rape;
+      (o.le = o.le || []).push(Math.abs(Math.log(s0.actual / c.d))); (o.rle = o.rle || []).push(Math.abs(Math.log(s0.actual / raw)));
+    }
+    if (opts.raw) return out;
+    return Object.fromEntries(Object.entries(out).map(([k, o]) => [k, { n: o.n, inBand: +(o.inBand / o.n).toFixed(2), within25: +(o.w25 / o.n).toFixed(2), mape: +(100 * o.ape / o.n).toFixed(0), uncal_within25: +(o.rawW25 / o.n).toFixed(2), uncal_mape: +(100 * o.rawApe / o.n).toFixed(0) }]));
+  };
+  const loadCal = () => { try { return JSON.parse(bb.read(CAL) || "null"); } catch { return null; } };
+
+  // ---- live prediction (calibrated) + logging + resolution
+  const predict = (spec, { log = true } = {}) => {
+    const rs = runs(), run = rs[rs.length - 1]; if (!run || run.length < 5) return { error: "not enough telemetry" };
+    const now = run[run.length - 1], get = getter(spec);
+    let T = spec.target;
+    if (spec.kind === "level") { const m = fitM(run); if (!m) return { error: "cannot fit multiplier" }; if (now.lvl[spec.skill || "hacking"] >= spec.target) return { done: true }; T = expFor(spec.target, m); }
+    const v = get(now); if (v != null && v >= T) return { done: true };
+    const preds = runModels(run, spec, T); if (!Object.keys(preds).length) return { error: "no positive rate yet" };
+    const cal = loadCal(), { model, b, d, lo, hi } = applyCal(cal && cal.table, spec.kind, preds, cal && cal.policy);
+    const rec = { type: "p", id: now.t.toString(36) + Math.random().toString(36).slice(2, 5), made: now.t, lastAug: now.lastAug, spec, T, preds, model, bucket: b,
+      eta: Math.round(now.t + d), lo: Math.round(now.t + lo), hi: Math.round(now.t + hi) };
+    if (log) {
+      // one open prediction per spec per 10 minutes (avoid duplicates from repeated calls)
+      const recent = parse(bb.read(LOG)).filter((p) => p.type === "p" && JSON.stringify(p.spec) === JSON.stringify(spec) && now.t - p.made < 10 * 6e4);
+      if (!recent.length) bb.write(LOG, JSON.stringify(rec) + "\n", "a");
+    }
+    return rec;
+  };
+  const resolve = () => {
+    const log = parse(bb.read(LOG)), done = new Set(log.filter((r) => r.type === "r").map((r) => r.id)), recs = parse(bb.read(TELE)), out = [];
+    for (const p of log.filter((r) => r.type === "p" && !done.has(r.id))) {
+      const get = getter(p.spec), after = recs.filter((r) => r.t > p.made);
+      const hit = after.find((r) => Math.abs(r.lastAug - p.lastAug) < 5000 && get(r) >= p.T);
+      const reset = !hit && after.some((r) => Math.abs(r.lastAug - p.lastAug) > 5000);
+      if (!hit && !reset) continue;
+      const r = { type: "r", id: p.id, at: Date.now() };
+      if (hit) { r.actual = hit.t; r.inBand = hit.t >= p.lo && hit.t <= p.hi; r.pctErr = +(100 * ((p.eta - p.made) - (hit.t - p.made)) / Math.max(hit.t - p.made, 1)).toFixed(1); }
+      else r.void = "install";
+      bb.write(LOG, JSON.stringify(r) + "\n", "a"); out.push(r);
+    }
+    return out;
+  };
+  const liveSamples = () => {
+    const log = parse(bb.read(LOG)), ps = Object.fromEntries(log.filter((r) => r.type === "p").map((p) => [p.id, p]));
+    return log.filter((r) => r.type === "r" && r.actual && ps[r.id]).map((r) => ({ kind: ps[r.id].spec.kind, t: ps[r.id].made, actual: r.actual - ps[r.id].made, preds: ps[r.id].preds, src: "live" }));
+  };
+  const report = () => {
+    const log = parse(bb.read(LOG)), res = log.filter((r) => r.type === "r" && r.actual), cal = loadCal();
+    const n = res.length, band = res.filter((r) => r.inBand).length, w25 = res.filter((r) => Math.abs(r.pctErr) <= 25).length;
+    const mape = n ? res.reduce((a, r) => a + Math.abs(r.pctErr), 0) / n : null;
+    const open = log.filter((r) => r.type === "p").length - log.filter((r) => r.type === "r").length;
+    return { live: { n, inBand: n ? +(band / n).toFixed(2) : null, within25: n ? +(w25 / n).toFixed(2) : null, mape: mape && +mape.toFixed(1), open },
+      calib: cal && { policy: cal.policy, age_h: +((Date.now() - cal.t) / 3.6e6).toFixed(1), nBacktest: cal.nBacktest, nLive: cal.nLive,
+        best: Object.fromEntries(Object.entries(cal.table).filter(([k]) => k.endsWith("|all")).map(([k, c]) => [k.split("|")[0], `${c.best.m} bias ${c.best.bias} sd ${c.best.sd} (n ${c.best.n})`])) } };
+  };
+  // check-in entry point: resolve, recalibrate if stale or new outcomes, then predict+log each spec; returns soonest
+  const tick = (specs) => {
+    const newly = resolve(); const cal = loadCal();
+    if (!cal || newly.length || Date.now() - cal.t > 2 * 3.6e6) calibrate();
+    let best = null; const all = [];
+    for (const s of specs) { const p = predict(s); if (p.done) return { min: 0, spec: s, all }; if (p.eta) { all.push(p); const m = Math.max(0, Math.round((p.eta - Date.now()) / 6e4)); if (!best || m < best.min) best = { min: m, spec: s, rec: p }; } }
+    return best ? { ...best, all, newlyResolved: newly.length } : { all, newlyResolved: newly.length };
+  };
+  window.__pred2 = { runs, backtest, evaluate, bucketOf, median, calibrate, predict, resolve, report, tick, MODELS };
+  return "predictor v2 loaded";
+})();

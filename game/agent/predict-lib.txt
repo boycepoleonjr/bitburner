@@ -1,0 +1,134 @@
+// predict-lib.js — milestone ETA predictor + scorer. Runs in the page (no game RAM), reads
+// /data/telemetry.txt and appends to /data/predictions.txt. Load with: eval(bb.read('agent/predict-lib.txt'))
+(() => {
+  const TELE = "/data/telemetry.txt", PRED = "/data/predictions.txt";
+  const SKILLS = ["hacking", "strength", "defense", "dexterity", "agility", "charisma"];
+  const parse = (txt) => txt.split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+  const load = () => parse(bb.read(TELE));
+  const preds = () => parse(bb.read(PRED));
+  // Records since the last install (same lastAug); optionally require same work type as the latest record.
+  const segment = (recs, sameWork = false) => {
+    if (!recs.length) return [];
+    const last = recs[recs.length - 1];
+    let out = recs.filter((r) => Math.abs(r.lastAug - last.lastAug) < 5000);
+    if (sameWork) {
+      const key = (r) => (r.work ? r.work.type + ":" + r.work.name : "none");
+      let i = out.length - 1; while (i > 0 && key(out[i - 1]) === key(last)) i--; out = out.slice(i);
+    }
+    return out;
+  };
+  // least-squares slope of y over t (per ms) within the last `win` minutes
+  const slope = (recs, get, win) => {
+    const t1 = recs[recs.length - 1].t, pts = recs.filter((r) => r.t >= t1 - win * 60000).map((r) => [r.t, get(r)]).filter((p) => p[1] != null);
+    if (pts.length < 3) return null;
+    const n = pts.length, mt = pts.reduce((a, p) => a + p[0], 0) / n, my = pts.reduce((a, p) => a + p[1], 0) / n;
+    let num = 0, den = 0; for (const [t, y] of pts) { num += (t - mt) * (y - my); den += (t - mt) ** 2; }
+    return den ? num / den : null;
+  };
+  // Skill formula (repo: calculateSkill): lvl = max(1, floor(m*(32*ln(exp+534.6)-200))). Fit effective m from recent records.
+  const f = (exp) => 32 * Math.log(exp + 534.6) - 200;
+  const fitM = (recs, sk) => {
+    let lo = 0, hi = Infinity;
+    for (const r of recs.slice(-30)) { const v = f(r.exp[sk]); if (v <= 0 || r.lvl[sk] <= 1) continue; lo = Math.max(lo, r.lvl[sk] / v); hi = Math.min(hi, (r.lvl[sk] + 1) / v); }
+    return lo > 0 && hi < Infinity && lo <= hi ? (lo + hi) / 2 : lo || null;
+  };
+  const expFor = (L, m) => Math.exp((L / m + 200) / 32) - 534.6;
+  const band = (remaining, rates) => {
+    const r = rates.filter((x) => x && x > 0); if (!r.length) return null;
+    const eta = (x) => remaining / x; // ms
+    const mid = Math.floor(r.length / 2), med = r.length % 2 ? r[mid] : (r[mid - 1] + r[mid]) / 2;
+    return { p50: eta(med), fast: eta(Math.max(...r)), slow: eta(Math.min(...r)) };
+  };
+  const id = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+  const P = {
+    load, preds, segment,
+    // kind: 'level' {skill, target} | 'money' {target} | 'rep' {faction, target}
+    predict(spec, opts = {}) {
+      const all = load(); if (all.length < 3) return { error: "not enough telemetry" };
+      const seg = segment(all, spec.kind === "level"), last = all[all.length - 1];
+      let cur, remaining, rates, method, accelEta = null;
+      if (spec.kind === "level") {
+        const m = fitM(segment(all), spec.skill); if (!m) return { error: "cannot fit multiplier" };
+        cur = last.lvl[spec.skill]; if (cur >= spec.target) return { done: true, cur };
+        remaining = expFor(spec.target, m) - last.exp[spec.skill];
+        rates = [5, 15, 45].map((w) => slope(seg, (r) => r.exp[spec.skill], w)).sort((a, b) => a - b);
+        method = `exp-formula m=${m.toFixed(4)} expNeed=${Math.round(remaining)}`;
+      } else if (spec.kind === "money") {
+        cur = last.money; if (cur >= spec.target) return { done: true, cur };
+        remaining = spec.target - cur;
+        // income field is smoother than money deltas (purchases cause drops); also use observed money slope
+        const inc = seg.slice(-10).map((r) => r.income * 1e-3); // $/s -> $/ms
+        const avgInc = inc.reduce((a, b) => a + b, 0) / (inc.length || 1);
+        // ledger-based net rate: all earnings minus continuous daemon spend (servers + hacknet), ignoring one-offs
+        // (augs, programs/"other", classes, stock buys) that are agent decisions, not drift
+        const EARN = (r) => Object.values(r.src).filter((v) => v > 0).reduce((a, b) => a + b, 0);
+        const DRIFT = (r) => (r.src.servers || 0) + (r.src.hacknet_expenses || 0);
+        const lseg = seg.filter((r) => r.src);
+        const ledger = lseg.length >= 3 ? slope(lseg, (r) => EARN(r) + DRIFT(r), 45) : null;
+        rates = [avgInc, slope(seg, (r) => r.money, 15), slope(seg, (r) => r.money, 45), ledger].filter((x) => x != null).sort((a, b) => a - b);
+        method = `income avg=${(avgInc * 1e3).toFixed(0)}/s + money slope${ledger != null ? ` + ledger net=${(ledger * 1e3).toFixed(0)}/s` : ""}`;
+        // growth-aware: income trend a ($/ms^2) over 45m; solve 0.5*a*t^2 + inc*t = remaining
+        const a = slope(seg, (r) => r.income * 1e-3, 45), inc0 = seg[seg.length - 1].income * 1e-3;
+        if (a && a > 0 && inc0 > 0) { accelEta = (-inc0 + Math.sqrt(inc0 * inc0 + 2 * a * remaining)) / a; method += ` accel=${(a * 1e3 * 6e4).toFixed(1)}$/s per min`; }
+      } else if (spec.kind === "rep") {
+        cur = last.rep[spec.faction] ?? 0; if (cur >= spec.target) return { done: true, cur };
+        remaining = spec.target - cur;
+        rates = [5, 15, 45].map((w) => slope(seg, (r) => r.rep[spec.faction], w)).sort((a, b) => a - b);
+        method = "rep slope";
+      } else return { error: "unknown kind" };
+      const b = band(remaining, rates); if (!b) return { error: "no positive rate yet", cur, remaining };
+      if (accelEta) { b.p50 = accelEta; b.fast = Math.min(b.fast, accelEta); b.slow = Math.max(b.slow, accelEta); }
+      const rec = { type: "pred", id: id(), made: last.t, spec, cur, method,
+        eta: Math.round(last.t + b.p50), etaFast: Math.round(last.t + b.fast), etaSlow: Math.round(last.t + b.slow) };
+      if (!opts.dry) bb.write(PRED, JSON.stringify(rec) + "\n", "a");
+      return rec;
+    },
+    // Resolve open predictions whose milestone has been reached (or invalidated by an install).
+    resolve() {
+      const all = load(), ps = preds(), done = new Set(ps.filter((p) => p.type === "res").map((p) => p.id)), out = [];
+      const hit = (s, r) => s.kind === "level" ? r.lvl[s.skill] >= s.target : s.kind === "money" ? r.money >= s.target : (r.rep[s.faction] ?? 0) >= s.target;
+      for (const p of ps.filter((p) => p.type === "pred" && !done.has(p.id))) {
+        const after = all.filter((r) => r.t > p.made);
+        const h = after.find((r) => hit(p.spec, r));
+        const madeRec = all.find((r) => r.t === p.made);
+        const reset = madeRec && after.find((r) => Math.abs(r.lastAug - madeRec.lastAug) > 5000 && !hit(p.spec, r));
+        if (!h && !reset) continue;
+        const res = { type: "res", id: p.id, at: Date.now() };
+        if (h) { res.actual = h.t; res.errMin = +((p.eta - h.t) / 6e4).toFixed(1); res.pctErr = +(100 * (p.eta - h.t) / Math.max(h.t - p.made, 1)).toFixed(1); res.inBand = h.t >= p.etaFast && h.t <= p.etaSlow; }
+        else res.void = "install before milestone";
+        bb.write(PRED, JSON.stringify(res) + "\n", "a"); out.push(res);
+      }
+      return out;
+    },
+    // Minutes until the soonest of several actionable milestones (dry run, nothing written). Feeds snapshot etaMin.
+    nextEta(specs) {
+      let best = null;
+      for (const s of specs) {
+        const p = P.predict(s, { dry: true });
+        if (p.done) return { min: 0, spec: s };
+        if (p.eta) { const m = Math.max(0, Math.round((p.eta - Date.now()) / 6e4)); if (!best || m < best.min) best = { min: m, spec: s }; }
+      }
+      return best;
+    },
+    // Money ledger since install: earned vs spent by category, hacknet ROI. Feeds the waste experiment.
+    ledger() {
+      const all = load(), last = [...all].reverse().find((r) => r.src); if (!last) return null;
+      const s = last.src, earned = {}, spent = {};
+      for (const [k, v] of Object.entries(s)) (v > 0 ? earned : spent)[k] = v;
+      const sum = (o) => Object.values(o).reduce((a, b) => a + b, 0);
+      return { sinceAugH: +(last.sinceAug / 3.6e6).toFixed(1), earned, spent, net: sum(earned) + sum(spent),
+        hacknetROI: s.hacknet_expenses ? +((s.hacknet || 0) / -s.hacknet_expenses).toFixed(3) : null };
+    },
+    report() {
+      const ps = preds(), res = ps.filter((p) => p.type === "res" && p.actual);
+      const open = ps.filter((p) => p.type === "pred" && !ps.some((r) => r.type === "res" && r.id === p.id));
+      const mape = res.length ? res.reduce((a, r) => a + Math.abs(r.pctErr), 0) / res.length : null;
+      const cover = res.length ? res.filter((r) => r.inBand).length / res.length : null;
+      return { scored: res.length, mapePct: mape && +mape.toFixed(1), bandCoverage: cover && +cover.toFixed(2),
+        open: open.map((p) => ({ id: p.id, spec: p.spec, eta: new Date(p.eta).toLocaleString(), band: [new Date(p.etaFast).toLocaleString(), new Date(p.etaSlow).toLocaleString()] })) };
+    },
+  };
+  window.__pred = P;
+  return "predict-lib loaded";
+})();

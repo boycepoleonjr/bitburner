@@ -1,0 +1,14 @@
+{
+  "name": "bitburner-agent",
+  "private": true,
+  "type": "module",
+  "description": "Autonomous Bitburner agent: in-game automation + a local bridge server so any agent can drive the game (browser or Steam) without Claude in Chrome.",
+  "bin": { "bb": "server/cli.js" },
+  "scripts": {
+    "start": "node server/index.js",
+    "bb": "node server/cli.js",
+    "test": "node test/smoke.js"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": { "ws": "^8.18.0" }
+}
