@@ -9,6 +9,7 @@ import path from "node:path";
 import { WebSocketServer } from "ws";
 import { pull, push } from "./sync.js";
 import { backup } from "./backup.js";
+import { importSave } from "./cdp.js";
 import { ROOT, PORT, HOST, loadToken } from "./config.js";
 
 const TOKEN = loadToken();
@@ -69,6 +70,7 @@ const routes = {
   "POST /api/remote": async (b) => remote(b.method, b.params || {}),
   "POST /api/pull": async (b) => pull(remote, b),
   "POST /api/push": async (b) => push(remote, b),
+  "POST /api/import-save": async (b) => importSave(b.b64),
   "POST /api/backup": async () => backup({ rpc: rpcSock ? rpc : null, remote: game ? remote : null }),
 };
 

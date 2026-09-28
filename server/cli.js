@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // bb CLI — talks to the local bb server.
-//   bb status | checkin | pull | push [file..] | backup
+//   bb status | checkin | pull | push [file..] | backup | import-save <save.json.gz>   (BB_URL=https://<host> for hosted)
 //   bb eval '<ns code, async body, use return>'      bb js '<page JS, async body>'
 //   bb read <file> | bb write <file> < stdin | bb note "<msg>" | bb remote <method> '<json params>'
 import fs from "node:fs";
@@ -19,6 +19,7 @@ const map = {
   pull: () => call("pull"),
   push: () => call("push", args.length ? { only: args } : {}),
   backup: () => call("backup"),
+  "import-save": () => call("import-save", { b64: fs.readFileSync(args[0]).toString("base64") }), // hosted only
   eval: () => call("eval", { code: args[0] ?? stdin() }),
   js: () => call("js", { code: args[0] ?? stdin() }),
   read: () => call("read", { file: args[0] }),
@@ -26,7 +27,7 @@ const map = {
   note: () => call("note", { msg: args.join(" ") }),
   remote: () => call("remote", { method: args[0], params: JSON.parse(args[1] || "{}") }),
 };
-if (!map[cmd]) { console.error("usage: bb status|checkin|pull|push|backup|eval|js|read|write|note|remote"); process.exit(1); }
+if (!map[cmd]) { console.error("usage: bb status|checkin|pull|push|backup|import-save|eval|js|read|write|note|remote"); process.exit(1); }
 map[cmd]().then((r) => {
   if (cmd === "read" && r.ok) process.stdout.write(r.value);
   else if (cmd === "checkin" && r.ok && r.value) console.log(r.value.report + (r.value.attention?.length ? `\n\nATTENTION: ${JSON.stringify(r.value.attention)}` : "") + `\nnextMin=${r.value.nextMin}`);

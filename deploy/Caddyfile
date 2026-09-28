@@ -1,0 +1,23 @@
+{
+	admin off
+	auto_https off
+}
+
+:{$PORT} {
+	respond /healthz 200
+
+	# bb server enforces its own Bearer token
+	handle /api/* {
+		reverse_proxy 127.0.0.1:12525
+	}
+
+	# GUI: noVNC behind basic auth
+	handle {
+		basicauth {
+			{$GUI_USER} {$GUI_HASH}
+		}
+		@root path /
+		redir @root /vnc.html?autoconnect=true&resize=scale&reconnect=true
+		reverse_proxy 127.0.0.1:6080
+	}
+}
