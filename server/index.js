@@ -69,7 +69,7 @@ const routes = {
   "POST /api/remote": async (b) => remote(b.method, b.params || {}),
   "POST /api/pull": async (b) => pull(remote, b),
   "POST /api/push": async (b) => push(remote, b),
-  "POST /api/backup": async () => backup(remote),
+  "POST /api/backup": async () => backup({ rpc: rpcSock ? rpc : null, remote: game ? remote : null }),
 };
 
 const server = http.createServer(async (req, res) => {
@@ -101,4 +101,4 @@ server.listen(PORT, HOST, () => log(`bb server on ${HOST}:${PORT} — token in .
 
 // scheduled save backups (default every 60 min; BB_BACKUP_MIN=0 disables)
 const every = Number(process.env.BB_BACKUP_MIN ?? 60);
-if (every > 0) setInterval(() => { if (game) backup(remote).then((r) => log("backup", r.file)).catch((e) => log("backup failed:", e.message)); }, every * 60000);
+if (every > 0) setInterval(() => { if (game || rpcSock) backup({ rpc: rpcSock ? rpc : null, remote: game ? remote : null }).then((r) => log("backup", r.file)).catch((e) => log("backup failed:", e.message)); }, every * 60000);

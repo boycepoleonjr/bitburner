@@ -8,7 +8,8 @@ import { PORT, HOST, loadToken } from "./config.js";
 
 const [cmd, ...args] = process.argv.slice(2);
 const call = async (route, payload, method = "POST") => {
-  const r = await fetch(`http://${HOST}:${PORT}/api/${route}`, { method, headers: { authorization: `Bearer ${loadToken()}`, "content-type": "application/json" }, body: method === "GET" ? undefined : JSON.stringify(payload || {}) });
+  const base = process.env.BB_URL || `http://${HOST}:${PORT}`; // BB_URL=https://<host> for the hosted game
+  const r = await fetch(`${base}/api/${route}`, { method, headers: { authorization: `Bearer ${loadToken()}`, "content-type": "application/json" }, body: method === "GET" ? undefined : JSON.stringify(payload || {}) });
   return r.json();
 };
 const stdin = () => fs.readFileSync(0, "utf8");

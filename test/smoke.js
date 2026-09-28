@@ -8,6 +8,7 @@ import WebSocket from "ws";
 const PORT = 13525, env = { ...process.env, BB_PORT: String(PORT), BB_BACKUP_DIR: fs.mkdtempSync(path.join(os.tmpdir(), "bbk-")), BB_BACKUP_MIN: "0" };
 const srv = spawn("node", ["server/index.js"], { env, stdio: "inherit" });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const SAVE_B64 = Buffer.from(JSON.stringify({ ctor: "BitburnerSaveObject", data: { pad: "x".repeat(2000) } })).toString("base64");
 const files = { "agent/x.js": "export async function main(ns){}", "data/telemetry.txt": "big" };
 try {
   await sleep(600);
@@ -21,7 +22,8 @@ try {
   await sleep(500);
   const cfg = JSON.parse(files["agent/rpc-config.txt"]);
   const rpc = new WebSocket(`ws://127.0.0.1:${cfg.port}/rpc?token=${cfg.token}`);
-  rpc.on("message", (d) => { const m = JSON.parse(d); rpc.send(JSON.stringify({ id: m.id, ok: true, value: m.op === "js" ? { report: "REPORT", attention: [], nextMin: 20 } : `${m.op}:${m.code || m.file || ""}` })); });
+  rpc.on("message", (d) => { const m = JSON.parse(d); const idb = m.op === "js" && m.code.includes("indexedDB"); // backup reads the save from IndexedDB
+    rpc.send(JSON.stringify({ id: m.id, ok: true, value: idb ? { b64: SAVE_B64 } : m.op === "js" ? { report: "REPORT", attention: [], nextMin: 20 } : `${m.op}:${m.code || m.file || ""}` })); });
   await sleep(300);
   const bb = async (...a) => (await promisify(execFile)("node", ["server/cli.js", ...a], { env })).stdout.trim();
   const out = { status: await bb("status"), eval: await bb("eval", "return 1"), checkin: await bb("checkin"), backup: await bb("backup"), rpcPushed: !!files["agent/rpc.js"] };

@@ -11,6 +11,7 @@ export const BACKUP_DIR = (process.env.BB_BACKUP_DIR || path.join(ROOT, "backups
 const TOKEN_FILE = path.join(ROOT, ".bb-token");
 
 export function loadToken() {
+  if (process.env.BB_TOKEN) return process.env.BB_TOKEN.trim(); // hosted (Railway) and remote CLI use
   if (!fs.existsSync(TOKEN_FILE)) fs.writeFileSync(TOKEN_FILE, crypto.randomBytes(24).toString("hex"), { mode: 0o600 });
   return fs.readFileSync(TOKEN_FILE, "utf8").trim();
 }
