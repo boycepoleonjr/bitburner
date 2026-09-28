@@ -30,7 +30,7 @@ export async function importSave(b64, port = Number(process.env.BB_CDP_PORT || 0
     await s.loaded();
     const code = `(async () => {
       const bin = atob(${JSON.stringify(b64)}); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
-      const db = await new Promise((res, rej) => { const r = indexedDB.open("bitburnerSave", 1); r.onupgradeneeded = () => r.result.createObjectStore("savestring"); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+      const db = await new Promise((res, rej) => { const r = indexedDB.open("bitburnerSave"); r.onupgradeneeded = () => r.result.createObjectStore("savestring"); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
       await new Promise((res, rej) => { const t = db.transaction("savestring", "readwrite"); t.objectStore("savestring").put(u, "save"); t.oncomplete = res; t.onerror = () => rej(t.error); });
       db.close(); return u.length; })()`;
     const r = await s.send("Runtime.evaluate", { expression: code, awaitPromise: true, returnByValue: true });
