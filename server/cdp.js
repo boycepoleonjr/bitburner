@@ -1,6 +1,7 @@
 // Import a save into the hosted Chromium through the DevTools protocol (BB_CDP_PORT, localhost only).
 // The game tab is navigated to a same-origin 404 page first, so the running game can't autosave over the import,
 // then the save bytes are written to IndexedDB (bitburnerSave/savestring/"save") and the game is loaded again.
+import zlib from "node:zlib";
 import WebSocket from "ws";
 
 const GAME = "https://bitburner-official.github.io/";
@@ -23,9 +24,15 @@ export async function importSave(b64, port = Number(process.env.BB_CDP_PORT || 0
   if (!port) throw new Error("import-save only works in the hosted container (BB_CDP_PORT unset)");
   const buf = Buffer.from(b64, "base64");
   if (!(buf.length > 1000 && buf[0] === 0x1f && buf[1] === 0x8b)) throw new Error("expected a .json.gz Bitburner save");
+  // Fully decompress and parse before touching the live save: a truncated/corrupt/unrelated gzip must not replace it.
+  let save;
+  try { save = JSON.parse(zlib.gunzipSync(buf).toString("utf8")); } catch (e) { throw new Error("not a readable save: " + e.message); }
+  if (save?.ctor !== "BitburnerSaveObject" || typeof save.data?.PlayerSave !== "string") throw new Error("not a Bitburner save (missing BitburnerSaveObject/PlayerSave)");
   const s = await session(port);
+  let wentBlank = false;
   try {
     await s.send("Page.navigate", { url: BLANK });
+    wentBlank = true;
     await s.loaded(BLANK); // the game page must be gone before the write, or its autosave overwrites the import
     const code = `(async () => {
       const bin = atob(${JSON.stringify(b64)}); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
@@ -36,5 +43,9 @@ export async function importSave(b64, port = Number(process.env.BB_CDP_PORT || 0
     if (r.exceptionDetails) throw new Error("IndexedDB write failed: " + JSON.stringify(r.exceptionDetails.exception?.description || r.exceptionDetails.text));
     await s.send("Page.navigate", { url: GAME });
     return { ok: true, bytes: r.result.value };
+  } catch (e) {
+    // never leave the unattended game parked on the blank page: reload it (with whatever save it had) and rethrow
+    if (wentBlank) await s.send("Page.navigate", { url: GAME }).catch(() => {});
+    throw e;
   } finally { s.close(); }
 }
