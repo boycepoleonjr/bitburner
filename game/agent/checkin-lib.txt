@@ -24,40 +24,6 @@
     bk.close();
     return { saved: true, key, bytes: data.length || data.byteLength || 0, kept: all.length - drop.length };
   };
-  // Off-browser export every 6h into a user-picked folder (File System Access API). The save bytes are the same
-  // gzip JSON as Options > Export, so files import back via Options > Import.
-  const meta = () => idb("agentMeta", (db) => db.createObjectStore("kv"));
-  const kvGet = async (k) => { const d = await meta(); const v = await reqP(d.transaction("kv").objectStore("kv").get(k)); d.close(); return v; };
-  const kvSet = async (k, v) => { const d = await meta(); await reqP(d.transaction("kv", "readwrite").objectStore("kv").put(v, k)); d.close(); };
-  window.__exportButton = () => {
-    if (document.getElementById("agent-export-btn")) return "exists";
-    const b = document.createElement("button");
-    b.id = "agent-export-btn"; b.textContent = "Agent: pick backup folder";
-    Object.assign(b.style, { position: "fixed", right: "12px", bottom: "12px", zIndex: 99999, padding: "10px 14px", background: "#0c0", color: "#000", font: "bold 14px monospace", border: "0", borderRadius: "6px", cursor: "pointer" });
-    b.onclick = async () => {
-      try {
-        let h = await kvGet("dir");
-        if (h && (await h.requestPermission({ mode: "readwrite" })) === "granted") { b.textContent = "Agent backups: allowed"; }
-        else { h = await showDirectoryPicker({ id: "bbsaves", mode: "readwrite", startIn: "documents" }); await kvSet("dir", h); b.textContent = `Agent backups -> ${h.name}`; }
-        const r = await __exportSave({ force: true }); b.textContent += r.file ? " (saved)" : "";
-        setTimeout(() => b.remove(), 4000);
-      } catch (e) { b.textContent = "Agent: pick backup folder (" + e.name + ")"; }
-    };
-    document.body.appendChild(b); return "shown";
-  };
-  window.__exportSave = async ({ everyH = 6, force = false } = {}) => {
-    const h = await kvGet("dir"); if (!h) return { need: "folder" };
-    const last = (await kvGet("lastExport")) || 0;
-    if (!force && Date.now() - last < everyH * 3.6e6) return { skipped: true, name: h.name };
-    if ((await h.queryPermission({ mode: "readwrite" })) !== "granted") return { need: "permission", name: h.name };
-    const src = await idb("bitburnerSave");
-    const data = await reqP(src.transaction("savestring").objectStore("savestring").get("save")); src.close();
-    const node = JSON.parse(bb.read("/data/telemetry.txt").trimEnd().split("\n").pop() || "{}").bn || "x";
-    const file = `bitburnerSave_${new Date().toISOString().replace(/[:.]/g, "-")}_BN${node}.json.gz`;
-    const fh = await h.getFileHandle(file, { create: true }); const w = await fh.createWritable(); await w.write(data); await w.close();
-    await kvSet("lastExport", Date.now());
-    return { file, bytes: data.length, name: h.name };
-  };
   // Fixed-format check-in report (markdown). Everything above "Notes" is generated; the agent only writes Notes.
   const fmt$ = (n) => { const a = Math.abs(n); const s = a >= 1e12 ? (a / 1e12).toFixed(2) + "t" : a >= 1e9 ? (a / 1e9).toFixed(2) + "b" : a >= 1e6 ? (a / 1e6).toFixed(1) + "m" : a >= 1e3 ? (a / 1e3).toFixed(1) + "k" : a.toFixed(0); return (n < 0 ? "-$" : "$") + s; };
   const et = (t) => new Date(t).toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" });
@@ -89,6 +55,7 @@
   };
   window.__checkin = async (opts = {}) => {
     const out = { attention: [], did: [] };
+    document.getElementById("agent-export-btn")?.remove(); // leftover from the retired MySaves folder export
     // 1. autopilot heartbeat (status file refreshed every ~30s)
     let st = readJ("/data/autopilot-status.txt");
     if (!st || Date.now() - st.t > 120000) {
@@ -103,10 +70,6 @@
     // 2b. rolling in-browser save backup (hourly, keeps 24h hourly + 14 daily) in IndexedDB "agentBackups"
     try { const b = await __backupSave(); if (b.saved) out.did.push(`save backup ${Math.round(b.bytes / 1024)}KB (${b.kept} kept)`); }
     catch (e) { out.attention.push("save backup failed: " + e); }
-    // 2c. 6-hourly export to the user's folder; if permission lapsed (browser restart), show the re-allow button
-    try { const x = await __exportSave(); if (x.file) out.did.push(`exported ${x.file} to ${x.name}`);
-      else if (x.need) { __exportButton(); out.warn = `backup folder ${x.need} needed — user must click the green button in the game tab`; } }
-    catch (e) { out.warn = "export failed: " + e; }
     // 3. predictions: score, then ETA over autopilot's next actionable targets
     eval(bb.read("agent/predictor.txt"));
     st = readJ("/data/autopilot-status.txt") || st || { flags: [], next: [], augs: {} };

@@ -1,0 +1,5 @@
+# Railway config-as-code for the "game" service. Only deploy settings we own; build stays auto-detected (Dockerfile).
+[deploy]
+healthcheckPath = "/healthz"
+healthcheckTimeout = 120
+restartPolicyType = "ALWAYS"

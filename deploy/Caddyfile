@@ -4,8 +4,9 @@
 }
 
 :{$PORT} {
+	# bb server liveness (process-level; stays 200 while the game/rpc reconnect). Must stay ahead of the catch-all.
 	handle /healthz {
-		respond 200
+		reverse_proxy 127.0.0.1:12525
 	}
 
 	# bb server enforces its own Bearer token

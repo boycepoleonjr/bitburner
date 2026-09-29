@@ -1,7 +1,7 @@
 # Hosted Bitburner: the game runs 24/7 in a real Chromium on a virtual display, next to the bb server.
 #   /          -> noVNC (watch/play the game; basic auth GUI_USER / GUI_PASSWORD)
 #   /api/*     -> bb server (Bearer BB_TOKEN)
-#   /healthz   -> 200
+#   /healthz   -> bb server liveness (unauthenticated JSON, 200 while the server process is up)
 # Persistent state lives on the /data volume: Chromium profile (the game save) and save backups.
 FROM node:22-bookworm-slim
 
@@ -18,4 +18,6 @@ COPY deploy ./deploy
 COPY AGENTS.md ./
 
 ENV DISPLAY=:99 BB_BACKUP_DIR=/data/backups BB_CDP_PORT=9222 GUI_USER=boyce
+# Hosted automation is off in the image; Railway service variables turn it on (BB_CHECKIN_AUTO=1, BB_WATCHDOG_MIN=10).
+ENV BB_CHECKIN_AUTO=0 BB_STATE_DIR=/data/state BB_WATCHDOG_MIN=0
 CMD ["bash", "/app/deploy/start.sh"]

@@ -6,3 +6,4 @@ game/agent/jobs/
 game/agent/rpc-config.txt
 .DS_Store
 .gui-password
+state/
