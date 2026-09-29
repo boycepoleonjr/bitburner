@@ -15,7 +15,7 @@ async function session(port) {
   let id = 0; const waits = new Map(), events = [];
   ws.on("message", (d) => { const m = JSON.parse(d); if (m.id && waits.has(m.id)) { waits.get(m.id)(m); waits.delete(m.id); } else if (m.method) events.push(m); });
   const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id; waits.set(i, (m) => (m.error ? rej(new Error(m.error.message)) : res(m.result))); ws.send(JSON.stringify({ id: i, method, params })); });
-  const loaded = async (ms = 30000) => { const t0 = Date.now(); for (;;) { const r = await send("Runtime.evaluate", { expression: "document.readyState + ' ' + location.href", returnByValue: true }).catch(() => null); if (r && r.result.value.startsWith("complete")) return r.result.value; if (Date.now() - t0 > ms) throw new Error("page load timeout"); await new Promise((s) => setTimeout(s, 300)); } };
+  const loaded = async (url, ms = 30000) => { const t0 = Date.now(); for (;;) { const r = await send("Runtime.evaluate", { expression: "document.readyState + ' ' + location.href", returnByValue: true }).catch(() => null); if (r && r.result.value === "complete " + url) return r.result.value; if (Date.now() - t0 > ms) throw new Error("page load timeout"); await new Promise((s) => setTimeout(s, 300)); } };
   return { send, loaded, close: () => ws.close() };
 }
 
@@ -26,8 +26,7 @@ export async function importSave(b64, port = Number(process.env.BB_CDP_PORT || 0
   const s = await session(port);
   try {
     await s.send("Page.navigate", { url: BLANK });
-    await new Promise((r) => setTimeout(r, 1500));
-    await s.loaded();
+    await s.loaded(BLANK); // the game page must be gone before the write, or its autosave overwrites the import
     const code = `(async () => {
       const bin = atob(${JSON.stringify(b64)}); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
       const db = await new Promise((res, rej) => { const r = indexedDB.open("bitburnerSave"); r.onupgradeneeded = () => r.result.createObjectStore("savestring"); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });

@@ -86,6 +86,10 @@ const wss = new WebSocketServer({ noServer: true });
 server.on("upgrade", (req, sock, head) => {
   const u = new URL(req.url, "http://x");
   if (u.pathname === "/rpc" && u.searchParams.get("token") !== TOKEN) { log("rpc rejected: bad token"); sock.destroy(); return; }
+  // The game's Remote API socket is unauthenticated, so it is only accepted at "/" from a direct local connection.
+  // Anything proxied (Caddy adds X-Forwarded-For) or on another path (e.g. a public /api/* upgrade) is refused;
+  // otherwise any client could pose as the game and be handed the token in agent/rpc-config.txt.
+  if (u.pathname !== "/rpc" && (u.pathname !== "/" || req.headers["x-forwarded-for"])) { log("upgrade rejected:", u.pathname); sock.destroy(); return; }
   wss.handleUpgrade(req, sock, head, (ws) => {
     if (u.pathname === "/rpc") {
       rpcSock = ws; log("rpc bridge connected");
