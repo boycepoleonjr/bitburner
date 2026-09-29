@@ -66,6 +66,8 @@ try {
   const nBefore = sink.discord.length;
   const notifyOk = await api("/api/notify", { method: "POST", body: JSON.stringify({ text: "hello from test" }) });
   const notifyBad = await api("/api/notify", { method: "POST", body: JSON.stringify({ text: "  " }) });
+  const escTestNoAuth = await api("/api/escalate-test", { method: "POST", token: null, body: "{}" });
+  const escTest = await api("/api/escalate-test", { method: "POST", body: "{}" });
   await sleep(200);
   const embedPosts = sink.discord.filter((p) => p.embeds);
   // watchdog: drop the rpc bridge; after BB_WATCHDOG_MIN (1.2 s) the allowlisted restart command runs
@@ -84,7 +86,8 @@ try {
     healthzNoAuth: health.status === 200 && health.json.ok === true && health.json.rpc === true,
     apiNeedsAuth: unauth.every((r) => r.status === 401),
     discordEmbed: embedPosts.length >= 1 && embedPosts[0].username === "Bitburner" && embedPosts[0].embeds.length === 1 && embedPosts[0].embeds[0].color === 0xed4245,
-    escalatedOnce: sink.fire.length === 1 && sink.fire[0].headers["anthropic-beta"] === "experimental-cc-routine-2026-04-01" && /Attention:\n- x/.test(sink.fire[0].body.text),
+    escalateTest: escTestNoAuth.status === 401 && escTest.json.ok === true && sink.fire.length === 2 && sink.fire[1].body.text.startsWith("[TEST]"),
+    escalatedOnce: sink.fire.length >= 1 && sink.fire[0].headers["anthropic-beta"] === "experimental-cc-routine-2026-04-01" && /Attention:\n- x/.test(sink.fire[0].body.text),
     sessionLinkPosted: sink.discord.some((p) => p.content === "escalated to Claude: https://claude.ai/code/session_x"),
     notifyRelay: notifyOk.status === 200 && sink.discord.slice(nBefore).some((p) => p.content === "hello from test"),
     notifyBadRequest: notifyBad.status === 400,

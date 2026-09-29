@@ -62,6 +62,7 @@ PREDICTOR v2, SPEND PLAN, CHECK-IN REPORT FORMAT).
    Escalation: only for NEW attention (or the same attention still open after 2h), the container fires the claude.ai
    routine "Bitburner escalation (hosted)" via its API trigger (BB_ESCALATE_ROUTINE_ID + BB_ESCALATE_TOKEN). That routine
    has the Railway connector for diagnosis and posts its summary back via POST /api/notify.
+   Test the whole path on demand: POST /api/escalate-test (auth) fires the routine with a "[TEST]" message.
    Watchdog (BB_WATCHDOG_MIN=10): if game/rpc is down or the rpc ping fails for 10 min it restarts Chromium (max 2
    attempts per outage), then escalates once and only probes until recovery. /healthz = bb server liveness (no auth).
    Rollback: set BB_CHECKIN_AUTO=0 and BB_WATCHDOG_MIN=0, re-enable the old routine "Bitburner hourly check-in (hosted)".

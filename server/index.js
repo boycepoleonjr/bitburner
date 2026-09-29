@@ -98,6 +98,12 @@ const routes = {
     await notifier.discordText(b.text);
     return { ok: true };
   },
+  // On-demand end-to-end test of the container -> Claude routine path (no dedupe state touched).
+  "POST /api/escalate-test": async () => {
+    if (!notifier.escalationEnabled) throw Object.assign(new Error(`escalation ${C.escalationStatus}`), { status: 400 });
+    const r = await notifier.fireRoutine("[TEST] Bitburner escalation test — no action needed. Reply with the current report and 'Notes: escalation test OK'.");
+    return r.ok ? { ok: true, url: r.url } : { ok: false, error: "routine fire failed (see server log)" };
+  },
   "POST /api/remote": async (b) => remote(b.method, b.params || {}),
   "POST /api/pull": async (b) => pull(remote, b),
   "POST /api/push": async (b) => push(remote, b),
