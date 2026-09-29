@@ -1,4 +1,4 @@
-/** agent/rpc.js — headless control bridge. Connects OUT to the local bb server (ws://127.0.0.1:<port>/rpc)
+/** agent/rpc.js — headless control bridge. Connects OUT to the local bb server (ws://localhost:<port>/rpc)
  * so any agent can drive the game without Claude in Chrome. Works in the browser build and the Steam (Electron) build.
  * Config comes from agent/rpc-config.txt ({port, token}), which the server pushes via the Remote API on connect.
  * Ops:  eval {code}  -> ns code (async fn body using `ns`), run as a one-shot job script (RAM is calculated per job)
@@ -44,16 +44,21 @@ export async function main(ns) {
     let cfg = null;
     try { cfg = JSON.parse(ns.read(CFG) || "null"); } catch { }
     if (!cfg) { ns.print("waiting for " + CFG + " (start the bb server + enable Remote API)"); await sleep(5000); continue; }
+    // "localhost", not 127.0.0.1: Chromium's local-network-access check can silently hang ws://127.0.0.1 while
+    // allowing localhost (the host the Remote API already uses)
+    const url = `ws://${cfg.host || "localhost"}:${cfg.port}/rpc`;
     await new Promise((resolve) => {
-      try { ws = new WebSocket(`ws://127.0.0.1:${cfg.port}/rpc?token=${encodeURIComponent(cfg.token)}`); } catch (e) { ns.print("ws error " + e); return resolve(); }
-      ws.onopen = () => { ns.print("connected"); ws.send(JSON.stringify({ hello: true, pid: ns.pid })); };
+      ns.print("connecting " + url);
+      try { ws = new WebSocket(`${url}?token=${encodeURIComponent(cfg.token)}`); } catch (e) { ns.print("ws error " + e); return resolve(); }
+      const t = setTimeout(() => { if (ws.readyState !== 1) { ns.print("connect timeout"); try { ws.close(); } catch { } resolve(); } }, 15000);
+      ws.onopen = () => { clearTimeout(t); ns.print("connected"); ws.send(JSON.stringify({ hello: true, pid: ns.pid })); };
       ws.onmessage = async (ev) => {
         let m; try { m = JSON.parse(ev.data); } catch { return; }
         let r; try { r = await handle(m); } catch (e) { r = { ok: false, error: String(e) }; }
         let s; try { s = JSON.stringify({ id: m.id, ...r }); } catch (e) { s = JSON.stringify({ id: m.id, ok: false, error: "unserializable result: " + e }); }
         try { ws.send(s); } catch { }
       };
-      ws.onclose = () => resolve();
+      ws.onclose = (e) => { clearTimeout(t); ns.print("closed " + (e && e.code)); resolve(); };
       ws.onerror = () => { try { ws.close(); } catch { } };
     });
     if (!stop) await sleep(3000);

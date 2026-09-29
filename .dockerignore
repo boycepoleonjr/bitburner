@@ -1,0 +1,5 @@
+node_modules
+.bb-token
+backups
+.git
+.claude

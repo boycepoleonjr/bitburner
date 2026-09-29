@@ -47,6 +47,12 @@ so the autopilot handles purchases and installs. Where they conflict, trust the 
 PREDICTOR v2, SPEND PLAN, CHECK-IN REPORT FORMAT).
 
 ## Control paths (pick whichever is available)
+0. HOSTED (current, since 2026-09-28): the game runs 24/7 in Chromium on Railway (project bitburner, service game,
+   Dockerfile + deploy/). GUI (noVNC, basic auth): https://game-production-0b2d.up.railway.app. API: same host /api,
+   Bearer BB_TOKEN. CLI: `BB_URL=https://game-production-0b2d.up.railway.app BB_TOKEN=... npx bb status|checkin|...`.
+   Check-ins: claude.ai routine "Bitburner hourly check-in (hosted)" (needs BB_TOKEN in its cloud environment).
+   Save backups: hourly, server-side, to the /data volume. Load a save: `bb import-save <save.json.gz>`.
+   Only one game instance at a time: don't open the game in a local browser while the hosted one runs.
 A. HEADLESS (preferred, no browser needed; works with the browser build AND Steam):
    The owner's machine runs `npm start` (server/). The game connects to it via Remote API, and agent/rpc.js connects back.
    Agents use the CLI on that machine: `npx bb status|checkin|eval|js|read|write|note|pull|push|backup`.

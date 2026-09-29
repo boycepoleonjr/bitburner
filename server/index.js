@@ -9,6 +9,7 @@ import path from "node:path";
 import { WebSocketServer } from "ws";
 import { pull, push } from "./sync.js";
 import { backup } from "./backup.js";
+import { importSave } from "./cdp.js";
 import { ROOT, PORT, HOST, loadToken } from "./config.js";
 
 const TOKEN = loadToken();
@@ -69,7 +70,8 @@ const routes = {
   "POST /api/remote": async (b) => remote(b.method, b.params || {}),
   "POST /api/pull": async (b) => pull(remote, b),
   "POST /api/push": async (b) => push(remote, b),
-  "POST /api/backup": async () => backup(remote),
+  "POST /api/import-save": async (b) => importSave(b.b64),
+  "POST /api/backup": async () => backup({ rpc: rpcSock ? rpc : null, remote: game ? remote : null }),
 };
 
 const server = http.createServer(async (req, res) => {
@@ -83,7 +85,11 @@ const server = http.createServer(async (req, res) => {
 const wss = new WebSocketServer({ noServer: true });
 server.on("upgrade", (req, sock, head) => {
   const u = new URL(req.url, "http://x");
-  if (u.pathname === "/rpc" && u.searchParams.get("token") !== TOKEN) { sock.destroy(); return; }
+  if (u.pathname === "/rpc" && u.searchParams.get("token") !== TOKEN) { log("rpc rejected: bad token"); sock.destroy(); return; }
+  // The game's Remote API socket is unauthenticated, so it is only accepted at "/" from a direct local connection.
+  // Anything proxied (Caddy adds X-Forwarded-For) or on another path (e.g. a public /api/* upgrade) is refused;
+  // otherwise any client could pose as the game and be handed the token in agent/rpc-config.txt.
+  if (u.pathname !== "/rpc" && (u.pathname !== "/" || req.headers["x-forwarded-for"])) { log("upgrade rejected:", u.pathname); sock.destroy(); return; }
   wss.handleUpgrade(req, sock, head, (ws) => {
     if (u.pathname === "/rpc") {
       rpcSock = ws; log("rpc bridge connected");
@@ -101,4 +107,4 @@ server.listen(PORT, HOST, () => log(`bb server on ${HOST}:${PORT} — token in .
 
 // scheduled save backups (default every 60 min; BB_BACKUP_MIN=0 disables)
 const every = Number(process.env.BB_BACKUP_MIN ?? 60);
-if (every > 0) setInterval(() => { if (game) backup(remote).then((r) => log("backup", r.file)).catch((e) => log("backup failed:", e.message)); }, every * 60000);
+if (every > 0) setInterval(() => { if (game || rpcSock) backup({ rpc: rpcSock ? rpc : null, remote: game ? remote : null }).then((r) => log("backup", r.file)).catch((e) => log("backup failed:", e.message)); }, every * 60000);
