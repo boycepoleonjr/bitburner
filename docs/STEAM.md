@@ -39,7 +39,7 @@ npx bb pull          # mirror game files into ./game, then commit
 | `game:true, rpc:false` | Is `agent/rpc.js` running (`ps` in the game terminal)? It waits for `agent/rpc-config.txt`, which the server pushes on connect. The tail of rpc.js shows its status. |
 | `401 bad token` | CLI and server must share the repo's `.bb-token`. Run the CLI from the repo folder. |
 | eval `exec failed` | Not enough free RAM on home for the job script. Lower `homeReserveGb`, or free RAM. |
-| checkin fails on Steam | checkin-lib's browser-only parts (IndexedDB backup, folder export) may warn. Server-side `bb backup` replaces them. |
+| checkin fails on Steam | checkin-lib's browser-only IndexedDB backup may warn outside the browser build. Folder export is no longer supported. Server-side `bb backup` is available only when a bb server is running with `BB_BACKUP_DIR` configured; Railway-hosted backups are stored on its `/data` volume. |
 | Steam save location | Windows: `%APPDATA%/bitburner/`. macOS: `~/Library/Application Support/bitburner/`. Backups via `bb backup` are the portable option. |
 
 ## Security

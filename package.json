@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server/index.js",
     "bb": "node server/cli.js",
-    "test": "node test/smoke.js"
+    "test": "node test/unit.js && node test/smoke.js"
   },
   "engines": { "node": ">=18" },
   "dependencies": { "ws": "^8.18.0" }

@@ -32,8 +32,14 @@ In-game scripts do the work. The agent keeps them healthy, fixes what breaks, an
 - daemon.js --reset (+ lib/hooks.js hacknet ROI gate). Config: /data/config-overrides.txt
 - agent/telemetry.js — 60s JSONL → /data/telemetry.txt
 - agent/predictor.txt (window.__pred2) — walk-forward-calibrated ETA predictions → /data/pred2.txt, /data/pred-calib.txt
-- agent/checkin-lib.txt — __checkin(): heartbeats, backups (hourly IndexedDB + 6h export to the owner's MySaves folder),
-  predictions, attention list, formatted report, nextMin.
+- agent/checkin-lib.txt — __checkin(): heartbeats, backups (hourly in-browser IndexedDB + hourly server-side to the
+  Railway /data volume), predictions, attention list, formatted report, nextMin.
+
+Backups by runtime (the MySaves folder export was retired 2026-09-29):
+| Runtime | IndexedDB (in-browser) | Server-side | MySaves export |
+|---|---|---|---|
+| Railway hosted | yes | /data/backups (hourly) | removed |
+| Local browser / Steam | yes (browser build) | only with a local bb server + BB_BACKUP_DIR | removed |
 
 ## Logs (read before changing anything)
 - /data/audit.txt (autopilot decisions)
@@ -50,7 +56,17 @@ PREDICTOR v2, SPEND PLAN, CHECK-IN REPORT FORMAT).
 0. HOSTED (current, since 2026-09-28): the game runs 24/7 in Chromium on Railway (project bitburner, service game,
    Dockerfile + deploy/). GUI (noVNC, basic auth): https://game-production-0b2d.up.railway.app. API: same host /api,
    Bearer BB_TOKEN. CLI: `BB_URL=https://game-production-0b2d.up.railway.app BB_TOKEN=... npx bb status|checkin|...`.
-   Check-ins: claude.ai routine "Bitburner hourly check-in (hosted)" (needs BB_TOKEN in its cloud environment).
+   Check-ins run INSIDE the container (server/checkin.js, Railway var BB_CHECKIN_AUTO=1): __checkin() on its own
+   nextMin cadence → cached in /data/state → posted to Discord (DISCORD_WEBHOOK_URL). Read the cache any time with
+   `bb report` (GET /api/report; instant, no game call). `bb checkin` still forces a fresh one.
+   Escalation: only for NEW attention (or the same attention still open after 2h), the container fires the claude.ai
+   routine "Bitburner escalation (hosted)" via its API trigger (BB_ESCALATE_ROUTINE_ID + BB_ESCALATE_TOKEN). That routine
+   has the Railway connector for diagnosis and posts its summary back via POST /api/notify.
+   Test the whole path on demand: POST /api/escalate-test (auth) fires the routine with a "[TEST]" message.
+   Watchdog (BB_WATCHDOG_MIN=10): if game/rpc is down or the rpc ping fails for 10 min it restarts Chromium (max 2
+   attempts per outage), then escalates once and only probes until recovery. /healthz = bb server liveness (no auth).
+   Rollback: set BB_CHECKIN_AUTO=0 and BB_WATCHDOG_MIN=0, re-enable the old routine "Bitburner hourly check-in (hosted)".
+   Never delete /data/state, /data/backups or the volume.
    Save backups: hourly, server-side, to the /data volume. Load a save: `bb import-save <save.json.gz>`.
    Only one game instance at a time: don't open the game in a local browser while the hosted one runs.
 A. HEADLESS (preferred, no browser needed; works with the browser build AND Steam):
@@ -76,7 +92,9 @@ neither unless linked to the owner's computer.
 2. Read this file and the tail of /data/agent-log.txt (`bb read data/agent-log.txt`).
 3. Check-in: `npx bb checkin` (A) or eval(bb.read('agent/checkin-lib.txt')); await __checkin() (B).
    Handle r.attention, then reply with r.report plus a Notes line.
-4. Start the loop: schedule the next check-in into THIS session (send_later, delay = r.nextMin) with the prompt below.
+4. HOSTED (path 0): do NOT start a send_later loop. The container schedules check-ins itself and escalates to the
+   escalation routine; just read `bb report` and act on what the escalation hands you.
+   Otherwise, start the loop: schedule the next check-in into THIS session (send_later, delay = r.nextMin) with the prompt below.
    Old check-ins scheduled into a previous session keep firing there. Delete them (list_triggers → delete_trigger)
    so two agents don't both act.
 
