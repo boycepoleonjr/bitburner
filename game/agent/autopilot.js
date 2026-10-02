@@ -14,18 +14,16 @@ export function cityInviteDecision(f, { joinCity, augsOf, owned }) {
   if (cityDone(augsOf, owned, f)) return "block";
   return (joinCity || []).includes(f) ? "join" : "flag";
 }
-// cityBlocked is audited at most once per city faction per autopilot process lifetime (reset on restart).
-const blockedLogged = new Set();
-/** Handles pending faction invites; returns flags. Exported for tests. */
-export function handleInvites({ invites, joinCity, augsOf, owned, join, act, audit }) {
-  const flags = [];
+/** Handles pending faction invites, pushing flags into `flags` as it goes (kept if a later join throws).
+ * `blockedLogged` is created in main(), so cityBlocked is audited once per city per autopilot run
+ * (module scope would survive restarts: Bitburner caches a script's module until its source changes). Exported for tests. */
+export function handleInvites({ invites, joinCity, augsOf, owned, join, act, audit, flags, blockedLogged }) {
   for (const f of invites) {
     const d = cityInviteDecision(f, { joinCity, augsOf, owned });
     if (d === "block") { if (!blockedLogged.has(f)) { blockedLogged.add(f); audit("cityBlocked", { f, why: "all non-NeuroFlux augs owned" }); } continue; }
     if (d === "flag") { flags.push(`city faction invite pending: ${f}`); continue; }
     if (join(f)) act(`joined ${f}`);
   }
-  return flags;
 }
 
 /** @param {NS} ns */
@@ -48,6 +46,7 @@ export async function main(ns) {
   const PROGRAMS = ["BruteSSH.exe", "FTPCrack.exe", "relaySMTP.exe", "HTTPWorm.exe", "SQLInject.exe"];
   const BACKDOORS = ["CSEC", "avmnite-02h", "I.I.I.I", "run4theh111z"];
   const recent = [];
+  const blockedLogged = new Set(); // cityBlocked audited once per city per run
   let liquidatedByMe = false;
   const act = (msg) => {
     const line = `${new Date().toLocaleTimeString("en-US", { hour12: false })} [autopilot] ${msg}`;
@@ -158,10 +157,10 @@ export async function main(ns) {
         // 4. Faction invitations (non-city auto; exhausted cities blocked; other cities joinCity-only, else flagged)
         if (c.joinFactions) {
           const ownedAll = new Set(S.getOwnedAugmentations(true));
-          flags.push(...handleInvites({
-            invites: S.checkFactionInvitations(), joinCity: c.joinCity, owned: ownedAll,
+          handleInvites({
+            invites: S.checkFactionInvitations(), joinCity: c.joinCity, owned: ownedAll, flags, blockedLogged,
             augsOf: (f) => S.getAugmentationsFromFaction(f), join: (f) => S.joinFaction(f), act, audit,
-          }));
+          });
         }
         // 5. Work policy (only when configured; "keep" never touches current work)
         if (c.work !== "keep") {

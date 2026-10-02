@@ -7,9 +7,12 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const src = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "game", "agent", "autopilot.js");
-const tmp = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "bbap-")), "autopilot.mjs");
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bbap-"));
+const tmp = path.join(dir, "autopilot.mjs");
 fs.copyFileSync(src, tmp);
-const { cityInviteDecision, handleInvites } = await import(pathToFileURL(tmp).href);
+let mod;
+try { mod = await import(pathToFileURL(tmp).href); } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+const { cityInviteDecision, handleInvites } = mod;
 
 const AUGS = {
   "Sector-12": ["CashRoot Starter Kit", "NeuroFlux Governor"],
@@ -23,7 +26,10 @@ const owned = new Set(["CashRoot Starter Kit", "Neurotrainer I"]);
 const decide = (f, joinCity = ["Sector-12"], o = owned) => cityInviteDecision(f, { joinCity, augsOf, owned: o });
 
 let n = 0;
-const t = (name, fn) => { fn(); n++; };
+const t = (name, fn) => {
+  try { fn(); } catch (e) { e.message = `[${name}] ${e.message}`; throw e; }
+  n++;
+};
 t("exhausted joinCity city is blocked", () => assert.equal(decide("Sector-12"), "block"));
 t("joinCity city with an unowned aug joins", () => assert.equal(decide("Sector-12", ["Sector-12"], new Set()), "join"));
 t("non-joinCity city with augs left is flagged", () => assert.equal(decide("Aevum"), "flag"));
@@ -32,17 +38,32 @@ t("NeuroFlux-only city is blocked", () => assert.equal(decide("Volhaven"), "bloc
 t("only the exact NeuroFlux Governor name is exempt", () => assert.equal(decide("Chongqing"), "flag"));
 t("non-city factions always join", () => assert.equal(decide("CyberSec", [], new Set()), "join"));
 
-t("handleInvites: joins, flags, blocks; cityBlocked audited once per process", () => {
-  const joined = [], audits = [], acts = [];
-  const run = () => handleInvites({
-    invites: ["Sector-12", "Aevum", "CyberSec"], joinCity: ["Sector-12"], augsOf, owned,
-    join: (f) => { joined.push(f); return true; }, act: (m) => acts.push(m), audit: (k, d) => audits.push([k, d.f]),
+const runInvites = ({ invites = ["Sector-12", "Aevum", "CyberSec"], blockedLogged = new Set(), flags = [], join } = {}) => {
+  const joined = [], audits = [];
+  handleInvites({
+    invites, joinCity: ["Sector-12"], augsOf, owned, flags, blockedLogged,
+    join: join || ((f) => { joined.push(f); return true; }), act: () => {}, audit: (k, d) => audits.push([k, d.f]),
   });
-  const f1 = run(), f2 = run();
-  assert.deepEqual(f1, ["city faction invite pending: Aevum"]);
-  assert.deepEqual(f2, f1);
-  assert.deepEqual(joined, ["CyberSec", "CyberSec"]);
-  assert.ok(!joined.includes("Sector-12"));
-  assert.deepEqual(audits, [["cityBlocked", "Sector-12"]]);
+  return { joined, audits, flags };
+};
+t("handleInvites: joins non-city, flags non-joinCity city, never joins exhausted Sector-12", () => {
+  const r = runInvites();
+  assert.deepEqual(r.flags, ["city faction invite pending: Aevum"]);
+  assert.deepEqual(r.joined, ["CyberSec"]);
+});
+t("handleInvites: cityBlocked audited once per blockedLogged set (one autopilot run)", () => {
+  const seen = new Set();
+  const a = runInvites({ blockedLogged: seen }), b = runInvites({ blockedLogged: seen });
+  assert.deepEqual(a.audits, [["cityBlocked", "Sector-12"]]);
+  assert.deepEqual(b.audits, []);
+});
+t("handleInvites: a new run (fresh set) audits again", () => {
+  assert.deepEqual(runInvites().audits, [["cityBlocked", "Sector-12"]]);
+  assert.deepEqual(runInvites().audits, [["cityBlocked", "Sector-12"]]);
+});
+t("handleInvites: flags pushed before a later join throws are kept", () => {
+  const flags = [];
+  assert.throws(() => runInvites({ invites: ["Aevum", "CyberSec"], flags, join: () => { throw new Error("boom"); } }), /boom/);
+  assert.deepEqual(flags, ["city faction invite pending: Aevum"]);
 });
 console.log(`AUTOPILOT CITY OK (${n})`);
