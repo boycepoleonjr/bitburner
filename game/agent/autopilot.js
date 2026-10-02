@@ -279,8 +279,9 @@ export async function main(ns) {
               const nfQueued = Math.max(bought.filter((a) => a === NEUROFLUX).length,
                 S.getOwnedAugmentations(true).filter((a) => a === NEUROFLUX).length - S.getOwnedAugmentations(false).filter((a) => a === NEUROFLUX).length);
               if (why === nfgWhy && nfQueued < c.augTrigger) {
-                flags.push(`NeuroFlux batch too small to install (${nfQueued} queued < ${c.augTrigger})`);
-                audit("skip", { why: "nfg batch too small", nfQueued, bought });
+                // expected while levels accumulate across loops (donations make each loop buy fewer than estimated):
+                // audit only, no flag, so check-ins don't escalate on it
+                if (bought.length) audit("skip", { why: "nfg batch too small", nfQueued, bought });
               } else if (bought.length) {
                 const src = ns.getMoneySources().sinceInstall;
                 ns.write("/data/install-log.txt", JSON.stringify({ t: Date.now(), why, bought, leftover: money(), src, sinceAug: Date.now() - ns.getResetInfo().lastAugReset }) + "\n", "a");
