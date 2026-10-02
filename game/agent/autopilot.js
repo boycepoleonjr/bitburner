@@ -108,12 +108,21 @@ export async function main(ns) {
     const nf = ns.getPlayer().factions.filter((f) => S.getAugmentationsFromFaction(f).some((a) => a.startsWith("NeuroFlux"))).sort((a, b) => S.getFactionRep(b) - S.getFactionRep(a))[0];
     if (nf) { const name = S.getAugmentationsFromFaction(nf).find((a) => a.startsWith("NeuroFlux"));
       const cb = c0();
+      // rep per $ donated: starts at the documented 1e-6 x faction_rep, then uses what each donation actually
+      // yielded (BitNode multipliers make the real rate lower; 2026-10-02 the formula under-donated every time).
+      let rate = ns.getPlayer().mults.faction_rep / 1e6;
       for (let i = 0; i < 100 && money() >= S.getAugmentationPrice(name); i++) {
-        const gap = S.getAugmentationRepReq(name) - S.getFactionRep(nf);
-        if (gap > 0 && cb.donate && S.getFactionFavor(nf) >= cb.donateFavor) {
-          const amt = Math.ceil(gap / ns.getPlayer().mults.faction_rep) * 1e6;
+        for (let k = 0; k < 6 && cb.donate && S.getFactionFavor(nf) >= cb.donateFavor; k++) {
+          const gap = S.getAugmentationRepReq(name) - S.getFactionRep(nf);
+          if (gap <= 0) break;
+          const amt = Math.ceil((gap / rate) * 1.02);
           const cap = Math.max(0, money() - cb.reserve) * cb.donateMaxFrac;
-          if (amt <= cap && money() - amt >= S.getAugmentationPrice(name) && S.donateToFaction(nf, amt)) audit("donate", { f: nf, amt, why: "NeuroFlux rep" });
+          if (amt > cap || money() - amt < S.getAugmentationPrice(name)) break;
+          const before = S.getFactionRep(nf);
+          if (!S.donateToFaction(nf, amt)) break;
+          const got = S.getFactionRep(nf) - before;
+          audit("donate", { f: nf, amt, got: Math.round(got), why: "NeuroFlux rep" });
+          if (got > 0) rate = got / amt; else break;
         }
         if (S.getFactionRep(nf) < S.getAugmentationRepReq(name) || !S.purchaseAugmentation(nf, name)) break;
         out.push(name);
@@ -266,7 +275,13 @@ export async function main(ns) {
               audit("trigger", { why, augs, money: money(), rep: Object.fromEntries(ns.getPlayer().factions.map((f) => [f, Math.round(S.getFactionRep(f))])) });
             } else {
               const bought = buyBatch(owned);
-              if (bought.length) {
+              // NeuroFlux-only batches install only once >= augTrigger levels are queued (never a 1-level install again)
+              const nfQueued = Math.max(bought.filter((a) => a === NEUROFLUX).length,
+                S.getOwnedAugmentations(true).filter((a) => a === NEUROFLUX).length - S.getOwnedAugmentations(false).filter((a) => a === NEUROFLUX).length);
+              if (why === nfgWhy && nfQueued < c.augTrigger) {
+                flags.push(`NeuroFlux batch too small to install (${nfQueued} queued < ${c.augTrigger})`);
+                audit("skip", { why: "nfg batch too small", nfQueued, bought });
+              } else if (bought.length) {
                 const src = ns.getMoneySources().sinceInstall;
                 ns.write("/data/install-log.txt", JSON.stringify({ t: Date.now(), why, bought, leftover: money(), src, sinceAug: Date.now() - ns.getResetInfo().lastAugReset }) + "\n", "a");
                 act(`bought ${bought.length} augs (${bought.slice(0, 4).join(", ")}${bought.length > 4 ? ", ..." : ""}); leftover $${ns.format.number(money())}; INSTALLING`);
