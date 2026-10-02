@@ -2,7 +2,33 @@
  * Every 30s: TOR + port programs, home RAM/cores, faction-server backdoors, faction invites,
  *   work policy, donations, and (autoInstall) aug batch + install. Never destroys a BitNode — it FLAGS that.
  * Decisions are appended to /data/audit.txt (JSONL). Status: /data/autopilot-status.txt. Config: /data/autopilot-config.txt.
- * @param {NS} ns */
+ * City invites are blocked when all non-NeuroFlux augmentations are owned or queued; otherwise configured
+ *   `joinCity` factions auto-join and other city invites are flagged.
+ */
+const NEUROFLUX = "NeuroFlux Governor";
+export const CITY_FACTIONS = new Set(["Sector-12", "Aevum", "Volhaven", "Chongqing", "New Tokyo", "Ishima"]);
+export const cityDone = (augsOf, owned, f) => augsOf(f).filter((a) => a !== NEUROFLUX).every((a) => owned.has(a));
+/** @returns {"join"|"flag"|"block"} */
+export function cityInviteDecision(f, { joinCity, augsOf, owned }) {
+  if (!CITY_FACTIONS.has(f)) return "join";
+  if (cityDone(augsOf, owned, f)) return "block";
+  return (joinCity || []).includes(f) ? "join" : "flag";
+}
+// cityBlocked is audited at most once per city faction per autopilot process lifetime (reset on restart).
+const blockedLogged = new Set();
+/** Handles pending faction invites; returns flags. Exported for tests. */
+export function handleInvites({ invites, joinCity, augsOf, owned, join, act, audit }) {
+  const flags = [];
+  for (const f of invites) {
+    const d = cityInviteDecision(f, { joinCity, augsOf, owned });
+    if (d === "block") { if (!blockedLogged.has(f)) { blockedLogged.add(f); audit("cityBlocked", { f, why: "all non-NeuroFlux augs owned" }); } continue; }
+    if (d === "flag") { flags.push(`city faction invite pending: ${f}`); continue; }
+    if (join(f)) act(`joined ${f}`);
+  }
+  return flags;
+}
+
+/** @param {NS} ns */
 export async function main(ns) {
   ns.disableLog("ALL");
   const S = ns.singularity;
@@ -21,7 +47,6 @@ export async function main(ns) {
   };
   const PROGRAMS = ["BruteSSH.exe", "FTPCrack.exe", "relaySMTP.exe", "HTTPWorm.exe", "SQLInject.exe"];
   const BACKDOORS = ["CSEC", "avmnite-02h", "I.I.I.I", "run4theh111z"];
-  const CITY = new Set(["Sector-12", "Aevum", "Volhaven", "Chongqing", "New Tokyo", "Ishima"]);
   const recent = [];
   let liquidatedByMe = false;
   const act = (msg) => {
@@ -130,12 +155,13 @@ export async function main(ns) {
             else next.push({ kind: "level", skill: "hacking", target: req, label: "w0r1d_d43m0n" });
           }
         }
-        // 4. Faction invitations (non-city auto; city ones flagged — they lock out rival cities)
+        // 4. Faction invitations (non-city auto; exhausted cities blocked; other cities joinCity-only, else flagged)
         if (c.joinFactions) {
-          for (const f of S.checkFactionInvitations()) {
-            if (CITY.has(f) && !(c.joinCity || []).includes(f)) { flags.push(`city faction invite pending: ${f}`); continue; }
-            if (S.joinFaction(f)) act(`joined ${f}`);
-          }
+          const ownedAll = new Set(S.getOwnedAugmentations(true));
+          flags.push(...handleInvites({
+            invites: S.checkFactionInvitations(), joinCity: c.joinCity, owned: ownedAll,
+            augsOf: (f) => S.getAugmentationsFromFaction(f), join: (f) => S.joinFaction(f), act, audit,
+          }));
         }
         // 5. Work policy (only when configured; "keep" never touches current work)
         if (c.work !== "keep") {
