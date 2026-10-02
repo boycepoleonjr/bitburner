@@ -2,6 +2,9 @@
  * Every 30s: TOR + port programs, home RAM/cores, faction-server backdoors, faction invites,
  *   work policy, donations, and (autoInstall) aug batch + install. Never destroys a BitNode — it FLAGS that.
  * Decisions are appended to /data/audit.txt (JSONL). Status: /data/autopilot-status.txt. Config: /data/autopilot-config.txt.
+ * NeuroFlux mode: once every other aug is owned, idle work goes to the top NeuroFlux faction, buyBatch donates for
+ *   NeuroFlux rep (favor >= donateFavor), and an install fires when >= augTrigger levels are affordable, unless
+ *   hacking already meets w0r1d_d43m0n's requirement.
  * City invites are blocked when all non-NeuroFlux augmentations are owned or queued; otherwise configured
  *   `joinCity` factions auto-join and other city invites are flagged.
  */
@@ -13,6 +16,13 @@ export function cityInviteDecision(f, { joinCity, augsOf, owned }) {
   if (!CITY_FACTIONS.has(f)) return "join";
   if (cityDone(augsOf, owned, f)) return "block";
   return (joinCity || []).includes(f) ? "join" : "flag";
+}
+/** How many more NeuroFlux levels `budget` buys: each purchase multiplies the next price by `growth`
+ * (x1.14 per NFG level times the x1.9 queued-aug multiplier). Exported for tests. */
+export function nfgAffordable(price, budget, growth = 1.14 * 1.9, max = 100) {
+  let n = 0, spent = 0;
+  while (n < max && price > 0 && spent + price <= budget) { spent += price; price *= growth; n++; }
+  return n;
 }
 /** Handles pending faction invites, pushing flags into `flags` as it goes (kept if a later join throws).
  * `blockedLogged` is created in main(), so cityBlocked is audited once per city per autopilot run
@@ -40,6 +50,7 @@ export async function main(ns) {
     work: "keep",             // "keep" | "study" (Algorithms @ Rothman) | "faction:<name>" | "auto-faction"
     autoInstall: false,       // buy aug batch + install on: Red Pill / >= augTrigger buyable / stalled
     augTrigger: 6,
+    nfgPriceGrowth: 1.14 * 1.9, // next-NFG price multiplier per purchase (level x1.14, queued-aug x1.9)
     donate: true, donateFavor: 150, donateMaxFrac: 0.5,
     loopMs: 30000,
   };
@@ -96,7 +107,17 @@ export async function main(ns) {
     // NeuroFlux last, from the faction with the most rep that sells it
     const nf = ns.getPlayer().factions.filter((f) => S.getAugmentationsFromFaction(f).some((a) => a.startsWith("NeuroFlux"))).sort((a, b) => S.getFactionRep(b) - S.getFactionRep(a))[0];
     if (nf) { const name = S.getAugmentationsFromFaction(nf).find((a) => a.startsWith("NeuroFlux"));
-      for (let i = 0; i < 100 && S.getFactionRep(nf) >= S.getAugmentationRepReq(name) && money() >= S.getAugmentationPrice(name); i++) { if (!S.purchaseAugmentation(nf, name)) break; out.push(name); } }
+      const cb = c0();
+      for (let i = 0; i < 100 && money() >= S.getAugmentationPrice(name); i++) {
+        const gap = S.getAugmentationRepReq(name) - S.getFactionRep(nf);
+        if (gap > 0 && cb.donate && S.getFactionFavor(nf) >= cb.donateFavor) {
+          const amt = Math.ceil(gap / ns.getPlayer().mults.faction_rep) * 1e6;
+          const cap = Math.max(0, money() - cb.reserve) * cb.donateMaxFrac;
+          if (amt <= cap && money() - amt >= S.getAugmentationPrice(name) && S.donateToFaction(nf, amt)) audit("donate", { f: nf, amt, why: "NeuroFlux rep" });
+        }
+        if (S.getFactionRep(nf) < S.getAugmentationRepReq(name) || !S.purchaseAugmentation(nf, name)) break;
+        out.push(name);
+      } }
     // leftover cash is lost at install: sink it into home RAM/cores (they persist)
     for (let i = 0; i < 20; i++) { const r = S.getUpgradeHomeRamCost(), c2 = S.getUpgradeHomeCoresCost(); const pick = Math.min(r, c2); if (!isFinite(pick) || money() < pick) break; if (pick === r ? S.upgradeHomeRam() : S.upgradeHomeCores()) out.push(pick === r ? "home RAM" : "home core"); else break; }
     return out;
@@ -179,6 +200,10 @@ export async function main(ns) {
               const pr = (c.factionPriority || []).indexOf(f), rank = pr < 0 ? 999 : pr;
               if (gap > 0 && (!best || rank < best.rank || (rank === best.rank && gap < best.gap))) best = { f, gap, rank };
             }
+            if (!best) { // everything but NeuroFlux owned: hacking contracts for the top NeuroFlux faction (rep + hacking exp)
+              const nfF = ns.getPlayer().factions.filter((f) => S.getAugmentationsFromFaction(f).includes(NEUROFLUX)).sort((a, b) => S.getFactionRep(b) - S.getFactionRep(a))[0];
+              if (nfF) best = { f: nfF, gap: Math.max(0, S.getAugmentationRepReq(NEUROFLUX) - S.getFactionRep(nfF)), rank: 999 };
+            }
             if (best && !(w && w.type === "FACTION" && w.factionName === best.f)) {
               if (S.workForFaction(best.f, "hacking", false)) act(`working for ${best.f} (hacking contracts, rep gap ${Math.round(best.gap)})`);
               else if (S.workForFaction(best.f, "field", false)) act(`working for ${best.f} (field work)`);
@@ -224,7 +249,15 @@ export async function main(ns) {
         // 8. Aug batch + install (user rules: highest rep req first, NeuroFlux LAST). Destroying a BitNode stays with the agent.
         if (c.autoInstall) {
           const repWorkLeft = ns.getPlayer().factions.some((f) => S.getAugmentationsFromFaction(f).some((a) => !owned.has(a) && !a.startsWith("NeuroFlux") && S.getAugmentationRepReq(a) > S.getFactionRep(f)));
-          const why = augs.redPill ? "Red Pill" : augs.buyable >= c.augTrigger ? `${augs.buyable} augs buyable` : (!repWorkLeft && augs.buyable >= 1) ? "stalled (all rep-complete)" : null;
+          let nfgWhy = null; // NeuroFlux-only stall: nothing else to buy, enough NFG levels affordable, w0r1d_d43m0n not yet reachable
+          if (!repWorkLeft && augs.buyable === 0) {
+            const wdReq = ns.serverExists("w0r1d_d43m0n") ? ns.getServerRequiredHackingLevel("w0r1d_d43m0n") : Infinity;
+            const nfF = ns.getPlayer().factions.filter((f) => S.getAugmentationsFromFaction(f).includes(NEUROFLUX)).sort((a, b) => S.getFactionRep(b) - S.getFactionRep(a))[0];
+            const repOk = nfF && (S.getFactionRep(nfF) >= S.getAugmentationRepReq(NEUROFLUX) || (c.donate && S.getFactionFavor(nfF) >= c.donateFavor));
+            const n = repOk ? nfgAffordable(S.getAugmentationPrice(NEUROFLUX), spendable(), c.nfgPriceGrowth) : 0;
+            if (hack < wdReq && n >= c.augTrigger) nfgWhy = `stalled: NeuroFlux x${n} affordable`;
+          }
+          const why = augs.redPill ? "Red Pill" : augs.buyable >= c.augTrigger ? `${augs.buyable} augs buyable` : (!repWorkLeft && augs.buyable >= 1) ? "stalled (all rep-complete)" : nfgWhy;
           if (why) {
             const cfgO = (() => { try { return JSON.parse(ns.read(OVR) || "{}"); } catch { return {}; } })();
             if (!(cfgO.stocks && cfgO.stocks.liquidate)) {
