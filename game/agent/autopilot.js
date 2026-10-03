@@ -24,6 +24,11 @@ export function nfgAffordable(price, budget, growth = 1.14 * 1.9, max = 100) {
   while (n < max && price > 0 && spent + price <= budget) { spent += price; price *= growth; n++; }
   return n;
 }
+/** NeuroFlux-only stall trigger: levels affordable now plus levels already queued from earlier loops reach `trigger`
+ * (counting only the affordable ones stranded a partial batch: the next level costs ~22x more after 4). Exported for tests. */
+export function nfgTrigger(affordable, queued, trigger) {
+  return affordable + queued >= trigger && affordable + queued > 0;
+}
 /** NeuroFlux-only installs are held once hacking reaches `frac` of w0r1d_d43m0n's requirement: an install resets
  * hacking and would throw away the finish. Exported for tests. */
 export function nfgHold(hack, wdReq, frac = 0.9) {
@@ -270,6 +275,7 @@ export async function main(ns) {
             const nfF = ns.getPlayer().factions.filter((f) => S.getAugmentationsFromFaction(f).includes(NEUROFLUX)).sort((a, b) => S.getFactionRep(b) - S.getFactionRep(a))[0];
             const repOk = nfF && (S.getFactionRep(nfF) >= S.getAugmentationRepReq(NEUROFLUX) || (c.donate && S.getFactionFavor(nfF) >= c.donateFavor));
             const n = repOk ? nfgAffordable(S.getAugmentationPrice(NEUROFLUX), spendable(), c.nfgPriceGrowth) : 0;
+            const nfQ = S.getOwnedAugmentations(true).filter((a) => a === NEUROFLUX).length - S.getOwnedAugmentations(false).filter((a) => a === NEUROFLUX).length;
             if (nfgHold(hack, wdReq, c.nfgHoldFrac)) {
               // near the finish: never reset hacking with a NeuroFlux install; make sure stock trading is back on
               if (!nfgHoldLogged) { nfgHoldLogged = true; audit("nfgHold", { hack, wdReq, frac: c.nfgHoldFrac, affordable: n }); }
@@ -278,7 +284,7 @@ export async function main(ns) {
                 cfgH.stocks = { ...cfgH.stocks, liquidate: false }; ns.write(OVR, JSON.stringify(cfgH), "w"); liquidatedByMe = false;
                 act(`NeuroFlux install held (hack ${hack} >= ${Math.round(c.nfgHoldFrac * 100)}% of w0r1d_d43m0n ${wdReq}): stock trading re-enabled`);
               }
-            } else if (hack < wdReq && n >= c.augTrigger) nfgWhy = `stalled: NeuroFlux x${n} affordable`;
+            } else if (hack < wdReq && nfgTrigger(n, nfQ, c.augTrigger)) nfgWhy = `stalled: NeuroFlux x${n} affordable + ${nfQ} queued`;
           }
           const why = augs.redPill ? "Red Pill" : augs.buyable >= c.augTrigger ? `${augs.buyable} augs buyable` : (!repWorkLeft && augs.buyable >= 1) ? "stalled (all rep-complete)" : nfgWhy;
           if (why) {
@@ -296,7 +302,7 @@ export async function main(ns) {
                 // expected while levels accumulate across loops (donations make each loop buy fewer than estimated):
                 // audit only, no flag, so check-ins don't escalate on it
                 if (bought.length) audit("skip", { why: "nfg batch too small", nfQueued, bought });
-              } else if (bought.length) {
+              } else if (bought.length || nfQueued >= c.augTrigger) { // a full NFG batch queued earlier installs even if this loop buys nothing
                 const src = ns.getMoneySources().sinceInstall;
                 ns.write("/data/install-log.txt", JSON.stringify({ t: Date.now(), why, bought, leftover: money(), src, sinceAug: Date.now() - ns.getResetInfo().lastAugReset }) + "\n", "a");
                 act(`bought ${bought.length} augs (${bought.slice(0, 4).join(", ")}${bought.length > 4 ? ", ..." : ""}); leftover $${ns.format.number(money())}; INSTALLING`);

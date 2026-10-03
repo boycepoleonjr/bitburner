@@ -8,7 +8,8 @@ export async function main(ns) {
   await ns.sleep(500);
   // Small home (fresh BitNode without enough RAM for Singularity): daemon-lite bootstraps itself (money, servers, programs,
   // home RAM) and starts autopilot + daemon.js once home is big enough. No manual steps.
-  const small = ns.getServerMaxRam("home") < ns.getScriptRam("agent/autopilot.js") + 64;
+  // same threshold as daemon-lite's handoff: between apRam+64 and apRam+dRam+64, daemon.js wouldn't fit and nothing would farm
+  const small = ns.getServerMaxRam("home") < ns.getScriptRam("agent/autopilot.js") + ns.getScriptRam("daemon.js") + 64;
   if (small) start("agent/daemon-lite.js"); else start("agent/autopilot.js"); // first: faction work + programs
   start("agent/tele-launch.js");
   start("agent/rpc.js");            // headless bridge (idles until the bb server pushes agent/rpc-config.txt)

@@ -26,7 +26,7 @@ export async function main(ns) {
   const GB = 55000, LIMIT = 25; // purchased-server price per GB / count limit (dl-buy.js verifies by actually buying)
   const fmt = (n) => (n >= 1e9 ? (n / 1e9).toFixed(1) + "b" : n >= 1e6 ? (n / 1e6).toFixed(1) + "m" : (n / 1e3).toFixed(0) + "k");
   const fail = {}; // op -> retry-after ms
-  let dbg = {}, info = { ram: Infinity, cores: Infinity }, infoT = 0, workT = 0, work = "", bdPending = null, seq = 0, stage = "start", lastErr = "", target = "", apPid = 0;
+  let dbg = {}, info = { ram: Infinity, cores: Infinity }, infoT = 0, workT = 0, work = "", bdPending = null, bdPid = 0, seq = 0, stage = "start", lastErr = "", target = "", apPid = 0;
   log(`started (home ${ns.getServerMaxRam("home")}GB, worker ${rpt}GB/thread)`);
 
   const net = () => { const seen = new Set(["home"]), q = ["home"]; while (q.length) for (const n of ns.scan(q.shift())) if (!seen.has(n)) { seen.add(n); q.push(n); } return [...seen]; };
@@ -57,21 +57,36 @@ export async function main(ns) {
     let ok = false; for (let s = ns.readPort(22); s !== "NULL PORT DATA"; s = ns.readPort(22)) { try { ok = JSON.parse(s).ok; } catch { } }
     return ok;
   };
-  const sing = async (script, ...args) => sing2(60, script, ...args);
-  const sing2 = async (waits, script, ...args) => {
-    if (!ns.serverExists(SING)) return null;
+  // port 21 carries every sl-* result. A late one must never answer another call, so results are matched by op;
+  // backdoor results (sl-backdoor.js runs without waiting: installBackdoor can take minutes) are handled whenever they arrive.
+  const drain = (op) => {
+    let r = null;
+    for (let s = ns.readPort(PORT); s !== "NULL PORT DATA"; s = ns.readPort(PORT)) {
+      let m; try { m = JSON.parse(s); } catch { continue; }
+      if (m.op === "backdoor") { for (const h of m.done || []) log(`backdoored ${h}`); bdPending = m.pending || []; }
+      else if (op && m.op === op) r = m;
+    }
+    return r;
+  };
+  const singPrep = () => {
+    if (!ns.serverExists(SING)) return false;
     // pserv-sing is reserved: anything else on it (2026-10-03: telemetry, 29.6GB) blocks the 49.6GB home-RAM script for hours
     for (const p of ns.ps(SING)) if (!SL.includes(p.filename)) { ns.kill(p.pid); log(`killed ${p.filename} on ${SING} (reserved for Singularity)`); }
     ns.scp(SL, SING, "home");
+    return true;
+  };
+  const sing = async (op, script, ...args) => {
+    if (!singPrep()) return null;
+    drain(null);
     const pid = ns.exec(script, SING, 1, ...args);
     if (!pid) { lastErr = `exec ${script} on ${SING} failed (ram?)`; return null; }
-    for (let i = 0; i < waits && ns.isRunning(pid); i++) await ns.sleep(250);
-    let r = null; for (let s = ns.readPort(PORT); s !== "NULL PORT DATA"; s = ns.readPort(PORT)) { try { r = JSON.parse(s); } catch { } }
-    return r;
+    for (let i = 0; i < 60 && ns.isRunning(pid); i++) await ns.sleep(250);
+    return drain(op);
   };
 
   while (true) {
     try {
+      drain(null);
       const money = ns.getServerMoneyAvailable("home"), hack = ns.getHackingLevel(), homeMax = ns.getServerMaxRam("home");
       const all = net();
       for (const h of all) if (h !== "home") root(h);
@@ -99,7 +114,7 @@ export async function main(ns) {
           if (money >= c64 * 1.05 && pserv.length < LIMIT) { if (await buy("buy", SING, 64)) { ns.scp(SL, SING, "home"); log(`bought ${SING} (64GB) as Singularity host`); } }
           else hold = money * 6 >= c64; // saving for it
         } else {
-          if (Date.now() - infoT > 60000) { const r = await sing("agent/sl-info.js"); if (r && r.op === "info") { info = r; infoT = Date.now(); } else infoT = Date.now() - 45000; }
+          if (Date.now() - infoT > 60000) { const r = await sing("info", "agent/sl-info.js"); if (r && r.op === "info") { info = r; infoT = Date.now(); } else infoT = Date.now() - 45000; }
           const LADDER = [
             ["tor", 200e3, !ns.hasTorRouter(), ["agent/sl-tor.js"]],
             ...PROGS.slice(0, 2).map(([p, c]) => [p, c, !ns.fileExists(p, "home"), ["agent/sl-prog.js", p]]),
@@ -117,20 +132,17 @@ export async function main(ns) {
             if ((fail[k] || 0) > Date.now()) continue;
             if (money < cost) { if (!goal) { goal = cost; hold = cost <= money * 6; stage = `saving for ${k} ($${fmt(cost)})`; } continue; }
             if (goal && cost > goal * 0.25) continue;
-            const r = run ? await sing(...run) : { ok: await buy("up", SING, SING_RAM) };
+            const r = run ? await sing(k, ...run) : { ok: await buy("up", SING, SING_RAM) };
             if (r && r.ok) { log(`bought ${k} ($${fmt(cost)})`); infoT = 0; break; }
             fail[k] = Date.now() + 60000; lastErr = `${k} purchase failed`;
           }
           // faction work: autopilot normally does this; without it the player sat idle for the whole BN5 bootstrap
           if (Date.now() - workT > 300000 && ns.getServerMaxRam(SING) >= ns.getScriptRam("agent/sl-work.js", "home")) {
             workT = Date.now();
-            // backdoors first (invites from NiteSec/Black Hand/BitRunners need them); installBackdoor can take ~1 min each
-            if (bdPending === null || bdPending.length) {
-              const b = await sing2(1200, "agent/sl-backdoor.js");
-              if (b && b.op === "backdoor") { for (const h of b.done) log(`backdoored ${h}`); bdPending = b.pending; }
-            }
+            // backdoors (NiteSec/Black Hand/BitRunners invites need them): fire and forget, one copy at a time; drain() records it
+            if ((bdPending === null || bdPending.length) && !(bdPid && ns.isRunning(bdPid)) && singPrep()) bdPid = ns.exec("agent/sl-backdoor.js", SING, 1);
             let c = {}; try { c = JSON.parse(ns.read("/data/autopilot-config.txt") || "{}"); } catch { }
-            const r = await sing("agent/sl-work.js", JSON.stringify({ prio: c.factionPriority || [], joinCity: c.joinCity || [], skipHacknet: !!c.skipHacknetAugs }));
+            const r = await sing("work", "agent/sl-work.js", JSON.stringify({ prio: c.factionPriority || [], joinCity: c.joinCity || [], skipHacknet: !!c.skipHacknetAugs }));
             if (r && r.op === "work") { if (r.work !== work) log(`work: ${r.work}`); work = r.work; for (const f of r.joined || []) log(`joined ${f}`); }
           }
         }
