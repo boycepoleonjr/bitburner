@@ -29,6 +29,7 @@
   const et = (t) => new Date(t).toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" });
   window.__report = (out, st, a, apc, snap) => {
     const tl = (bb.read("/data/telemetry.txt") || "").trimEnd().split("\n").pop(); let t = {}; try { t = JSON.parse(tl); } catch {}
+    { const lv = window.__live || {}; if (!t.t || Date.now() - t.t > 600000 || (lv.bn && t.bn !== lv.bn)) t = { bn: lv.bn }; }
     const installs = (bb.read("/data/install-log.txt") || "").trim().split("\n").filter(Boolean).length;
     const hrs = snap.snap.sinceAug / 3.6e6;
     const status = out.attention.length ? `ATTENTION — ${out.attention.join("; ")}` : out.warn ? `OK (warn: ${out.warn})` : "OK";
@@ -48,7 +49,7 @@
       `| Work | ${work} |`,
       `| Augs | ${a.buyable || 0} buyable · install at ${apc.augTrigger || 6}${apc.autoInstall ? " (auto)" : ""} |`,
       `| Activity | ${did} |`,
-      `| Next event | ${out.next || "—"} |`,
+      `| Next event | ${out.next || (out.boot ? `bootstrap (daemon-lite): ${out.boot.stage}` : "—")} |`,
       `| Predictions | ${(() => { const p = out.pred || {}, l = p.live || {}; return l.n ? `${l.n} scored · ${Math.round(100 * l.inBand)}% in 80% band · ${Math.round(100 * l.within25)}% within ±25%` : `${l.open || 0} open, none scored yet`; })()} |`,
       `| Next check | ${nextAt} ET (+${out.nextMin}m) |`,
     ].join("\n");
@@ -59,20 +60,34 @@
     // 1. autopilot heartbeat (status file refreshed every ~30s)
     let st = readJ("/data/autopilot-status.txt");
     if (!st || Date.now() - st.t > 120000) {
-      const pid = bb.run("agent/autopilot.js");
-      out.did.push(pid ? `started autopilot pid ${pid}` : "autopilot start FAILED");
-      if (!pid) out.attention.push("autopilot not running and could not start (RAM?)");
+      // bootstrap mode: home too small for autopilot -> agent/daemon-lite.js runs the economy and starts autopilot itself
+      const dl = readJ("/data/daemon-lite-status.txt");
+      if (dl && dl.bootstrap && Date.now() - dl.t < 120000) { out.boot = dl; }
+      else {
+        const pid = bb.run("agent/autopilot.js");
+        if (pid) out.did.push(`started autopilot pid ${pid}`);
+        else {
+          const p2 = bb.run("agent/daemon-lite.js");
+          out.did.push(p2 ? `started daemon-lite pid ${p2} (home too small for autopilot)` : "autopilot AND daemon-lite start FAILED");
+          if (!p2) out.attention.push("autopilot and daemon-lite could not start (RAM?)");
+        }
+      }
     }
+    // stale-status guard: a status file older than 3 min (e.g. right after a BitNode reset) must not feed the report
+    let live = {};
+    try { const r = await bb.eval("const ri=ns.getResetInfo();return {bn:ri.currentNode,money:ns.getServerMoneyAvailable('home'),hack:ns.getHackingLevel(),ram:ns.getServerMaxRam('home')}"); if (r && r.ok) live = r.value; } catch {}
+    window.__live = live;
+    if (!st || Date.now() - st.t > 180000) st = { t: Date.now(), stale: true, flags: [], next: [], augs: {}, recent: [], money: live.money ?? 0, hack: live.hack ?? 0, homeRam: live.ram ?? 0, work: (out.boot && out.boot.work) || "idle" };
     // 2. telemetry heartbeat (last line < 3 min old)
     const tl = (bb.read("/data/telemetry.txt") || "").trimEnd().split("\n").pop();
     let tAge = Infinity; try { tAge = Date.now() - JSON.parse(tl).t; } catch {}
-    if (tAge > 180000) { const pid = bb.run("agent/tele-launch.js"); out.did.push(pid ? "relaunched telemetry" : "telemetry relaunch FAILED"); if (!pid) out.attention.push("telemetry down"); }
+    if (tAge > 180000 && (live.ram || 0) >= 128) { const pid = bb.run("agent/tele-launch.js"); out.did.push(pid ? "relaunched telemetry" : "telemetry relaunch FAILED"); if (!pid) out.attention.push("telemetry down"); }
     // 2b. rolling in-browser save backup (hourly, keeps 24h hourly + 14 daily) in IndexedDB "agentBackups"
     try { const b = await __backupSave(); if (b.saved) out.did.push(`save backup ${Math.round(b.bytes / 1024)}KB (${b.kept} kept)`); }
     catch (e) { out.attention.push("save backup failed: " + e); }
     // 3. predictions: score, then ETA over autopilot's next actionable targets
     eval(bb.read("agent/predictor.txt"));
-    st = readJ("/data/autopilot-status.txt") || st || { flags: [], next: [], augs: {} };
+    st = ((x) => (x && Date.now() - x.t <= 180000 ? x : null))(readJ("/data/autopilot-status.txt")) || st || { flags: [], next: [], augs: {} };
     const specs = (st.next || []).map(({ label, ...s }) => s);
     // predictor v2: resolves past predictions, recalibrates when due, logs a calibrated prediction for every target
     const nx = __pred2.tick(specs); const scored = { length: nx.newlyResolved || 0 };
@@ -107,3 +122,4 @@
   };
   return "checkin-lib loaded";
 })();
+
