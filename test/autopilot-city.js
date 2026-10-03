@@ -1,4 +1,4 @@
-// City-faction invite gate in game/agent/autopilot.js. The game file has no package.json type, so it is
+// Pure helpers in game/agent/autopilot.js (city-faction invite gate, NeuroFlux batch sizing). The game file has no package.json type, so it is
 // copied to a temp .mjs and imported; importing only defines functions (main is never called).
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -12,7 +12,7 @@ const tmp = path.join(dir, "autopilot.mjs");
 fs.copyFileSync(src, tmp);
 let mod;
 try { mod = await import(pathToFileURL(tmp).href); } finally { fs.rmSync(dir, { recursive: true, force: true }); }
-const { cityInviteDecision, handleInvites } = mod;
+const { cityInviteDecision, handleInvites, nfgAffordable, nfgHold } = mod;
 
 const AUGS = {
   "Sector-12": ["CashRoot Starter Kit", "NeuroFlux Governor"],
@@ -66,4 +66,25 @@ t("handleInvites: flags pushed before a later join throws are kept", () => {
   assert.throws(() => runInvites({ invites: ["Aevum", "CyberSec"], flags, join: () => { throw new Error("boom"); } }), /boom/);
   assert.deepEqual(flags, ["city faction invite pending: Aevum"]);
 });
-console.log(`AUTOPILOT CITY OK (${n})`);
+t("nfgAffordable: counts levels under a growing price", () => {
+  assert.equal(nfgAffordable(10, 9, 2), 0);
+  assert.equal(nfgAffordable(10, 10, 2), 1);
+  assert.equal(nfgAffordable(10, 70, 2), 3); // 10 + 20 + 40
+  assert.equal(nfgAffordable(10, 69, 2), 2);
+  assert.equal(nfgAffordable(1, 1e9, 1, 5), 5); // capped
+  assert.equal(nfgAffordable(0, 1e9, 2), 0); // bad price -> nothing
+});
+t("nfgAffordable: live-like numbers buy a sensible batch ($9.1q, $4.27b, x2.166)", () => {
+  const k = nfgAffordable(4.27e9, 9.1e15);
+  assert.ok(k >= 15 && k <= 20, `got ${k}`);
+});
+t("nfgHold: holds NeuroFlux installs at >= 90% of w0r1d_d43m0n's requirement", () => {
+  assert.equal(nfgHold(8099, 9000), false);
+  assert.equal(nfgHold(8100, 9000), true);
+  assert.equal(nfgHold(8741, 9000), true);
+  assert.equal(nfgHold(9500, 9000), true);
+  assert.equal(nfgHold(8741, Infinity), false); // no w0r1d_d43m0n yet
+  assert.equal(nfgHold(7000, 9000, 0.75), true); // custom frac
+  assert.equal(nfgHold(6000, 9000, 0.75), false);
+});
+console.log(`AUTOPILOT OK (${n})`);
