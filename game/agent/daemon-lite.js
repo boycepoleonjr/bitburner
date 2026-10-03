@@ -4,7 +4,7 @@
  *   1. roots everything it can, runs a phase-based hack/grow/weaken loop over home + rooted servers + purchased servers
  *   2. buys a small purchased server ("pserv-sing") that is kept free of workers (and of anything else: foreign scripts
  *      are killed) and used to run one-shot Singularity scripts (agent/sl-*.js): TOR, port programs, home RAM, home
- *      cores, and faction joins/work (sl-work.js, once pserv-sing is upgraded to 256GB) — Singularity is far too big
+ *      cores, faction backdoors (sl-backdoor.js) and joins/work (sl-work.js; both need pserv-sing at 512GB) — Singularity is far too big
  *      for 32GB home
  *   3. spends leftover cash on purchased servers (workers), but only while the workers are mostly busy
  *   4. hands over: once home fits agent/autopilot.js it starts it; once home also fits daemon.js it starts
@@ -13,8 +13,8 @@
 const WK = { hack: "workers/hack.js", grow: "workers/grow.js", weaken: "workers/weaken.js" };
 const SING = "pserv-sing", AP = "agent/autopilot.js", DAEMON = "daemon.js";
 const STATUS = "/data/daemon-lite-status.txt", EV = "/data/events.txt", PORT = 21;
-const SL = ["agent/sl-tor.js", "agent/sl-prog.js", "agent/sl-ram.js", "agent/sl-cores.js", "agent/sl-info.js", "agent/sl-work.js"];
-const SING_RAM = 256, MAXT = 15, BUY_UTIL = 0.6; // pserv-sing size (fits sl-work.js), max targets, worker utilization needed to buy more
+const SL = ["agent/sl-tor.js", "agent/sl-prog.js", "agent/sl-ram.js", "agent/sl-cores.js", "agent/sl-info.js", "agent/sl-work.js", "agent/sl-backdoor.js"];
+const SING_RAM = 512, MAXT = 15, BUY_UTIL = 0.6; // pserv-sing size (fits sl-work.js), max targets, worker utilization needed to buy more
 const PROGS = [["BruteSSH.exe", 500e3], ["FTPCrack.exe", 1.5e6], ["relaySMTP.exe", 5e6], ["HTTPWorm.exe", 30e6], ["SQLInject.exe", 250e6]];
 
 export async function main(ns) {
@@ -26,7 +26,7 @@ export async function main(ns) {
   const GB = 55000, LIMIT = 25; // purchased-server price per GB / count limit (dl-buy.js verifies by actually buying)
   const fmt = (n) => (n >= 1e9 ? (n / 1e9).toFixed(1) + "b" : n >= 1e6 ? (n / 1e6).toFixed(1) + "m" : (n / 1e3).toFixed(0) + "k");
   const fail = {}; // op -> retry-after ms
-  let dbg = {}, info = { ram: Infinity, cores: Infinity }, infoT = 0, workT = 0, work = "", seq = 0, stage = "start", lastErr = "", target = "", apPid = 0;
+  let dbg = {}, info = { ram: Infinity, cores: Infinity }, infoT = 0, workT = 0, work = "", bdPending = null, seq = 0, stage = "start", lastErr = "", target = "", apPid = 0;
   log(`started (home ${ns.getServerMaxRam("home")}GB, worker ${rpt}GB/thread)`);
 
   const net = () => { const seen = new Set(["home"]), q = ["home"]; while (q.length) for (const n of ns.scan(q.shift())) if (!seen.has(n)) { seen.add(n); q.push(n); } return [...seen]; };
@@ -57,14 +57,15 @@ export async function main(ns) {
     let ok = false; for (let s = ns.readPort(22); s !== "NULL PORT DATA"; s = ns.readPort(22)) { try { ok = JSON.parse(s).ok; } catch { } }
     return ok;
   };
-  const sing = async (script, ...args) => {
+  const sing = async (script, ...args) => sing2(60, script, ...args);
+  const sing2 = async (waits, script, ...args) => {
     if (!ns.serverExists(SING)) return null;
     // pserv-sing is reserved: anything else on it (2026-10-03: telemetry, 29.6GB) blocks the 49.6GB home-RAM script for hours
     for (const p of ns.ps(SING)) if (!SL.includes(p.filename)) { ns.kill(p.pid); log(`killed ${p.filename} on ${SING} (reserved for Singularity)`); }
     ns.scp(SL, SING, "home");
     const pid = ns.exec(script, SING, 1, ...args);
     if (!pid) { lastErr = `exec ${script} on ${SING} failed (ram?)`; return null; }
-    for (let i = 0; i < 60 && ns.isRunning(pid); i++) await ns.sleep(250);
+    for (let i = 0; i < waits && ns.isRunning(pid); i++) await ns.sleep(250);
     let r = null; for (let s = ns.readPort(PORT); s !== "NULL PORT DATA"; s = ns.readPort(PORT)) { try { r = JSON.parse(s); } catch { } }
     return r;
   };
@@ -123,8 +124,13 @@ export async function main(ns) {
           // faction work: autopilot normally does this; without it the player sat idle for the whole BN5 bootstrap
           if (Date.now() - workT > 300000 && ns.getServerMaxRam(SING) >= ns.getScriptRam("agent/sl-work.js", "home")) {
             workT = Date.now();
+            // backdoors first (invites from NiteSec/Black Hand/BitRunners need them); installBackdoor can take ~1 min each
+            if (bdPending === null || bdPending.length) {
+              const b = await sing2(1200, "agent/sl-backdoor.js");
+              if (b && b.op === "backdoor") { for (const h of b.done) log(`backdoored ${h}`); bdPending = b.pending; }
+            }
             let c = {}; try { c = JSON.parse(ns.read("/data/autopilot-config.txt") || "{}"); } catch { }
-            const r = await sing("agent/sl-work.js", JSON.stringify({ prio: c.factionPriority || [], joinCity: c.joinCity || [] }));
+            const r = await sing("agent/sl-work.js", JSON.stringify({ prio: c.factionPriority || [], joinCity: c.joinCity || [], skipHacknet: !!c.skipHacknetAugs }));
             if (r && r.op === "work") { if (r.work !== work) log(`work: ${r.work}`); work = r.work; for (const f of r.joined || []) log(`joined ${f}`); }
           }
         }
