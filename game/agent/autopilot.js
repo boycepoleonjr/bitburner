@@ -4,7 +4,7 @@
  * Decisions are appended to /data/audit.txt (JSONL). Status: /data/autopilot-status.txt. Config: /data/autopilot-config.txt.
  * NeuroFlux mode: once every other aug is owned, idle work goes to the top NeuroFlux faction, buyBatch donates for
  *   NeuroFlux rep (favor >= donateFavor), and an install fires when >= augTrigger levels are affordable, unless
- *   hacking already meets w0r1d_d43m0n's requirement.
+ *   hacking is at nfgHoldFrac (90%) of w0r1d_d43m0n's requirement or more (an install would reset the finish).
  * City invites are blocked when all non-NeuroFlux augmentations are owned or queued; otherwise configured
  *   `joinCity` factions auto-join and other city invites are flagged.
  */
@@ -23,6 +23,11 @@ export function nfgAffordable(price, budget, growth = 1.14 * 1.9, max = 100) {
   let n = 0, spent = 0;
   while (n < max && price > 0 && spent + price <= budget) { spent += price; price *= growth; n++; }
   return n;
+}
+/** NeuroFlux-only installs are held once hacking reaches `frac` of w0r1d_d43m0n's requirement: an install resets
+ * hacking and would throw away the finish. Exported for tests. */
+export function nfgHold(hack, wdReq, frac = 0.9) {
+  return Number.isFinite(wdReq) && wdReq > 0 && hack >= frac * wdReq;
 }
 /** Handles pending faction invites, pushing flags into `flags` as it goes (kept if a later join throws).
  * `blockedLogged` is created in main(), so cityBlocked is audited once per city per autopilot run
@@ -51,6 +56,7 @@ export async function main(ns) {
     autoInstall: false,       // buy aug batch + install on: Red Pill / >= augTrigger buyable / stalled
     augTrigger: 6,
     nfgPriceGrowth: 1.14 * 1.9, // next-NFG price multiplier per purchase (level x1.14, queued-aug x1.9)
+    nfgHoldFrac: 0.9,         // no NeuroFlux-only install once hacking >= this fraction of w0r1d_d43m0n's requirement
     donate: true, donateFavor: 150, donateMaxFrac: 0.5,
     loopMs: 30000,
   };
@@ -58,7 +64,7 @@ export async function main(ns) {
   const BACKDOORS = ["CSEC", "avmnite-02h", "I.I.I.I", "run4theh111z"];
   const recent = [];
   const blockedLogged = new Set(); // cityBlocked audited once per city per run
-  let liquidatedByMe = false;
+  let liquidatedByMe = false, nfgHoldLogged = false;
   const act = (msg) => {
     const line = `${new Date().toLocaleTimeString("en-US", { hour12: false })} [autopilot] ${msg}`;
     recent.push({ t: Date.now(), msg }); while (recent.length > 20) recent.shift();
@@ -264,7 +270,15 @@ export async function main(ns) {
             const nfF = ns.getPlayer().factions.filter((f) => S.getAugmentationsFromFaction(f).includes(NEUROFLUX)).sort((a, b) => S.getFactionRep(b) - S.getFactionRep(a))[0];
             const repOk = nfF && (S.getFactionRep(nfF) >= S.getAugmentationRepReq(NEUROFLUX) || (c.donate && S.getFactionFavor(nfF) >= c.donateFavor));
             const n = repOk ? nfgAffordable(S.getAugmentationPrice(NEUROFLUX), spendable(), c.nfgPriceGrowth) : 0;
-            if (hack < wdReq && n >= c.augTrigger) nfgWhy = `stalled: NeuroFlux x${n} affordable`;
+            if (nfgHold(hack, wdReq, c.nfgHoldFrac)) {
+              // near the finish: never reset hacking with a NeuroFlux install; make sure stock trading is back on
+              if (!nfgHoldLogged) { nfgHoldLogged = true; audit("nfgHold", { hack, wdReq, frac: c.nfgHoldFrac, affordable: n }); }
+              const cfgH = (() => { try { return JSON.parse(ns.read(OVR) || "{}"); } catch { return {}; } })();
+              if (cfgH.stocks && cfgH.stocks.liquidate) {
+                cfgH.stocks = { ...cfgH.stocks, liquidate: false }; ns.write(OVR, JSON.stringify(cfgH), "w"); liquidatedByMe = false;
+                act(`NeuroFlux install held (hack ${hack} >= ${Math.round(c.nfgHoldFrac * 100)}% of w0r1d_d43m0n ${wdReq}): stock trading re-enabled`);
+              }
+            } else if (hack < wdReq && n >= c.augTrigger) nfgWhy = `stalled: NeuroFlux x${n} affordable`;
           }
           const why = augs.redPill ? "Red Pill" : augs.buyable >= c.augTrigger ? `${augs.buyable} augs buyable` : (!repWorkLeft && augs.buyable >= 1) ? "stalled (all rep-complete)" : nfgWhy;
           if (why) {

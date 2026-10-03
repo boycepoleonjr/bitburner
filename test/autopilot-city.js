@@ -12,7 +12,7 @@ const tmp = path.join(dir, "autopilot.mjs");
 fs.copyFileSync(src, tmp);
 let mod;
 try { mod = await import(pathToFileURL(tmp).href); } finally { fs.rmSync(dir, { recursive: true, force: true }); }
-const { cityInviteDecision, handleInvites, nfgAffordable } = mod;
+const { cityInviteDecision, handleInvites, nfgAffordable, nfgHold } = mod;
 
 const AUGS = {
   "Sector-12": ["CashRoot Starter Kit", "NeuroFlux Governor"],
@@ -77,5 +77,14 @@ t("nfgAffordable: counts levels under a growing price", () => {
 t("nfgAffordable: live-like numbers buy a sensible batch ($9.1q, $4.27b, x2.166)", () => {
   const k = nfgAffordable(4.27e9, 9.1e15);
   assert.ok(k >= 15 && k <= 20, `got ${k}`);
+});
+t("nfgHold: holds NeuroFlux installs at >= 90% of w0r1d_d43m0n's requirement", () => {
+  assert.equal(nfgHold(8099, 9000), false);
+  assert.equal(nfgHold(8100, 9000), true);
+  assert.equal(nfgHold(8741, 9000), true);
+  assert.equal(nfgHold(9500, 9000), true);
+  assert.equal(nfgHold(8741, Infinity), false); // no w0r1d_d43m0n yet
+  assert.equal(nfgHold(7000, 9000, 0.75), true); // custom frac
+  assert.equal(nfgHold(6000, 9000, 0.75), false);
 });
 console.log(`AUTOPILOT OK (${n})`);
