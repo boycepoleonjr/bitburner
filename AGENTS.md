@@ -11,8 +11,13 @@ Maximize long-run progress: money → augmentations → installs → destroy Bit
 In-game scripts do the work. The agent keeps them healthy, fixes what breaks, and records every decision.
 
 ## Goals (current → next)
-1. NOW: BN4.1. Finish the NiteSec → BitRunners → The Black Hand aug sets. Grow hacking and home RAM/cores.
-2. NEXT: Daedalus → The Red Pill → hack w0r1d_d43m0n → destroy BN4. The agent picks the next BitNode
+History: BN1 destroyed 2026-09-26 (SF1.1). BN4 destroyed 2026-10-03 01:39 UTC (SF4.1) → entered BN5.1
+(reasoning in /data/agent-log.txt, 2026-10-03T01:39Z).
+1. NOW: BN5.1 bootstrap. With SF4.1, Singularity costs 16x RAM outside BN4, so agent/autopilot.js needs ~1TB and
+   cannot start on a small home. agent/daemon-lite.js runs the economy until home reaches 2048GB, then starts the
+   autopilot and daemon.js and exits. After that: the NiteSec → BitRunners → The Black Hand aug sets, then grow hacking
+   and home RAM/cores.
+2. NEXT: Daedalus → The Red Pill → hack w0r1d_d43m0n → destroy BN5. The agent picks the next BitNode
    (log the reasoning to /data/agent-log.txt).
 3. ALWAYS: Predictions keep improving from data (predictor v2 self-calibrates). Zero lost progress (backups).
    Cheap, short check-ins.
@@ -26,6 +31,9 @@ In-game scripts do the work. The agent keeps them healthy, fixes what breaks, an
 - Check-ins: frequent and driven by ETAs. Standard report (r.report verbatim) plus one "**Notes:**" line. Owner wants terse replies.
 
 ## What runs by itself (in-game; source of truth)
+- agent/daemon-lite.js — small-home bootstrap (fresh BitNode): hack/grow/weaken over up to 15 targets on home + rooted +
+  purchased servers. pserv-sing is reserved for its one-shot Singularity scripts (agent/sl-*.js: TOR, programs, home
+  RAM/cores, faction joins + work); nothing else may run there. Status: /data/daemon-lite-status.txt.
 - agent/autopilot.js — Singularity autopilot. Buys programs, RAM and cores; installs backdoors; joins factions;
   does faction work (factionPriority); donates; auto-installs (Red Pill / ≥6 buyable / stalled)
   → runs agent/post-install.js. Config: /data/autopilot-config.txt
