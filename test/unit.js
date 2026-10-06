@@ -7,7 +7,7 @@ import { createState } from "../server/state.js";
 import { createCheckin, FIRST_RUN_DELAY_MS, RETRY_MS, ESCALATION_INTERVAL_MS, ORDERING_HEAD_START_MS } from "../server/checkin.js";
 import { createWatchdog, RESTART_WINDOW_MS } from "../server/watchdog.js";
 import { buildReportEmbed, buildEscalationText, sanitize, createNotifier, LIMITS, ESCALATE_MAX_BYTES } from "../server/notify.js";
-import { parseWatchdog } from "../server/config.js";
+import { parseWatchdog, cliAuthHeader } from "../server/config.js";
 
 const tests = [];
 const test = (name, fn) => tests.push([name, fn]);
@@ -287,6 +287,15 @@ test("config: watchdog allowlist and finite minutes", () => {
   assert.equal(parseWatchdog({ BB_WATCHDOG_MIN: "10", BB_WATCHDOG_CMD: "/bin/rm" }).min, 0);
   assert.equal(parseWatchdog({ BB_WATCHDOG_MIN: "10", BB_WATCHDOG_ARGS: "\"-f\"" }).min, 0);
   assert.deepEqual(parseWatchdog({}).args, ["-f", "--", "--user-data-dir=/data/chrome"]);
+});
+test("config: cli auth header (env token, proxy-injected, remote without token)", () => {
+  const missing = path.join(tmp(), ".bb-token");
+  assert.deepEqual(cliAuthHeader({ BB_TOKEN: " t1 \n" }, missing), { authorization: "Bearer t1" });
+  assert.deepEqual(cliAuthHeader({ BB_TOKEN: "t1", BB_TOKEN_VIA_PROXY: "1", BB_URL: "https://h" }, missing), {});
+  assert.throws(() => cliAuthHeader({ BB_URL: "https://h" }, missing), /BB_TOKEN_VIA_PROXY/);
+  assert.equal(fs.existsSync(missing), false); // never creates a token file for a remote server
+  fs.writeFileSync(missing, "t2\n");
+  assert.deepEqual(cliAuthHeader({ BB_URL: "https://h" }, missing), { authorization: "Bearer t2" });
 });
 
 let failed = 0;

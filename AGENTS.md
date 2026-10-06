@@ -64,6 +64,7 @@ PREDICTOR v2, SPEND PLAN, CHECK-IN REPORT FORMAT).
 0. HOSTED (current, since 2026-09-28): the game runs 24/7 in Chromium on Railway (project bitburner, service game,
    Dockerfile + deploy/). GUI (noVNC, basic auth): https://game-production-0b2d.up.railway.app. API: same host /api,
    Bearer BB_TOKEN. CLI: `BB_URL=https://game-production-0b2d.up.railway.app BB_TOKEN=... npx bb status|checkin|...`.
+   In a cloud environment whose proxy injects BB_TOKEN, use BB_TOKEN_VIA_PROXY=1 instead of BB_TOKEN (Node >= 22.21).
    Check-ins run INSIDE the container (server/checkin.js, Railway var BB_CHECKIN_AUTO=1): __checkin() on its own
    nextMin cadence → cached in /data/state → posted to Discord (DISCORD_WEBHOOK_URL). Read the cache any time with
    `bb report` (GET /api/report; instant, no game call). `bb checkin` still forces a fresh one.
