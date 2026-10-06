@@ -88,7 +88,10 @@ export function createCheckin({
       if (!escalationEnabled) { await state.writeJsonAtomic(ESC, esc); return; }
       esc.lastEscalatedAt = now;
       await state.writeJsonAtomic(ESC, esc);
-      await escalate(buildEscalationText({ ...rec, attention }));
+      // The report's status line still lists every flag, so say which ones are the owner's.
+      const held = rec.attention.filter((x) => !attention.includes(x));
+      const report = held.length ? `(Owner decision, not for the agent: ${held.join("; ")})\n\n${rec.report}` : rec.report;
+      await escalate(buildEscalationText({ ...rec, attention, report }));
     });
     escChain = job.catch(() => {});
     return job;

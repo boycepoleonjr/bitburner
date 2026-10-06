@@ -4,8 +4,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createState } from "../server/state.js";
-import { createCheckin, FIRST_RUN_DELAY_MS, RETRY_MS, ESCALATION_INTERVAL_MS, ORDERING_HEAD_START_MS } from "../server/checkin.js";
-import { createWatchdog, RESTART_WINDOW_MS, RPC_ALERT_MS } from "../server/watchdog.js";
+import { createCheckin, OWNER_DECISION, FIRST_RUN_DELAY_MS, RETRY_MS, ESCALATION_INTERVAL_MS, ORDERING_HEAD_START_MS } from "../server/checkin.js";
+import { createWatchdog, RESTART_WINDOW_MS, RPC_ALERT_MS, RPC_ESCALATE_MS } from "../server/watchdog.js";
 import { buildReportEmbed, buildEscalationText, sanitize, createNotifier, LIMITS, ESCALATE_MAX_BYTES } from "../server/notify.js";
 import { parseWatchdog } from "../server/config.js";
 
@@ -200,10 +200,18 @@ test("checkin: READY alongside other attention escalates without READY; READY co
   const a = harness({ attention: [READY, "home RAM stalled"] });
   await a.ci.run(); await a.ci._settle();
   assert.equal(a.calls.escalate.length, 1);
-  assert.match(a.calls.escalate[0], /home RAM stalled/); assert.doesNotMatch(a.calls.escalate[0], /READY/);
+  assert.match(a.calls.escalate[0], /Attention:\n- home RAM stalled\n/);
+  assert.match(a.calls.escalate[0], /Owner decision, not for the agent: w0r1d_d43m0n READY/);
   a.h.attention = ["home RAM stalled"]; await a.ci.run(); await a.ci._settle();
   a.h.attention = [READY, "home RAM stalled"]; await a.ci.run(); await a.ci._settle();
   assert.equal(a.calls.escalate.length, 1);
+});
+
+test("checkin: OWNER_DECISION still matches the flag text autopilot.js raises", () => {
+  const src = fs.readFileSync(new URL("../game/agent/autopilot.js", import.meta.url), "utf8");
+  const flags = [...src.matchAll(/flags\.push\(`([^`]*READY[^`]*)`\)|flags\.push\("([^"]*READY[^"]*)"\)/g)].map((m) => m[1] || m[2]);
+  assert.ok(flags.length >= 1, "READY flag not found in autopilot.js");
+  for (const f of flags) assert.ok(OWNER_DECISION.some((re) => re.test(f)), f);
 });
 
 // ---------------- notify ----------------
@@ -255,6 +263,7 @@ function wdHarness({ min = 10, restartImpl, dir = tmp(), sockets = false } = {})
     notifyText: async (t) => calls.texts.push(t), escalate: async () => { calls.esc++; },
     checkin: { run: async () => { calls.runs++; } }, state, watchdogMin: min, nowMs: c.nowMs,
   });
+  wd._dir = dir;
   return { wd, c, calls, h, dir };
 }
 const flush = () => sleep(10);
@@ -301,19 +310,31 @@ test("watchdog: overlapping ticks run one probe; ping timeout reason", async () 
   await Promise.all([wd.tick(), wd.tick(), wd.tick()]);
   assert.equal(calls.pings, 1);
 });
-test("watchdog: game up + rpc.js absent -> one Discord alert at 5 min, never a restart; reconnect noted", async () => {
+test("watchdog: game up + rpc.js absent -> one Discord alert at 5 min, one escalation at 30, never a restart", async () => {
   const { wd, c, calls, h } = wdHarness({ sockets: true });
   h.gameSock = true; h.rpcSock = false;
   await wd.tick(); c.advance(4 * MIN); await wd.tick(); await flush();
   assert.equal(calls.texts.length, 0);
   c.advance(RPC_ALERT_MS - 4 * MIN); await wd.tick(); await flush();
-  assert.equal(calls.texts.length, 1); assert.match(calls.texts[0], /rpc\.js absent/);
-  for (let i = 0; i < 6; i++) { c.advance(5 * MIN); await wd.tick(); }
+  assert.equal(calls.texts.length, 1); assert.match(calls.texts[0], /rpc\.js absent/); assert.equal(calls.esc, 0);
+  for (let i = 0; i < 12; i++) { c.advance(5 * MIN); await wd.tick(); }
   await flush();
-  assert.equal(calls.texts.length, 1, "alert once"); assert.equal(calls.restarts, 0); assert.equal(calls.esc, 0); assert.equal(calls.pings, 0);
+  assert.ok(12 * 5 * MIN + RPC_ALERT_MS > RPC_ESCALATE_MS);
+  assert.equal(calls.texts.length, 1, "alert once"); assert.equal(calls.esc, 1, "escalate once");
+  assert.equal(calls.restarts, 0); assert.equal(calls.pings, 0);
+  const sf = path.join(wd._dir, "watchdog-state.json");
+  assert.ok(!fs.existsSync(sf) || !fs.readFileSync(sf, "utf8").includes("rpc"), "rpc gap is not persisted");
   h.rpcSock = true; await wd.tick(); await flush();
   assert.deepEqual(calls.texts.slice(1), ["watchdog: agent/rpc.js reconnected"]);
-  assert.equal(wd._state().rpcMissingSince, null); assert.equal(wd._state().rpcAlertedAt, null);
+  assert.equal(wd._rpcGap(), null);
+});
+test("watchdog: rpc gap is in memory only (a restarted server starts it afresh)", async () => {
+  const dir = tmp();
+  const a = wdHarness({ sockets: true, dir }); a.h.gameSock = true;
+  await a.wd.tick(); a.c.advance(4 * MIN); await a.wd.tick();
+  const b = wdHarness({ sockets: true, dir }); b.h.gameSock = true;
+  await b.wd.tick(); b.c.advance(4 * MIN); await b.wd.tick(); await flush();
+  assert.equal(b.calls.texts.length, 0);
 });
 test("watchdog: short rpc gap clears quietly; game socket down still takes the restart path", async () => {
   const { wd, c, calls, h } = wdHarness({ sockets: true });

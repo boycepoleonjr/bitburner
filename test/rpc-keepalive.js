@@ -25,7 +25,7 @@ for (const file of ["autopilot.js", "daemon-lite.js"]) {
   };
   t("names", () => { assert.equal(RPC, "agent/rpc.js"); assert.equal(RPC_CFG, "agent/rpc-config.txt"); });
   t("running -> no-op", () => { const g = go({ running: true }); assert.equal(g.runs, 0); assert.deepEqual(g.acts, []); });
-  t("no rpc-config (no bb server) -> no start", () => { const g = go({ hasConfig: false }); assert.equal(g.runs, 0); assert.deepEqual(g.acts, []); });
+  t("no rpc-config (bb server never connected) -> no start", () => { const g = go({ hasConfig: false }); assert.equal(g.runs, 0); assert.deepEqual(g.acts, []); });
   t("not running -> start + one event line", () => {
     const g = go(); assert.equal(g.r, 42); assert.equal(g.runs, 1);
     assert.deepEqual(g.acts, ["agent/rpc.js was not running: restarted it (pid 42)"]);
