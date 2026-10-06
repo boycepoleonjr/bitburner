@@ -16,6 +16,17 @@ export function loadToken() {
   return fs.readFileSync(TOKEN_FILE, "utf8").trim();
 }
 
+// CLI auth header. BB_TOKEN_VIA_PROXY=1 sends none, so an egress proxy that injects the token can add it (a proxy
+// won't overwrite a header the client already sent). With BB_URL (a remote server) a fresh local .bb-token can never
+// match, so only an existing one is used and none is created.
+export function cliAuthHeader(e = process.env, tokenFile = TOKEN_FILE) {
+  if (e.BB_TOKEN_VIA_PROXY === "1") return {};
+  if (e.BB_TOKEN) return { authorization: `Bearer ${e.BB_TOKEN.trim()}` };
+  if (!e.BB_URL) return { authorization: `Bearer ${loadToken()}` };
+  if (!fs.existsSync(tokenFile)) throw new Error("BB_URL is set but BB_TOKEN is not: set BB_TOKEN, or BB_TOKEN_VIA_PROXY=1 if a proxy injects it");
+  return { authorization: `Bearer ${fs.readFileSync(tokenFile, "utf8").trim()}` };
+}
+
 // ---------- hosted automation (all off by default; Railway turns them on via service variables) ----------
 const env = process.env;
 const TEST = env.NODE_ENV === "test";

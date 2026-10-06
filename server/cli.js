@@ -1,15 +1,18 @@
 #!/usr/bin/env node
 // bb CLI — talks to the local bb server.
 //   bb status | checkin | report | pull | push [file..] | backup | import-save <save.json.gz>   (BB_URL=https://<host> for hosted)
+//   Auth: BB_TOKEN, else the local .bb-token; BB_TOKEN_VIA_PROXY=1 sends no header (an egress proxy injects it;
+//   needs Node >= 22.21, whose fetch only uses HTTPS_PROXY with NODE_USE_ENV_PROXY=1, so the CLI re-runs itself with it)
 //   bb eval '<ns code, async body, use return>'      bb js '<page JS, async body>'
 //   bb read <file> | bb write <file> < stdin | bb note "<msg>" | bb remote <method> '<json params>'
 import fs from "node:fs";
-import { PORT, HOST, loadToken } from "./config.js";
+import { spawnSync } from "node:child_process";
+import { PORT, HOST, cliAuthHeader } from "./config.js";
 
 const [cmd, ...args] = process.argv.slice(2);
 const call = async (route, payload, method = "POST") => {
   const base = process.env.BB_URL || `http://${HOST}:${PORT}`; // BB_URL=https://<host> for the hosted game
-  const r = await fetch(`${base}/api/${route}`, { method, headers: { authorization: `Bearer ${loadToken()}`, "content-type": "application/json" }, body: method === "GET" ? undefined : JSON.stringify(payload || {}) });
+  const r = await fetch(`${base}/api/${route}`, { method, headers: { ...auth, "content-type": "application/json" }, body: method === "GET" ? undefined : JSON.stringify(payload || {}) });
   return r.json();
 };
 const stdin = () => fs.readFileSync(0, "utf8");
@@ -29,6 +32,12 @@ const map = {
   remote: () => call("remote", { method: args[0], params: JSON.parse(args[1] || "{}") }),
 };
 if (!map[cmd]) { console.error("usage: bb status|checkin|report|pull|push|backup|import-save|eval|js|read|write|note|remote"); process.exit(1); }
+if (process.env.BB_TOKEN_VIA_PROXY === "1" && process.env.NODE_USE_ENV_PROXY !== "1") {
+  const r = spawnSync(process.execPath, ["--no-warnings", ...process.argv.slice(1)], { stdio: "inherit", env: { ...process.env, NODE_USE_ENV_PROXY: "1" } });
+  process.exit(r.status ?? 1);
+}
+let auth;
+try { auth = cliAuthHeader(); } catch (e) { console.error(e.message); process.exit(1); }
 map[cmd]().then((r) => {
   if (cmd === "read" && r.ok) process.stdout.write(r.value);
   else if (cmd === "report" && r.ok && r.value) {
