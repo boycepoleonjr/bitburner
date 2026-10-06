@@ -5,8 +5,9 @@ import { sanitize } from "./notify.js";
 
 export const RESTART_WINDOW_MS = 30 * 60 * 1000;
 export const PING_TIMEOUT_MS = 20 * 1000;
+export const RPC_ALERT_MS = 5 * 60 * 1000;
 const FILE = "watchdog-state.json";
-const fresh = () => ({ version: 1, downSince: null, restartTimes: [], backoffUntil: null, escalatedAt: null });
+const fresh = () => ({ version: 1, downSince: null, restartTimes: [], backoffUntil: null, escalatedAt: null, rpcMissingSince: null, rpcAlertedAt: null });
 
 // Runs an allowlisted executable with argv (no shell). Resolves {started, exitCode, error}; never rejects.
 export function spawnRestart(cmd, args, timeoutMs = 10000) {
@@ -22,8 +23,10 @@ export function spawnRestart(cmd, args, timeoutMs = 10000) {
   });
 }
 
+// isGameSocket/isRpcSocket (optional): when the game is connected but agent/rpc.js is not, a browser restart can't help
+// (the save records rpc.js as stopped; the in-game keepalive restarts it), so that case only posts one Discord alert.
 export function createWatchdog({
-  isGameConnected, ping, restartBrowser, notifyText = async () => {}, escalate = async () => {}, checkin, state,
+  isGameConnected, isGameSocket, isRpcSocket, ping, restartBrowser, notifyText = async () => {}, escalate = async () => {}, checkin, state,
   log = () => {}, watchdogMin, nowMs = () => Date.now(), intervalMs = 60000,
 }) {
   const minMs = watchdogMin * 60 * 1000;
@@ -54,8 +57,22 @@ export function createWatchdog({
     ticking = true;
     try {
       await load();
-      const reason = await probe();
       const now = nowMs();
+      if (isGameSocket && isRpcSocket && isGameSocket() && !isRpcSocket()) {
+        if (s.rpcMissingSince == null) { s.rpcMissingSince = now; await save(); }
+        else if (s.rpcAlertedAt == null && now - s.rpcMissingSince >= RPC_ALERT_MS) {
+          s.rpcAlertedAt = now; await save();
+          log("watchdog: game connected but agent/rpc.js absent > 5 min; alerting (no restart)");
+          bg(() => notifyText("watchdog: game connected but agent/rpc.js absent > 5 min. No browser restart (it can't help); the in-game keepalive should restart it, check events.txt"), "notify");
+        }
+        return;
+      }
+      if (s.rpcMissingSince != null) {
+        const alerted = s.rpcAlertedAt != null;
+        s.rpcMissingSince = null; s.rpcAlertedAt = null; await save();
+        if (alerted && isRpcSocket()) { log("watchdog: agent/rpc.js reconnected"); bg(() => notifyText("watchdog: agent/rpc.js reconnected"), "notify"); }
+      }
+      const reason = await probe();
       if (!reason) {
         if (s.downSince != null) {
           // Only a real outage (past the threshold, or after a restart attempt) is announced; boot/reconnect blips clear quietly.

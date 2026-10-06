@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { createState } from "../server/state.js";
 import { createCheckin, FIRST_RUN_DELAY_MS, RETRY_MS, ESCALATION_INTERVAL_MS, ORDERING_HEAD_START_MS } from "../server/checkin.js";
-import { createWatchdog, RESTART_WINDOW_MS } from "../server/watchdog.js";
+import { createWatchdog, RESTART_WINDOW_MS, RPC_ALERT_MS } from "../server/watchdog.js";
 import { buildReportEmbed, buildEscalationText, sanitize, createNotifier, LIMITS, ESCALATE_MAX_BYTES } from "../server/notify.js";
 import { parseWatchdog } from "../server/config.js";
 
@@ -186,6 +186,26 @@ test("checkin: getReport reads disk once, never rpc; stale math uses atMs", asyn
   assert.equal((await b.ci.getReport()).stale, true);
 });
 
+test("checkin: owner-decision attention (w0r1d READY) posts to Discord but never escalates", async () => {
+  const READY = "w0r1d_d43m0n READY — agent decides BitNode destruction";
+  const c = clock(), a = harness({ attention: [READY], c });
+  await a.ci.run(); await a.ci._settle();
+  assert.equal(a.calls.notify.length, 1); assert.deepEqual(a.calls.notify[0].attention, [READY]);
+  assert.equal(a.calls.escalate.length, 0);
+  c.advance(ESCALATION_INTERVAL_MS); await a.ci.run(); await a.ci._settle();
+  assert.equal(a.calls.escalate.length, 0, "no 2h re-escalation either");
+});
+test("checkin: READY alongside other attention escalates without READY; READY coming/going doesn't re-fire", async () => {
+  const READY = "w0r1d_d43m0n READY — agent decides BitNode destruction";
+  const a = harness({ attention: [READY, "home RAM stalled"] });
+  await a.ci.run(); await a.ci._settle();
+  assert.equal(a.calls.escalate.length, 1);
+  assert.match(a.calls.escalate[0], /home RAM stalled/); assert.doesNotMatch(a.calls.escalate[0], /READY/);
+  a.h.attention = ["home RAM stalled"]; await a.ci.run(); await a.ci._settle();
+  a.h.attention = [READY, "home RAM stalled"]; await a.ci.run(); await a.ci._settle();
+  assert.equal(a.calls.escalate.length, 1);
+});
+
 // ---------------- notify ----------------
 test("notify: embed caps hold for huge reports; fallback for unparsable", () => {
   const rows = Array.from({ length: 40 }, (_, i) => `| Row${i} | ${"v".repeat(900)} |`).join("\n");
@@ -224,12 +244,13 @@ test("notify: fireRoutine headers/body + session link to Discord; never throws",
 });
 
 // ---------------- watchdog ----------------
-function wdHarness({ min = 10, restartImpl, dir = tmp() } = {}) {
+function wdHarness({ min = 10, restartImpl, dir = tmp(), sockets = false } = {}) {
   const c = clock(), calls = { restarts: 0, texts: [], esc: 0, runs: 0, pings: 0 };
-  const h = { connected: false, pingOk: true, stateAtRestart: null };
+  const h = { connected: false, pingOk: true, stateAtRestart: null, gameSock: false, rpcSock: false };
+  const sock = sockets ? { isGameSocket: () => h.gameSock, isRpcSocket: () => h.rpcSock } : {};
   const state = createState({ dir });
   const wd = createWatchdog({
-    isGameConnected: () => h.connected, ping: async () => { calls.pings++; await sleep(5); if (!h.pingOk) throw new Error("rpc ping timeout"); return { ok: true }; },
+    ...sock, isGameConnected: () => (sockets ? h.gameSock && h.rpcSock : h.connected), ping: async () => { calls.pings++; await sleep(5); if (!h.pingOk) throw new Error("rpc ping timeout"); return { ok: true }; },
     restartBrowser: restartImpl || (async () => { calls.restarts++; h.stateAtRestart = JSON.parse(fs.readFileSync(path.join(dir, "watchdog-state.json"))); return { started: true, exitCode: 0 }; }),
     notifyText: async (t) => calls.texts.push(t), escalate: async () => { calls.esc++; },
     checkin: { run: async () => { calls.runs++; } }, state, watchdogMin: min, nowMs: c.nowMs,
@@ -279,6 +300,28 @@ test("watchdog: overlapping ticks run one probe; ping timeout reason", async () 
   h.connected = true; h.pingOk = false;
   await Promise.all([wd.tick(), wd.tick(), wd.tick()]);
   assert.equal(calls.pings, 1);
+});
+test("watchdog: game up + rpc.js absent -> one Discord alert at 5 min, never a restart; reconnect noted", async () => {
+  const { wd, c, calls, h } = wdHarness({ sockets: true });
+  h.gameSock = true; h.rpcSock = false;
+  await wd.tick(); c.advance(4 * MIN); await wd.tick(); await flush();
+  assert.equal(calls.texts.length, 0);
+  c.advance(RPC_ALERT_MS - 4 * MIN); await wd.tick(); await flush();
+  assert.equal(calls.texts.length, 1); assert.match(calls.texts[0], /rpc\.js absent/);
+  for (let i = 0; i < 6; i++) { c.advance(5 * MIN); await wd.tick(); }
+  await flush();
+  assert.equal(calls.texts.length, 1, "alert once"); assert.equal(calls.restarts, 0); assert.equal(calls.esc, 0); assert.equal(calls.pings, 0);
+  h.rpcSock = true; await wd.tick(); await flush();
+  assert.deepEqual(calls.texts.slice(1), ["watchdog: agent/rpc.js reconnected"]);
+  assert.equal(wd._state().rpcMissingSince, null); assert.equal(wd._state().rpcAlertedAt, null);
+});
+test("watchdog: short rpc gap clears quietly; game socket down still takes the restart path", async () => {
+  const { wd, c, calls, h } = wdHarness({ sockets: true });
+  h.gameSock = true; await wd.tick(); c.advance(1 * MIN); h.rpcSock = true; await wd.tick(); await flush();
+  assert.equal(calls.texts.length, 0);
+  h.gameSock = false; h.rpcSock = false;
+  await wd.tick(); c.advance(10 * MIN); await wd.tick(); await flush();
+  assert.equal(calls.restarts, 1); assert.deepEqual(calls.texts, ["watchdog: restarting Chromium (rpc socket absent)"]);
 });
 test("config: watchdog allowlist and finite minutes", () => {
   assert.equal(parseWatchdog({ BB_WATCHDOG_MIN: "10" }).min, 10);

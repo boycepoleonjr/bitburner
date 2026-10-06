@@ -70,8 +70,9 @@ try {
   const escTest = await api("/api/escalate-test", { method: "POST", body: "{}" });
   await sleep(200);
   const embedPosts = sink.discord.filter((p) => p.embeds);
-  // watchdog: drop the rpc bridge; after BB_WATCHDOG_MIN (1.2 s) the allowlisted restart command runs
-  rpc.close();
+  // watchdog: drop the game and the rpc bridge; after BB_WATCHDOG_MIN (1.2 s) the allowlisted restart command runs
+  // (rpc alone gone with the game connected only alerts; covered in unit.js)
+  rpc.close(); game.close();
   for (let i = 0; i < 30 && !fs.existsSync(MARK); i++) await sleep(200);
 
   const checks = {

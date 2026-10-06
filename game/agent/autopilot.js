@@ -45,6 +45,17 @@ export function handleInvites({ invites, joinCity, augsOf, owned, join, act, aud
     if (join(f)) act(`joined ${f}`);
   }
 }
+export const RPC = "agent/rpc.js", RPC_CFG = "agent/rpc-config.txt";
+/** Keeps the headless bridge (agent/rpc.js) alive: if it isn't running and the bb server has pushed its config, start it
+ * and log to events.txt. Never kills anything. A failed start is logged once until a start succeeds (`memo` lives in
+ * main()). Same copy in agent/daemon-lite.js. Exported for tests. */
+export function ensureRpc({ running, hasConfig, run, act, memo }) {
+  if (running() || !hasConfig()) return 0;
+  const pid = run();
+  if (pid) { memo.failed = false; act(`${RPC} was not running: restarted it (pid ${pid})`); }
+  else if (!memo.failed) { memo.failed = true; act(`${RPC} is not running and could not be started (RAM on home?)`); }
+  return pid;
+}
 
 /** @param {NS} ns */
 export async function main(ns) {
@@ -70,6 +81,7 @@ export async function main(ns) {
   const recent = [];
   const blockedLogged = new Set(); // cityBlocked audited once per city per run
   let liquidatedByMe = false, nfgHoldLogged = false;
+  const rpcMemo = { failed: false };
   const act = (msg) => {
     const line = `${new Date().toLocaleTimeString("en-US", { hour12: false })} [autopilot] ${msg}`;
     recent.push({ t: Date.now(), msg }); while (recent.length > 20) recent.shift();
@@ -148,6 +160,7 @@ export async function main(ns) {
     const flags = [], next = [];
     let augs = { buyable: 0, top: [], redPill: false };
     try {
+      ensureRpc({ running: () => ns.isRunning(RPC, "home"), hasConfig: () => ns.fileExists(RPC_CFG, "home"), run: () => ns.run(RPC), act, memo: rpcMemo });
       if (c.enabled) {
         const hack = ns.getHackingLevel();
         const spendable = () => Math.max(0, money() - c.reserve);

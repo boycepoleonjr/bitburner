@@ -15,6 +15,15 @@ const SING = "pserv-sing", AP = "agent/autopilot.js", DAEMON = "daemon.js";
 const STATUS = "/data/daemon-lite-status.txt", EV = "/data/events.txt", PORT = 21;
 const SL = ["agent/sl-tor.js", "agent/sl-prog.js", "agent/sl-ram.js", "agent/sl-cores.js", "agent/sl-info.js", "agent/sl-work.js", "agent/sl-backdoor.js"];
 const SING_RAM = 512, MAXT = 15, BUY_UTIL = 0.6; // pserv-sing size (fits sl-work.js), max targets, worker utilization needed to buy more
+export const RPC = "agent/rpc.js", RPC_CFG = "agent/rpc-config.txt";
+/** Keeps agent/rpc.js alive. Same copy as in agent/autopilot.js (see there); exported for tests. */
+export function ensureRpc({ running, hasConfig, run, act, memo }) {
+  if (running() || !hasConfig()) return 0;
+  const pid = run();
+  if (pid) { memo.failed = false; act(`${RPC} was not running: restarted it (pid ${pid})`); }
+  else if (!memo.failed) { memo.failed = true; act(`${RPC} is not running and could not be started (RAM on home?)`); }
+  return pid;
+}
 const PROGS = [["BruteSSH.exe", 500e3], ["FTPCrack.exe", 1.5e6], ["relaySMTP.exe", 5e6], ["HTTPWorm.exe", 30e6], ["SQLInject.exe", 250e6]];
 
 export async function main(ns) {
@@ -84,8 +93,10 @@ export async function main(ns) {
     return drain(op);
   };
 
+  const rpcMemo = { failed: false };
   while (true) {
     try {
+      ensureRpc({ running: () => ns.isRunning(RPC, "home"), hasConfig: () => ns.fileExists(RPC_CFG, "home"), run: () => ns.run(RPC), act: log, memo: rpcMemo });
       drain(null);
       const money = ns.getServerMoneyAvailable("home"), hack = ns.getHackingLevel(), homeMax = ns.getServerMaxRam("home");
       const all = net();

@@ -73,7 +73,7 @@ const checkin = createCheckin({
   notify: (rec) => notifier.discordReport(rec), escalate: (text) => notifier.fireRoutine(text),
 });
 const watchdog = createWatchdog({
-  isGameConnected: isUp, ping: () => rpc("ping", {}, PING_TIMEOUT_MS), restartBrowser: () => spawnRestart(C.WATCHDOG_CMD, C.WATCHDOG_ARGS),
+  isGameConnected: isUp, isGameSocket: () => Boolean(game), isRpcSocket: () => Boolean(rpcSock), ping: () => rpc("ping", {}, PING_TIMEOUT_MS), restartBrowser: () => spawnRestart(C.WATCHDOG_CMD, C.WATCHDOG_ARGS),
   notifyText: (t) => notifier.discordText(t), escalate: (t) => notifier.fireRoutine(t), checkin, state, log,
   watchdogMin: C.WATCHDOG_MIN, intervalMs: C.WATCHDOG_INTERVAL_MS,
 });
