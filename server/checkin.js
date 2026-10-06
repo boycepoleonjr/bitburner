@@ -1,5 +1,6 @@
 // Scheduled, cached check-in. Runs checkin-lib's __checkin() in the page on its own ETA-driven cadence, persists
-// each result, posts it to Discord, and wakes Claude (routine API trigger) only for new or long-open attention.
+// each result, posts it to Discord, and wakes Claude (routine API trigger) only for new or long-open attention
+// (owner-decision items excepted).
 import { createHash } from "node:crypto";
 import { buildEscalationText, sanitize } from "./notify.js";
 
@@ -17,6 +18,9 @@ export const cadenceMs = (r) => clamp(Number(r?.nextMin) || 60, 5, 120) * 60 * 1
 export function normalizeAttention(a) {
   return [...new Set((Array.isArray(a) ? a : []).map((x) => String(x).replace(/\s+/g, " ").trim()).filter(Boolean))].sort((x, y) => x.localeCompare(y));
 }
+// Attention the owner decides on (destroying a BitNode): shown in Discord, never escalated to Claude.
+export const OWNER_DECISION = [/w0r1d_d43m0n READY/i];
+export const escalatable = (a) => normalizeAttention(a).filter((x) => !OWNER_DECISION.some((re) => re.test(x)));
 export const attentionKey = (a) => createHash("sha256").update(JSON.stringify(normalizeAttention(a))).digest("hex");
 
 export function makeRecord(atMs, raw) {
@@ -73,18 +77,21 @@ export function createCheckin({
   function maybeEscalate(rec) {
     const job = escChain.then(async () => {
       if (!rec.ok) return;
-      const esc = await loadEsc(), now = nowMs();
-      if (!rec.attention.length) {
+      const esc = await loadEsc(), now = nowMs(), attention = escalatable(rec.attention);
+      if (!attention.length) {
         if (esc.attentionKey) { Object.assign(esc, { attentionKey: null, firstSeenAt: null, lastResolvedAt: now }); await state.writeJsonAtomic(ESC, esc); }
         return;
       }
-      const key = attentionKey(rec.attention);
+      const key = attentionKey(attention);
       if (key !== esc.attentionKey) Object.assign(esc, { attentionKey: key, firstSeenAt: now, lastEscalatedAt: null });
       else if (esc.lastEscalatedAt != null && now - esc.lastEscalatedAt < ESCALATION_INTERVAL_MS) return;
       if (!escalationEnabled) { await state.writeJsonAtomic(ESC, esc); return; }
       esc.lastEscalatedAt = now;
       await state.writeJsonAtomic(ESC, esc);
-      await escalate(buildEscalationText(rec));
+      // The report's status line still lists every flag, so say which ones are the owner's.
+      const held = rec.attention.filter((x) => !attention.includes(x));
+      const report = held.length ? `(Owner decision, not for the agent: ${held.join("; ")})\n\n${rec.report}` : rec.report;
+      await escalate(buildEscalationText({ ...rec, attention, report }));
     });
     escChain = job.catch(() => {});
     return job;

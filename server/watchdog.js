@@ -5,6 +5,8 @@ import { sanitize } from "./notify.js";
 
 export const RESTART_WINDOW_MS = 30 * 60 * 1000;
 export const PING_TIMEOUT_MS = 20 * 1000;
+export const RPC_ALERT_MS = 5 * 60 * 1000;
+export const RPC_ESCALATE_MS = 30 * 60 * 1000;
 const FILE = "watchdog-state.json";
 const fresh = () => ({ version: 1, downSince: null, restartTimes: [], backoffUntil: null, escalatedAt: null });
 
@@ -22,12 +24,17 @@ export function spawnRestart(cmd, args, timeoutMs = 10000) {
   });
 }
 
+// isGameSocket/isRpcSocket (optional): when the game is connected but agent/rpc.js is not, a browser restart can't help
+// (the save records rpc.js as stopped; the in-game keepalive restarts it), so that case posts one Discord alert at 5 min
+// and, if rpc.js is still absent at 30 min (keepalive dead or stuck), escalates once. Check-ins can't run without rpc,
+// so this is the only wake-up for it. Kept in memory: a server restart starts the gap afresh.
 export function createWatchdog({
-  isGameConnected, ping, restartBrowser, notifyText = async () => {}, escalate = async () => {}, checkin, state,
+  isGameConnected, isGameSocket, isRpcSocket, ping, restartBrowser, notifyText = async () => {}, escalate = async () => {}, checkin, state,
   log = () => {}, watchdogMin, nowMs = () => Date.now(), intervalMs = 60000,
 }) {
   const minMs = watchdogMin * 60 * 1000;
   let s = null, ticking = false, handle = null;
+  let rpcGap = null; // { since, alertedAt, escalatedAt } while the game is connected without rpc.js
   const bg = (p, what) => { Promise.resolve().then(p).catch((e) => log(`watchdog ${what}: ${sanitize(e)}`)); };
   const load = async () => {
     if (s) return s;
@@ -54,8 +61,29 @@ export function createWatchdog({
     ticking = true;
     try {
       await load();
-      const reason = await probe();
       const now = nowMs();
+      if (isGameSocket && isRpcSocket && isGameSocket() && !isRpcSocket()) {
+        if (!rpcGap) rpcGap = { since: now, alertedAt: null, escalatedAt: null };
+        const gap = now - rpcGap.since;
+        if (rpcGap.alertedAt == null && gap >= RPC_ALERT_MS) {
+          rpcGap.alertedAt = now;
+          log("watchdog: game connected but agent/rpc.js absent > 5 min; alerting (no restart)");
+          bg(() => notifyText("watchdog: game connected but agent/rpc.js absent > 5 min. No browser restart (it can't help); the in-game keepalive should restart it, check events.txt"), "notify");
+        }
+        if (rpcGap.escalatedAt == null && gap >= RPC_ESCALATE_MS) {
+          rpcGap.escalatedAt = now;
+          const since = new Date(rpcGap.since).toISOString();
+          log("watchdog: agent/rpc.js still absent after 30 min; escalating");
+          bg(() => escalate(`Bitburner escalation\n\nWatchdog: game connected but agent/rpc.js absent since ${since} (30+ min). The in-game keepalive (autopilot/daemon-lite) has not restarted it, so check-ins are stopped. No browser restart was attempted.`), "escalate");
+        }
+        return;
+      }
+      if (rpcGap) {
+        const alerted = rpcGap.alertedAt != null;
+        rpcGap = null;
+        if (alerted && isRpcSocket?.()) { log("watchdog: agent/rpc.js reconnected"); bg(() => notifyText("watchdog: agent/rpc.js reconnected"), "notify"); }
+      }
+      const reason = await probe();
       if (!reason) {
         if (s.downSince != null) {
           // Only a real outage (past the threshold, or after a restart attempt) is announced; boot/reconnect blips clear quietly.
@@ -103,5 +131,6 @@ export function createWatchdog({
     start() { if (minMs > 0 && !handle) { handle = setInterval(tick, intervalMs); handle.unref?.(); } return !!handle; },
     stop() { if (handle) clearInterval(handle); handle = null; },
     _state: () => s,
+    _rpcGap: () => rpcGap,
   };
 }
