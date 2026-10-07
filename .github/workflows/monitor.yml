@@ -1,0 +1,38 @@
+# External health check for the hosted game. The in-container watchdog can't report the container itself dying, so
+# this runs from GitHub every 30 minutes and keeps issues in sync (see .github/scripts/monitor.js):
+#   incident: game unreachable / check-ins stalled; attention + owner-decision: the latest check-in's attention items.
+# Secrets: BB_TOKEN (optional; without it only /healthz is checked). Variables: BB_URL (optional; defaults to the
+# hosted URL). GitHub pauses schedules after 60 days without repo activity; re-enable under Actions if that happens.
+name: Monitor
+on:
+  schedule:
+    - cron: "7,37 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/scripts
+            server
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check game and sync issues
+        env:
+          BB_URL: ${{ vars.BB_URL }}
+          BB_TOKEN: ${{ secrets.BB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node .github/scripts/monitor.js

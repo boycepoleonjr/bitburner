@@ -1,0 +1,38 @@
+# Releases: a named, known-good point to roll back to. Either push a tag (git tag bn5-destroyed && git push origin
+# bn5-destroyed) or run this workflow from the Actions tab with a tag name; it tags the chosen ref (default main) and
+# publishes a release with notes generated from the merged PRs (categories: .github/release.yml).
+# Tag names: bnN-destroyed for BitNode milestones, vYYYY.MM.DD for notable automation versions.
+name: Release
+on:
+  push:
+    tags: ["bn*", "v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to create, e.g. bn5-destroyed or v2026.10.07"
+        required: true
+      ref:
+        description: "Commit or branch to tag"
+        default: main
+      notes:
+        description: "Extra notes placed above the generated ones (optional)"
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          fetch-depth: 0
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          gh release create "$TAG" --target "$(git rev-parse HEAD)" --title "$TAG" --generate-notes --notes "$NOTES"

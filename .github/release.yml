@@ -1,0 +1,17 @@
+# Categories for auto-generated release notes (gh release create --generate-notes), by PR label.
+changelog:
+  exclude:
+    labels: [skip-changelog]
+  categories:
+    - title: Autopilot & in-game automation
+      labels: [autopilot]
+    - title: Server & hosting
+      labels: [server]
+    - title: Predictions
+      labels: [predictor]
+    - title: Fixes
+      labels: [bug]
+    - title: Dependencies
+      labels: [dependencies]
+    - title: Other changes
+      labels: ["*"]

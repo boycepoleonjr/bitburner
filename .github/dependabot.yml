@@ -1,0 +1,20 @@
+# Weekly update PRs (CI must pass before merge). Security updates come as soon as an advisory is published, once
+# Dependabot alerts + security updates are enabled in Settings → Advanced Security.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule: { interval: weekly, day: monday }
+    groups:
+      npm-minor-patch: { update-types: [minor, patch] }
+    labels: [dependencies]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly, day: monday }
+    groups:
+      actions: { patterns: ["*"] }
+    labels: [dependencies]
+  - package-ecosystem: docker
+    directory: /
+    schedule: { interval: weekly, day: monday }
+    labels: [dependencies]

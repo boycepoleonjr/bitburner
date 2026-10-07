@@ -42,6 +42,9 @@ History: BN1 destroyed 2026-09-26 (SF1.1). BN4 destroyed 2026-10-03 01:39 UTC (S
 - agent/predictor.txt (window.__pred2) — walk-forward-calibrated ETA predictions → /data/pred2.txt, /data/pred-calib.txt
 - agent/checkin-lib.txt — __checkin(): heartbeats, backups (hourly in-browser IndexedDB + hourly server-side to the
   Railway /data volume), predictions, attention list, formatted report, nextMin.
+- GitHub (docs/GITHUB.md): CI (`test` check) gates merges to main and Railway deploys. The Monitor workflow (every 30 min)
+  keeps issues labelled `monitor` in sync: `incident` (game unreachable / check-ins stalled), `attention`,
+  `owner-decision`. Open monitor issues are a quick view of what is wrong; the workflow closes them when cleared.
 
 Backups by runtime (the MySaves folder export was retired 2026-09-29):
 | Runtime | IndexedDB (in-browser) | Server-side | MySaves export |
@@ -88,7 +91,8 @@ B. CLAUDE IN CHROME (legacy fallback): the javascript tool in the Bitburner tab,
 ## How to work on code
 The repo is canonical. `game/` mirrors the in-game home server.
 1. `bb pull` (game → repo) before editing, in case the game changed.
-2. Edit in the repo and commit.
+2. Edit in the repo on a branch, commit, open a PR. main is protected: CI (`npm test`) must pass, and Railway deploys
+   main only after CI passes. Put the PR on the current milestone and label it (autopilot/server/predictor/bug).
 3. `bb push [files]` (repo → game; never touches data/).
 4. Restart the script in-game, then `bb note` what changed.
 Without the server: edit a scratch copy in your workspace and write it back with bb.write (path B), then commit it later.

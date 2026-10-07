@@ -1,0 +1,38 @@
+# Keeps labels and milestones in line with .github/labels.json and .github/milestones.json (create or update;
+# never deletes). Runs when either file changes on main, or by hand from the Actions tab.
+name: Repo setup
+on:
+  push:
+    branches: [main]
+    paths: [".github/labels.json", ".github/milestones.json"]
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sync labels and milestones
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          jq -c '.[]' .github/labels.json | while read -r l; do
+            name=$(jq -r .name <<<"$l"); color=$(jq -r .color <<<"$l"); desc=$(jq -r .description <<<"$l")
+            gh label create "$name" --color "$color" --description "$desc" --force
+          done
+          existing=$(gh api "repos/$GITHUB_REPOSITORY/milestones?state=all&per_page=100" --jq '.[].title')
+          jq -c '.[]' .github/milestones.json | while read -r m; do
+            title=$(jq -r .title <<<"$m"); desc=$(jq -r .description <<<"$m")
+            if grep -Fxq "$title" <<<"$existing"; then
+              num=$(gh api "repos/$GITHUB_REPOSITORY/milestones?state=all&per_page=100" --jq ".[] | select(.title == \"$title\") | .number")
+              gh api -X PATCH "repos/$GITHUB_REPOSITORY/milestones/$num" -f description="$desc" >/dev/null
+              echo "updated milestone: $title"
+            else
+              gh api "repos/$GITHUB_REPOSITORY/milestones" -f title="$title" -f description="$desc" >/dev/null
+              echo "created milestone: $title"
+            fi
+          done

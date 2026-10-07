@@ -1,0 +1,13 @@
+[
+  { "name": "monitor", "color": "5319e7", "description": "Managed by the monitor workflow (opened/closed automatically)" },
+  { "name": "incident", "color": "b60205", "description": "Hosted game down or check-ins stalled" },
+  { "name": "attention", "color": "d93f0b", "description": "Check-in attention item" },
+  { "name": "owner-decision", "color": "fbca04", "description": "Needs the owner's decision" },
+  { "name": "bug", "color": "d73a4a", "description": "Automation does the wrong thing" },
+  { "name": "enhancement", "color": "a2eeef", "description": "Improve the automation or tooling" },
+  { "name": "autopilot", "color": "1d76db", "description": "agent/autopilot.js, daemon-lite, sl-* scripts" },
+  { "name": "server", "color": "0e8a16", "description": "bb server, CLI, hosted container (server/, deploy/, Dockerfile)" },
+  { "name": "predictor", "color": "c5def5", "description": "ETA predictions and calibration" },
+  { "name": "dependencies", "color": "0366d6", "description": "Dependency updates" },
+  { "name": "skip-changelog", "color": "ededed", "description": "Leave out of release notes" }
+]
