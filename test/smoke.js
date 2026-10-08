@@ -68,6 +68,8 @@ try {
   const getOut = await bb("settings", "get", "strategy.mid");
   const setBad = await api("/api/settings", { method: "POST", body: JSON.stringify({ set: { "strategy.mid": 9 } }) });
   const setGet = await api("/api/settings");
+  const dash = await api("/api/dashboard");
+  const dashCli = await bb("dashboard");
   const legacy = await api("/api/checkin", { method: "POST", body: "{}" });
   await sleep(900); // let detached Discord/escalation dispatch finish
   const rep = await api("/api/report");
@@ -103,6 +105,7 @@ try {
     notifyRelay: notifyOk.status === 200 && sink.discord.slice(nBefore).some((p) => p.content === "hello from test"),
     notifyBadRequest: notifyBad.status === 400,
     watchdogFired: fs.existsSync(MARK),
+    dashboardApi: dash.status === 200 && dash.json.ok === true && typeof dash.json.value.kpis.destroy === "object" && dashCli.startsWith("Dashboard"),
     settingsCli: setOut.includes("changed strategy.mid: 0.5 -> 0.25") && getOut.includes("* strategy.mid = 0.25"),
     settingsApi: setBad.status === 400 && setGet.json.value.values["strategy.mid"] === 0.25 && setGet.json.value.rev === 1 && Array.isArray(setGet.json.value.schema)
       && /"by":"cli"/.test(rpcFiles["data/settings-log.txt"] || ""),

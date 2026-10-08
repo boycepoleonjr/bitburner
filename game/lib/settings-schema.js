@@ -97,7 +97,11 @@ export const SCHEMA = [
   { key: "ui.refreshMs", group: "ui", type: "int", default: 1000, min: 250, max: 60000, ui: "number", owner: "dashboard",
     label: "Refresh interval (ms)", help: "How often the dashboard re-reads data." },
   { key: "ui.historyMinutes", group: "ui", type: "int", default: 360, min: 10, max: 10080, ui: "number", owner: "dashboard",
-    label: "Chart history (min)", help: "Telemetry window shown in charts." },
+    label: "Chart history (min)", help: "Telemetry window shown in charts (also the length of data/telemetry-ring.txt)." },
+  { key: "ui.slowRefreshMs", group: "ui", type: "int", default: 30000, min: 1000, max: 600000, ui: "number", owner: "dashboard",
+    label: "Slow refresh (ms)", help: "How often large files (predictions, logs, raw view) are re-read. Their tails only." },
+  { key: "ui.tailLines", group: "ui", type: "int", default: 200, min: 20, max: 2000, ui: "number", owner: "dashboard",
+    label: "Tail lines", help: "Lines read from the end of large files for the Predictions, Logs and Raw views." },
 ];
 
 export const BY_KEY = Object.freeze(Object.fromEntries(SCHEMA.map((f) => [f.key, f])));

@@ -5,10 +5,12 @@
 //   needs Node >= 22.21, whose fetch only uses HTTPS_PROXY with NODE_USE_ENV_PROXY=1, so the CLI re-runs itself with it)
 //   bb eval '<ns code, async body, use return>'      bb js '<page JS, async body>'
 //   bb read <file> | bb write <file> < stdin | bb note "<msg>" | bb remote <method> '<json params>'
+//   bb dashboard            KPIs as shown in the in-game dashboard (GET /api/dashboard)
 //   bb settings [get <key>] | bb settings set <key>=<value> [...] | bb settings unset <key> [...] | bb settings schema
 import fs from "node:fs";
 import { spawnSync } from "node:child_process";
 import { PORT, HOST, cliAuthHeader } from "./config.js";
+import { formatDashboard } from "./dashboard.js";
 
 const [cmd, ...args] = process.argv.slice(2);
 let auth;
@@ -50,6 +52,7 @@ const map = {
   read: () => call("read", { file: args[0] }),
   write: () => call("write", { file: args[0], data: stdin(), mode: args[1] }),
   note: () => call("note", { msg: args.join(" ") }),
+  dashboard: () => call("dashboard", null, "GET"),
   remote: () => call("remote", { method: args[0], params: JSON.parse(args[1] || "{}") }),
   settings: () => {
     const [sub = "list", ...rest] = args;
@@ -60,7 +63,7 @@ const map = {
 };
 const isMain = process.argv[1] && import.meta.url === new URL(`file://${fs.realpathSync(process.argv[1])}`).href;
 if (isMain) {
-if (!map[cmd]) { console.error("usage: bb status|checkin|report|pull|push|backup|import-save|eval|js|read|write|note|remote|settings"); process.exit(1); }
+if (!map[cmd]) { console.error("usage: bb status|checkin|report|pull|push|backup|import-save|eval|js|read|write|note|remote|settings|dashboard"); process.exit(1); }
 if (process.env.BB_TOKEN_VIA_PROXY === "1" && process.env.NODE_USE_ENV_PROXY !== "1") {
   const r = spawnSync(process.execPath, ["--no-warnings", ...process.argv.slice(1)], { stdio: "inherit", env: { ...process.env, NODE_USE_ENV_PROXY: "1" } });
   process.exit(r.status ?? 1);
@@ -74,6 +77,7 @@ map[cmd]().then((r) => {
     console.log(`\nAge: ${ageMin ?? "—"} min\nStale: ${stale ? "yes" : "no"}`);
     if (l?.attention?.length) console.log("Attention:\n" + l.attention.map((a) => `- ${a}`).join("\n"));
   }
+  else if (cmd === "dashboard" && r.ok && r.value) console.log(formatDashboard(r.value));
   else if (cmd === "settings" && r.ok && r.value && (args[0] ?? "list") === "schema") console.log(JSON.stringify(r.value.schema, null, 2));
   else if (cmd === "settings" && r.ok && r.value) {
     console.log(formatSettings(r.value, args[0] === "get" ? args[1] : null));

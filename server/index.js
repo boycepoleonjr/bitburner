@@ -18,6 +18,7 @@ import { createCheckin } from "./checkin.js";
 import { createWatchdog, spawnRestart, PING_TIMEOUT_MS } from "./watchdog.js";
 import { createSettingsApi } from "./settings.js";
 import { createNodeControl, readPlan } from "./node-control.js";
+import { createDashboardApi } from "./dashboard.js";
 
 const TOKEN = loadToken();
 const log = (...a) => console.log(new Date().toISOString(), ...a);
@@ -85,6 +86,7 @@ const settingsApi = createSettingsApi({ rpc });
 const nodeControl = createNodeControl({ rpc, isUp, state, log, backup: () => backup({ rpc: rpcSock ? rpc : null, remote: game ? remote : null }),
   pollMs: Number(process.env.BB_NODE_POLL_MS) || undefined });
 nodeControl.start();
+const dashboardApi = createDashboardApi({ rpc });
 
 // ---------- HTTP API ----------
 const body = (req) => new Promise((res) => { let b = ""; req.on("data", (c) => (b += c)); req.on("end", () => { try { res(b ? JSON.parse(b) : {}); } catch { res({}); } }); });
@@ -116,6 +118,8 @@ const routes = {
   "POST /api/settings": async (b) => settingsApi.patch(b),
   // Aug planner output (data/aug-plan.txt). Read-only: destruction is controlled by settings only, never by an endpoint.
   "GET /api/plan": async () => readPlan(rpc),
+  // KPIs shown by the in-game dashboard (game/lib/kpi.js), computed from the same small files. Read-only.
+  "GET /api/dashboard": async () => dashboardApi.get(),
   "POST /api/remote": async (b) => remote(b.method, b.params || {}),
   "POST /api/pull": async (b) => pull(remote, b),
   "POST /api/push": async (b) => push(remote, b),
