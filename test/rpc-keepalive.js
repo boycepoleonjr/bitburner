@@ -1,5 +1,6 @@
 // rpc.js keepalive (ensureRpc) in game/agent/autopilot.js and game/agent/daemon-lite.js. Game files have no package.json
 // type, so each is copied to a temp .mjs and imported; importing only defines functions (main is never called).
+import "./helpers/game-import.js"; // maps in-game "lib/..." imports (autopilot.js imports lib/settings.js)
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";

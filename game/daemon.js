@@ -300,7 +300,7 @@ export function tick(ns, cfg, state, log, nextWaveId, firstLoop) {
   // ── 9. hooks (phase 2) ───────────────────────────────────────────────
   let cloudInfo = null;
   try { // manager on: buy/upgrade (hooks.purchasedServers is off); off: observe only
-    cloudInfo = cloudTick(ns, mgrOn ? S : { ...S, "ram.cloud.enabled": false }, { autopilotRaw: mgrOn ? ns.read(AUTOPILOT_STATUS) : "", now, log });
+    cloudInfo = cloudTick(ns, mgrOn ? S : { ...S, "ram.cloud.enabled": false }, { autopilotRaw: mgrOn ? ns.read(AUTOPILOT_STATUS) : "", planRaw: mgrOn ? ns.read("data/aug-plan.txt") : "", now, log });
   } catch (e) { log.warn("hook", `cloud: ${e}`); }
   for (const [name, fn] of [["programs", programsHook], ["pserv", purchasedServersHook], ["hacknet", hacknetHook], ["stocks", stocksHook], ["milestones", milestonesHook]]) {
     try { fn(ns, cfg, state, log, map, hackLevel); } catch (e) { log.warn("hook", `${name}: ${e}`); }

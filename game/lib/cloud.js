@@ -46,11 +46,20 @@ export function planCloud({ servers, limit, ramLimit, budget, costOf, upgradeCos
   return { actions, spent: actions.reduce((a, x) => a + x.cost, 0) };
 }
 
-/** Is a predicted install too close for spending? Missing/stale ETA = no freeze (with a reason). */
-export function cloudFreeze(autopilotRaw, freezeMin, now = Date.now()) {
+/** Install ETA from data/aug-plan.txt (aug planner): plan.t + install.next.etaMin. Null when unknown or stale (>10 min). */
+export function planInstallEta(planRaw, now = Date.now()) {
+  let p = null; try { p = JSON.parse(planRaw || "null"); } catch { }
+  const m = p?.install?.next?.etaMin, t = p?.t;
+  if (!Number.isFinite(m) || !Number.isFinite(t) || now - t > 10 * 60_000) return null;
+  return t + m * 60_000;
+}
+
+/** Is a predicted install too close for spending? Missing/stale ETA = no freeze (with a reason).
+ *  ETA source: autopilot-status.installEtaMs if present, else the aug planner's data/aug-plan.txt. */
+export function cloudFreeze(autopilotRaw, freezeMin, now = Date.now(), planRaw = "") {
   let ap = null; try { ap = JSON.parse(autopilotRaw || "null"); } catch { }
-  const eta = ap?.installEtaMs;
-  if (!Number.isFinite(eta)) return { frozen: false, reason: "no install ETA in autopilot-status; freeze ignored" };
+  const eta = Number.isFinite(ap?.installEtaMs) ? ap.installEtaMs : planInstallEta(planRaw, now);
+  if (!Number.isFinite(eta)) return { frozen: false, reason: "no install ETA (autopilot-status / aug-plan); freeze ignored" };
   const left = eta - now;
   if (left > 0 && left <= freezeMin * 60_000) return { frozen: true, reason: `install predicted in ${Math.ceil(left / 60_000)}m: cloud buying frozen` };
   return { frozen: false, reason: "" };
@@ -62,14 +71,14 @@ export function cloudFreeze(autopilotRaw, freezeMin, now = Date.now()) {
  * @param {Object} S  settings (lib/settings.js)
  * @returns {{count:number, limit:number, minGb:number, maxGb:number, spentThisLoop:number, reasons:string[]}}
  */
-export function cloudTick(ns, S, { autopilotRaw = "", now = Date.now(), log } = {}) {
+export function cloudTick(ns, S, { autopilotRaw = "", planRaw = "", now = Date.now(), log } = {}) {
   const reasons = [];
   const names = ns.cloud.getServerNames();
   const limit = ns.cloud.getServerLimit();
   let spent = 0;
   if (!S["ram.cloud.enabled"]) reasons.push("cloud buying disabled");
   else {
-    const fz = cloudFreeze(autopilotRaw, S["ram.cloud.freezeBeforeInstallMin"], now);
+    const fz = cloudFreeze(autopilotRaw, S["ram.cloud.freezeBeforeInstallMin"], now, planRaw);
     if (fz.reason) reasons.push(fz.reason);
     if (!fz.frozen) {
       const plan = planCloud({

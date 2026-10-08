@@ -41,6 +41,12 @@ test("freeze: inside window freezes; outside, past or missing ETA does not", () 
   assert.equal(cloudFreeze(JSON.stringify({ installEtaMs: now + 5 * 60_000 }), 10, now).frozen, true);
   assert.equal(cloudFreeze(JSON.stringify({ installEtaMs: now + 30 * 60_000 }), 10, now).frozen, false);
   assert.equal(cloudFreeze(JSON.stringify({ installEtaMs: now - 1 }), 10, now).frozen, false);
+  // aug planner ETA (data/aug-plan.txt) is used when autopilot-status has none; stale plans are ignored
+  const plan = (etaMin, age = 0) => JSON.stringify({ t: now - age, install: { next: { etaMin } } });
+  assert.equal(cloudFreeze("", 10, now, plan(5)).frozen, true);
+  assert.equal(cloudFreeze("", 10, now, plan(30)).frozen, false);
+  assert.equal(cloudFreeze("", 10, now, plan(5, 11 * 60_000)).frozen, false);
+  assert.equal(cloudFreeze(JSON.stringify({ installEtaMs: now + 60 * 60_000 }), 10, now, plan(5)).frozen, false, "autopilot ETA wins");
   const miss = cloudFreeze("", 10, now);
   assert.equal(miss.frozen, false); assert.match(miss.reason, /no install ETA/);
 });

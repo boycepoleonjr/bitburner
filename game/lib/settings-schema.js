@@ -36,6 +36,8 @@ export const SCHEMA = [
     label: "Automatic node destruction", help: "Hack w0r1d_d43m0n as soon as it is ready (fl1ght.exe complete, hack level met). A save backup is taken first." },
   { key: "node.backupBeforeDestroy", group: "node", type: "bool", default: true, ui: "toggle", owner: "autopilot",
     label: "Backup before destroy", help: "Force a save backup right before destroying a BitNode, so it can be undone by importing it." },
+  { key: "node.destroyDelayMin", group: "node", type: "int", default: 10, min: 0, max: 1440, ui: "number", owner: "autopilot",
+    label: "Destroy veto window (min)", help: "After the backup is confirmed, wait this long before destroying. Turning node.autoDestroy off during the wait cancels it." },
   { key: "node.order", group: "node", type: "intList", default: [], ui: "list", min: 1, max: 14, owner: "autopilot",
     label: "BitNode order", help: "Preferred next BitNodes, first available wins. Empty = use the planner's recommendation." },
 
@@ -86,6 +88,8 @@ export const SCHEMA = [
     label: "Planner goal", help: "destroy = shortest aug path to Daedalus, The Red Pill and w0r1d_d43m0n; complete = every buyable aug." },
   { key: "augs.donateAtFavor", group: "augs", type: "int", default: 150, min: 0, max: 100000, ui: "number", owner: "autopilot",
     label: "Donate at favor", help: "Donate money for rep once faction favor reaches this (scaled by the BitNode multiplier)." },
+  { key: "augs.nfgHoldFrac", group: "augs", type: "number", default: 0.9, min: 0, max: 1, step: 0.01, ui: "slider", owner: "autopilot",
+    label: "NeuroFlux hold near finish", help: "No NeuroFlux-only install once hacking reaches this fraction of w0r1d_d43m0n's requirement (an install would reset the finish)." },
   { key: "augs.neuroFluxLast", group: "augs", type: "bool", default: true, ui: "toggle", owner: "autopilot",
     label: "NeuroFlux last", help: "Owner rule: buy NeuroFlux Governor only after every other purchasable aug." },
 

@@ -207,10 +207,11 @@ test("checkin: READY alongside other attention escalates without READY; READY co
   assert.equal(a.calls.escalate.length, 1);
 });
 
-test("checkin: OWNER_DECISION still matches the flag text autopilot.js raises", () => {
-  const src = fs.readFileSync(new URL("../game/agent/autopilot.js", import.meta.url), "utf8");
-  const flags = [...src.matchAll(/flags\.push\(`([^`]*READY[^`]*)`\)|flags\.push\("([^"]*READY[^"]*)"\)/g)].map((m) => m[1] || m[2]);
-  assert.ok(flags.length >= 1, "READY flag not found in autopilot.js");
+test("checkin: OWNER_DECISION still matches the flag text the autopilot raises (READY_FLAG in lib/augplan.js)", () => {
+  const src = fs.readFileSync(new URL("../game/lib/augplan.js", import.meta.url), "utf8");
+  const flags = [...src.matchAll(/export const READY_FLAG = "([^"]*)"/g)].map((m) => m[1]);
+  assert.ok(flags.length === 1, "READY_FLAG not found in lib/augplan.js");
+  assert.ok(fs.readFileSync(new URL("../game/lib/nodectl.js", import.meta.url), "utf8").includes("READY_FLAG"), "nodectl raises READY_FLAG");
   for (const f of flags) assert.ok(OWNER_DECISION.some((re) => re.test(f)), f);
 });
 
