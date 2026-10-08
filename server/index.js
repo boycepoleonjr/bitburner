@@ -16,6 +16,7 @@ import { createState } from "./state.js";
 import { createNotifier } from "./notify.js";
 import { createCheckin } from "./checkin.js";
 import { createWatchdog, spawnRestart, PING_TIMEOUT_MS } from "./watchdog.js";
+import { createSettingsApi } from "./settings.js";
 
 const TOKEN = loadToken();
 const log = (...a) => console.log(new Date().toISOString(), ...a);
@@ -78,6 +79,7 @@ const watchdog = createWatchdog({
   watchdogMin: C.WATCHDOG_MIN, intervalMs: C.WATCHDOG_INTERVAL_MS,
 });
 if (isUp()) checkin.onRpcUp();
+const settingsApi = createSettingsApi({ rpc });
 
 // ---------- HTTP API ----------
 const body = (req) => new Promise((res) => { let b = ""; req.on("data", (c) => (b += c)); req.on("end", () => { try { res(b ? JSON.parse(b) : {}); } catch { res({}); } }); });
@@ -104,6 +106,9 @@ const routes = {
     const r = await notifier.fireRoutine("[TEST] Bitburner escalation test — no action needed. Reply with the current report and 'Notes: escalation test OK'.");
     return r.ok ? { ok: true, url: r.url } : { ok: false, error: "routine fire failed (see server log)" };
   },
+  // Settings (schema: game/lib/settings-schema.js). GET returns schema + effective values; POST {set, unset, rev?} patches.
+  "GET /api/settings": async () => settingsApi.get(),
+  "POST /api/settings": async (b) => settingsApi.patch(b),
   "POST /api/remote": async (b) => remote(b.method, b.params || {}),
   "POST /api/pull": async (b) => pull(remote, b),
   "POST /api/push": async (b) => push(remote, b),
