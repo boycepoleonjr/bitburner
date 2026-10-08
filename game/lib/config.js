@@ -200,3 +200,22 @@ export function loadConfig(ns) {
     return { cfg: DEFAULTS, overrideError: String(e) };
   }
 }
+
+/**
+ * RAM manager on (settings ram.manager.enabled): settings win over DEFAULTS/overrides for the concepts they own.
+ * Off: cfg is returned untouched, so the daemon runs exactly the pre-manager code path.
+ *   ram.homeReserveGb -> homeReserveGb | ram.xp.target -> xp.target | ram.batches.max (0 = time/RAM bound) -> farm.maxBatches
+ *   one-shot XP waves (xp.enabled) and hooks.purchasedServers are replaced by workers/xp-loop.js and lib/cloud.js
+ * @param {Config} cfg
+ * @param {Object} S  flat settings from lib/settings.js readSettings()
+ */
+export function managedConfig(cfg, S) {
+  if (!S || S["ram.manager.enabled"] !== true) return cfg;
+  const maxB = S["ram.batches.max"] > 0 ? S["ram.batches.max"] : Number.MAX_SAFE_INTEGER;
+  return merge(cfg, {
+    homeReserveGb: S["ram.homeReserveGb"],
+    xp: { enabled: false, target: S["ram.xp.target"] },
+    farm: { maxBatches: maxB },
+    hooks: { purchasedServers: { enabled: false } },
+  });
+}

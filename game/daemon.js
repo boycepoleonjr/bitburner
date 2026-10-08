@@ -2,6 +2,9 @@
  * daemon.js — continuous hacking orchestrator.
  *
  * Every loop:  scan → root → classify → score → decide → reconcile → plan/launch waves → log/state
+ * RAM manager (settings ram.*, strategy.*; docs/specs/ram-manager.md): when ram.manager.enabled, the active target set
+ * grows while RAM allows, share/xp loops fill the rest by strategy weight, cloud servers are bought (lib/cloud.js), and
+ * data/ram-status.txt is written each loop. ram.manager.enabled=false runs the pre-manager path unchanged.
  *
  * Usage:
  *   run daemon.js            start (resumes persisted state)
@@ -9,7 +12,10 @@
  *   run daemon.js --once     single loop, then exit (debugging)
  *   tail daemon.js           live log;  run tools/status.js  for a summary
  */
-import { loadConfig } from "lib/config.js";
+import { loadConfig, managedConfig } from "lib/config.js";
+import { readSettings } from "lib/settings.js";
+import { observe, plan as ramPlan, shrinkLoops, killAllLoops, resizeLoops, writeStatus, AUTOPILOT_STATUS } from "lib/rammgr.js";
+import { cloudTick } from "lib/cloud.js";
 import { makeLogger, money, dur, stamp } from "lib/log.js";
 import { scanNetwork, classify, byRole, describe } from "lib/network.js";
 import { ownedOpeners, rootEligibility, tryRoot } from "lib/rooting.js";
@@ -61,8 +67,11 @@ export async function main(ns) {
  * @param {import("lib/config.js").Config} cfg
  * @param {import("lib/state.js").DaemonState} state
  */
-function tick(ns, cfg, state, log, nextWaveId, firstLoop) {
+export function tick(ns, cfg, state, log, nextWaveId, firstLoop) {
   const now = Date.now();
+  const S = readSettings(ns);
+  const mgr = S["ram.manager.enabled"] === true;
+  cfg = managedConfig(cfg, S); // unchanged when the manager is off
   state.loops++;
   state.lastLoopAt = now;
   const hackLevel = ns.getHackingLevel();
@@ -142,7 +151,17 @@ function tick(ns, cfg, state, log, nextWaveId, firstLoop) {
   }
 
   // ── 6. active set + reconcile (kill workers on targets we dropped) ───
-  const secondaries = pickSecondaries(ranking, state.primary, state.secondaries, cfg);
+  let ctx = null;
+  try { ctx = observe(ns, cfg, S, executors, map, hackLevel, now); } catch (e) { log.warn("ram", `observe failed, manager skipped this loop: ${e}`); }
+  const mgrOn = mgr && !!ctx;
+  if (!mgr && ctx && (ctx.loops.share.length || ctx.loops.xp.length)) log.event("ram", `manager off: killed ${killAllLoops(ns, ctx)} share/xp loops`);
+  let secondaries = pickSecondaries(ranking, state.primary, state.secondaries, cfg);
+  let rplan = null;
+  if (mgrOn) {
+    const ramW = { hack: ns.getScriptRam(cfg.workers.hack, "home"), grow: ns.getScriptRam(cfg.workers.grow, "home"), weaken: ns.getScriptRam(cfg.workers.weaken, "home") };
+    rplan = ramPlan(ns, cfg, S, ctx, ranking, state.primary, secondaries, ramW);
+    secondaries = rplan.secondaries;
+  }
   if (secondaries.join() !== state.secondaries.join()) log.info("target", `secondaries: ${secondaries.join(", ") || "none"}`);
   state.secondaries = secondaries;
   const active = [state.primary, ...secondaries];
@@ -165,6 +184,14 @@ function tick(ns, cfg, state, log, nextWaveId, firstLoop) {
 
   // ── 7. allocation: one wave per idle target, primary first ───────────
   const pool = buildPool(ns, executors, cfg);
+  if (mgrOn) { // money first: loops above their share never block the hacking waves the allocation promised
+    const runningMoney = [...load.values()].reduce((a, t) => a + t.ramGb, 0);
+    const short = rplan.alloc.moneyGb - runningMoney - pool.reduce((a, p) => a + p.free, 0);
+    if (short >= Math.max(8, 0.001 * ctx.usable)) {
+      const freed = shrinkLoops(ns, ctx, short);
+      if (freed > 0) { pool.splice(0, pool.length, ...buildPool(ns, executors, cfg)); log.info("ram", `freed ${freed.toFixed(0)}GB of xp/share loops for hacking waves`); }
+    }
+  }
   const ram = {
     hack: ns.getScriptRam(cfg.workers.hack, "home"),
     grow: ns.getScriptRam(cfg.workers.grow, "home"),
@@ -180,6 +207,7 @@ function tick(ns, cfg, state, log, nextWaveId, firstLoop) {
   const reachable = Math.min(primaryIdeal?.ramGb ?? 0, state.totalRamGb); // an ideal wave bigger than the network can't be reserved
   const headroom = Math.max(0, reachable - (primaryLoad?.ramGb ?? 0));
 
+  let skipLoopSpawn = false;
   for (const host of active) {
     const isPrimary = host === state.primary;
     const busy = load.get(host);
@@ -191,6 +219,14 @@ function tick(ns, cfg, state, log, nextWaveId, firstLoop) {
     if (isPrimary && primaryIdeal && cfg.secondary.preemptBelow > 0) {
       const cap = poolCapacity(pool, unit);
       if (cap < primaryIdeal.ramGb * cfg.secondary.preemptBelow) {
+        if (mgrOn) { // RAM manager: shrink xp, then share loops before touching any hacking worker
+          const freed = shrinkLoops(ns, ctx, primaryIdeal.ramGb - cap);
+          if (freed > 0) {
+            log.event("ram", `freed ${freed.toFixed(0)}GB of xp/share loops for primary ${host}`);
+            state.mode = "preempting"; skipLoopSpawn = true;
+            break;
+          }
+        }
         const k = killWorkers(ns, allHosts, cfg, (t) => t !== host && (secondaries.includes(t) || t === xpTarget));
         if (k > 0) {
           log.event("deploy", `preempted ${k} secondary workers: primary wants ${primaryIdeal.ramGb.toFixed(0)}GB, only ${cap.toFixed(0)}GB free`);
@@ -235,6 +271,13 @@ function tick(ns, cfg, state, log, nextWaveId, firstLoop) {
       log.debug("xp", `weaken ${xpTarget} × ${r.placed} threads on ${r.hosts} hosts`);
     }
   }
+  // ── 7c. RAM manager: size persistent share/xp loops into what is left ──
+  let ramReasons = [];
+  if (mgrOn) {
+    const r = resizeLoops(ns, ctx, rplan.alloc, pool, S, { allowSpawn: !skipLoopSpawn, xpRooted: !!map.get(S["ram.xp.target"])?.rooted, nextTag: () => `${nextWaveId()}` });
+    ramReasons = r.reasons;
+    if (r.killed || r.spawned.share || r.spawned.xp) log.info("ram", `loops: killed ${r.killed}, +share ${r.spawned.share.toFixed(0)}GB, +xp ${r.spawned.xp.toFixed(0)}GB`);
+  }
   state.freeRamGb = pool.reduce((a, p) => a + p.free, 0);
 
   // ── 8. income tracking ───────────────────────────────────────────────
@@ -255,8 +298,22 @@ function tick(ns, cfg, state, log, nextWaveId, firstLoop) {
   }
 
   // ── 9. hooks (phase 2) ───────────────────────────────────────────────
+  let cloudInfo = null;
+  try { // manager on: buy/upgrade (hooks.purchasedServers is off); off: observe only
+    cloudInfo = cloudTick(ns, mgrOn ? S : { ...S, "ram.cloud.enabled": false }, { autopilotRaw: mgrOn ? ns.read(AUTOPILOT_STATUS) : "", now, log });
+  } catch (e) { log.warn("hook", `cloud: ${e}`); }
   for (const [name, fn] of [["programs", programsHook], ["pserv", purchasedServersHook], ["hacknet", hacknetHook], ["stocks", stocksHook], ["milestones", milestonesHook]]) {
     try { fn(ns, cfg, state, log, map, hackLevel); } catch (e) { log.warn("hook", `${name}: ${e}`); }
+  }
+
+  // ── 9b. RAM status (data/ram-status.txt, read by the dashboard and agents) ──
+  if (ctx) {
+    try {
+      const moneyRunningGb = [...census(ns, allHosts, cfg).values()].reduce((a, t) => a + t.ramGb, 0);
+      const reasons = mgrOn ? [...rplan.alloc.reasons, ...ramReasons, ...(cloudInfo?.reasons ?? []), `work signal: ${ctx.workSource}`, ctx.hackNeedWhy, `daedalus reqs: ${ctx.reqSource}`]
+        : ["RAM manager disabled (ram.manager.enabled=false)"];
+      writeStatus(ns, cfg, state, ctx, { enabled: mgrOn, alloc: rplan?.alloc, moneyRunningGb, cloud: cloudInfo, reasons }, now);
+    } catch (e) { log.warn("ram", `status: ${e}`); }
   }
 
   // ── 10. periodic status ──────────────────────────────────────────────

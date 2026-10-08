@@ -1,7 +1,5 @@
-/** Keeps agent/share.js filling up to TARGET GB of home RAM. @param {NS} ns */
-export async function main(ns){ const TARGET = Number(ns.args[0] ?? 500000); ns.disableLog('ALL');
-  while(true){ const used = ns.ps('home').filter(p=>p.filename==='agent/share.js').reduce((a,p)=>a+p.threads*4,0);
-    const free = ns.getServerMaxRam('home') - ns.getServerUsedRam('home') - 64;
-    const want = Math.floor(Math.min(TARGET - used, free) / 4);
-    if (want > 100) ns.exec('agent/share.js', 'home', want);
-    await ns.sleep(30000); } }
+/** agent/share-keeper.js — RETIRED. The daemon's RAM manager now sizes workers/share-loop.js from the strategy
+ * settings (strategy.*, ram.share.enabled). Kept as a stub so old references exit cleanly. @param {NS} ns */
+export async function main(ns) {
+  ns.tprint("agent/share-keeper.js is retired: the daemon RAM manager runs workers/share-loop.js (see docs/specs/ram-manager.md)");
+}
