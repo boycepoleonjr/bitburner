@@ -80,7 +80,7 @@ const watchdog = createWatchdog({
 if (isUp()) checkin.onRpcUp();
 
 // ---------- HTTP API ----------
-const body = (req) => new Promise((res) => { let b = ""; req.on("data", (c) => (b += c)); req.on("end", () => { try { res(b ? JSON.parse(b) : {}); } catch { res({}); } }); });
+const body = (req) => new Promise((res) => { const chunks = []; req.on("data", (c) => chunks.push(c)); req.on("end", () => { const b = Buffer.concat(chunks).toString("utf8"); try { res(b ? JSON.parse(b) : {}); } catch { res({}); } }); }); // decode once: a multi-byte char can straddle chunks
 const routes = {
   "GET /api/status": async () => ({ game: !!game, rpc: !!rpcSock, port: PORT }),
   "POST /api/eval": async (b) => rpc("eval", { code: b.code, timeoutMs: b.timeoutMs }),
