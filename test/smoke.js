@@ -22,8 +22,10 @@ await new Promise((r) => sinkSrv.listen(0, "127.0.0.1", r));
 const S = `http://127.0.0.1:${sinkSrv.address().port}`;
 
 const PORT = 13525, TMP = fs.mkdtempSync(path.join(os.tmpdir(), "bbk-")), MARK = path.join(TMP, "watchdog-fired");
+// The CLI under test must only reach this local server, never a real game named by the caller's environment.
+const { BB_URL, BB_TOKEN_VIA_PROXY, ...callerEnv } = process.env;
 const env = {
-  ...process.env, NODE_ENV: "test", BB_TOKEN: "smoketoken", BB_PORT: String(PORT), BB_BACKUP_DIR: path.join(TMP, "backups"), BB_BACKUP_MIN: "0",
+  ...callerEnv, NODE_ENV: "test", BB_TOKEN: "smoketoken", BB_PORT: String(PORT), BB_BACKUP_DIR: path.join(TMP, "backups"), BB_BACKUP_MIN: "0",
   BB_STATE_DIR: path.join(TMP, "state"), DISCORD_WEBHOOK_URL: `${S}/discord`, BB_ESCALATE_URL: `${S}/fire`, BB_ESCALATE_TOKEN: "esc",
   BB_WATCHDOG_MIN: "0.02", BB_WATCHDOG_CMD: "/usr/bin/touch", BB_WATCHDOG_ARGS: JSON.stringify([MARK]), BB_WATCHDOG_INTERVAL_MS: "200",
 };
