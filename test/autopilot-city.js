@@ -1,5 +1,6 @@
 // Pure helpers in game/agent/autopilot.js (city-faction invite gate, NeuroFlux batch sizing). The game file has no package.json type, so it is
 // copied to a temp .mjs and imported; importing only defines functions (main is never called).
+import "./helpers/game-import.js"; // maps in-game "lib/..." imports (autopilot.js imports lib/settings.js)
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";

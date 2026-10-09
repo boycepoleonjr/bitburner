@@ -13,12 +13,13 @@ In-game scripts do the work. The agent keeps them healthy, fixes what breaks, an
 ## Goals (current → next)
 History: BN1 destroyed 2026-09-26 (SF1.1). BN4 destroyed 2026-10-03 01:39 UTC (SF4.1) → entered BN5.1
 (reasoning in /data/agent-log.txt, 2026-10-03T01:39Z).
-1. NOW: BN5.1 bootstrap. With SF4.1, Singularity costs 16x RAM outside BN4, so agent/autopilot.js needs ~1TB and
-   cannot start on a small home. agent/daemon-lite.js runs the economy until home reaches 2048GB, then starts the
-   autopilot and daemon.js and exits. After that: the NiteSec → BitRunners → The Black Hand aug sets, then grow hacking
-   and home RAM/cores.
-2. NEXT: Daedalus → The Red Pill → hack w0r1d_d43m0n → destroy BN5. The agent picks the next BitNode
-   (log the reasoning to /data/agent-log.txt).
+1. NOW: BN5 is finished (w0r1d_d43m0n ready since 2026-10-05). Ship the RAM manager, aug planner + node control and
+   dashboard (docs/specs/), then destroy BN5. The next BitNode is the testing ground for all three; recommended next:
+   BN1 → BN4 (docs/specs/aug-planner.md "Recommended BitNode order").
+2. NEXT: in each fresh BitNode, agent/daemon-lite.js bootstraps until home reaches 2048GB (with SF4.1 the Singularity
+   autopilot needs ~1TB outside BN4), then autopilot + daemon follow the aug plan (/data/aug-plan.txt): Daedalus →
+   The Red Pill → hack w0r1d_d43m0n → destroy. Destruction and node choice are settings-driven (node.autoDestroy,
+   node.autoSelect, node.order; both off by default = owner decides). Log the reasoning to /data/agent-log.txt.
 3. ALWAYS: Predictions keep improving from data (predictor v2 self-calibrates). Zero lost progress (backups).
    Cheap, short check-ins.
 
@@ -28,6 +29,8 @@ History: BN1 destroyed 2026-09-26 (SF1.1). BN4 destroyed 2026-10-03 01:39 UTC (S
 - Debt is OK early.
 - Rep: faction hacking contracts, not the Algorithms course.
 - Never: delete saves, change game options, touch real money / Steam / logins.
+- BitNode destruction only via settings node.autoDestroy, after a save-backup ack and a node.destroyDelayMin veto
+  window. Veto: `bb settings set node.autoDestroy=false`.
 - Check-ins: frequent and driven by ETAs. Standard report (r.report verbatim) plus one "**Notes:**" line. Owner wants terse replies.
 
 ## What runs by itself (in-game; source of truth)
@@ -37,7 +40,16 @@ History: BN1 destroyed 2026-09-26 (SF1.1). BN4 destroyed 2026-10-03 01:39 UTC (S
 - agent/autopilot.js — Singularity autopilot. Buys programs, RAM and cores; installs backdoors; joins factions;
   does faction work (factionPriority); donates; auto-installs (Red Pill / ≥6 buyable / stalled)
   → runs agent/post-install.js. Config: /data/autopilot-config.txt
-- daemon.js --reset (+ lib/hooks.js hacknet ROI gate). Config: /data/config-overrides.txt
+- daemon.js --reset — hacking + RAM manager (settings ram.*, strategy.*): grows the target set with RAM, fills spare RAM
+  with persistent share/xp loops by the phase's money↔rep strategy weight, buys cloud servers (lib/cloud.js). Status:
+  /data/ram-status.txt. Rollback: `bb settings set ram.manager.enabled=false`. Legacy config: /data/config-overrides.txt
+  (settings win). agent/share-keeper.js is retired. (+ lib/hooks.js hacknet ROI gate.)
+- agent/sl-plan.js — aug path planner (lib/augplan.js), started by the autopilot: /data/aug-plan.txt (GET /api/plan),
+  /data/daedalus-req.txt. agent/sl-destroy.js is the ONLY script that destroys a BitNode; server/node-control.js does the
+  save-backup handshake (/data/node-request.txt → backup → /data/node-ack.txt).
+- dashboard.js — in-game React dashboard (owner-facing; `run dashboard.js`). Reads only small files
+  (data/telemetry-latest.txt, data/telemetry-ring.txt written by agent/telemetry.js, ram-status, aug-plan,
+  autopilot-status, settings). Agents get the same KPIs from `bb dashboard` / GET /api/dashboard (game/lib/kpi.js).
 - agent/telemetry.js — 60s JSONL → /data/telemetry.txt
 - agent/predictor.txt (window.__pred2) — walk-forward-calibrated ETA predictions → /data/pred2.txt, /data/pred-calib.txt
 - agent/checkin-lib.txt — __checkin(): heartbeats, backups (hourly in-browser IndexedDB + hourly server-side to the
@@ -49,11 +61,19 @@ Backups by runtime (the MySaves folder export was retired 2026-09-29):
 | Railway hosted | yes | /data/backups (hourly) | removed |
 | Local browser / Steam | yes (browser build) | only with a local bb server + BB_BACKUP_DIR | removed |
 
+## Settings (one schema, every surface)
+
+Every owner/agent-tunable knob is a key in game/lib/settings-schema.js with a default, stored as overrides in /data/settings.txt (changes logged to /data/settings-log.txt). Change them with `bb settings set key=value` (or POST /api/settings), the in-game dashboard, or writeSettings() in-game. Never edit the file by hand. Owner defaults: node.autoSelect=false, node.autoDestroy=false, strategy early/mid/late = 0 / 0.5 / 1 (money -> faction rep). Spec: docs/specs/settings.md.
+
 ## Logs (read before changing anything)
 - /data/audit.txt (autopilot decisions)
 - /data/events.txt (actions)
 - /data/install-log.txt (one line per install)
 - /data/agent-log.txt (agent notes: write with bb.note)
+- /data/settings-log.txt (every settings change, who made it)
+- /data/ram-status.txt (RAM manager, each daemon loop)
+- /data/aug-plan.txt, /data/node-request.txt, /data/node-ack.txt, state/node-control.json (planner + destroy handshake)
+- /data/telemetry-latest.txt, /data/telemetry-ring.txt (small telemetry views; telemetry.txt is ~20MB, don't poll it)
 
 ## Deeper reference
 agent/PLAYBOOK.txt — procedures and lessons. NOTE: its opening section predates BN4. Singularity (SF4) IS available now,
@@ -90,7 +110,12 @@ The repo is canonical. `game/` mirrors the in-game home server.
 1. `bb pull` (game → repo) before editing, in case the game changed.
 2. Edit in the repo and commit.
 3. `bb push [files]` (repo → game; never touches data/).
-4. Restart the script in-game, then `bb note` what changed.
+4. Restart the script in-game, then `bb note` what changed. (daemon: `kill daemon.js; run daemon.js`, state is kept.)
+5. `npm test` must stay green; new test/*.js files are picked up by test/run-all.js. test/helpers/game-import.js lets
+   Node import in-game modules. Write the spec in docs/specs/ first (Boyce's pre-execution plan improvement: plan →
+   Perplexity "Improve this plan for oneshot execution" → review → execute).
+6. In anything an in-game script imports, never reference window/document, and avoid identifiers named like Netscript
+   functions (share, hack, exec, run, rm, scan, …): Bitburner's static RAM check charges for them.
 Without the server: edit a scratch copy in your workspace and write it back with bb.write (path B), then commit it later.
 
 ## HANDOFF — starting in a new agent/session

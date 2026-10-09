@@ -16,7 +16,8 @@ export async function main(ns) {
     target = cands[0] || null;
   }
   if (!target) { ns.tprint(`telemetry: no host with ${need}GB free`); return; }
-  if (target !== "home") ns.scp(S, target, "home");
+  // telemetry.js imports these (ring for the dashboard); a non-home host needs copies
+  if (target !== "home") ns.scp([S, "lib/telemetry-ring.js", "lib/data-sources.js", "lib/settings.js", "lib/settings-schema.js"], target, "home");
   const pid = ns.exec(S, target, 1, ...ns.args);
   ns.write("/data/telemetry-host.txt", target, "w");
   ns.tprint(pid ? `telemetry started on ${target} (pid ${pid}, ${need}GB)` : `telemetry exec failed on ${target}`);

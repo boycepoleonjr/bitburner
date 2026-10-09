@@ -48,7 +48,13 @@ try {
   await sleep(500);
   const cfg = JSON.parse(files["agent/rpc-config.txt"]);
   const rpc = new WebSocket(`ws://127.0.0.1:${cfg.port}/rpc?token=${cfg.token}`);
-  rpc.on("message", (d) => { const m = JSON.parse(d); const idb = m.op === "js" && m.code.includes("indexedDB"); // backup reads the save from IndexedDB
+  const rpcFiles = {}; // in-game files the settings API reads/writes
+  rpc.on("message", (d) => { const m = JSON.parse(d);
+    if ((m.op === "read" || m.op === "write") && String(m.file).startsWith("data/settings")) {
+      if (m.op === "write") rpcFiles[m.file] = m.mode === "a" ? (rpcFiles[m.file] ?? "") + m.data : m.data;
+      return rpc.send(JSON.stringify({ id: m.id, ok: true, value: m.op === "read" ? (rpcFiles[m.file] ?? "") : true }));
+    }
+    const idb = m.op === "js" && m.code.includes("indexedDB"); // backup reads the save from IndexedDB
     if (m.op === "js" && m.code.includes("__checkin")) checkinJsCalls++;
     const value = idb ? { b64: SAVE_B64 } : m.op === "ping" ? { t: 1 } : m.op === "js" ? { report: REPORT, attention: ["x"], warn: "w", nextMin: 20, did: [] } : `${m.op}:${m.code || m.file || ""}`;
     rpc.send(JSON.stringify({ id: m.id, ok: true, value })); });
@@ -58,6 +64,12 @@ try {
   const callsAfterCheckin = checkinJsCalls;
   out.report = await bb("report");
   const callsAfterReport = checkinJsCalls;
+  const setOut = await bb("settings", "set", "strategy.mid=0.25", "node.autoDestroy=false");
+  const getOut = await bb("settings", "get", "strategy.mid");
+  const setBad = await api("/api/settings", { method: "POST", body: JSON.stringify({ set: { "strategy.mid": 9 } }) });
+  const setGet = await api("/api/settings");
+  const dash = await api("/api/dashboard");
+  const dashCli = await bb("dashboard");
   const legacy = await api("/api/checkin", { method: "POST", body: "{}" });
   await sleep(900); // let detached Discord/escalation dispatch finish
   const rep = await api("/api/report");
@@ -93,6 +105,10 @@ try {
     notifyRelay: notifyOk.status === 200 && sink.discord.slice(nBefore).some((p) => p.content === "hello from test"),
     notifyBadRequest: notifyBad.status === 400,
     watchdogFired: fs.existsSync(MARK),
+    dashboardApi: dash.status === 200 && dash.json.ok === true && typeof dash.json.value.kpis.destroy === "object" && dashCli.startsWith("Dashboard"),
+    settingsCli: setOut.includes("changed strategy.mid: 0.5 -> 0.25") && getOut.includes("* strategy.mid = 0.25"),
+    settingsApi: setBad.status === 400 && setGet.json.value.values["strategy.mid"] === 0.25 && setGet.json.value.rev === 1 && Array.isArray(setGet.json.value.schema)
+      && /"by":"cli"/.test(rpcFiles["data/settings-log.txt"] || ""),
   };
   console.log(JSON.stringify(checks, null, 1));
   const ok = Object.values(checks).every(Boolean);
