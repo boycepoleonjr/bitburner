@@ -61,6 +61,14 @@ try {
     const value = idb ? { b64: SAVE_B64 } : m.op === "ping" ? { t: 1 } : m.op === "js" ? { report: REPORT, attention: ["x"], warn: "w", nextMin: 20, did: [] } : `${m.op}:${m.code || m.file || ""}`;
     rpc.send(JSON.stringify({ id: m.id, ok: true, value })); });
   await sleep(300);
+  // UTF-8 request body: ~600KB of a 3-byte character arrives in many chunks and must reach the game (and read back) intact.
+  // This listener answers first for its file; the generic reply that follows has a used id and is ignored.
+  const BIG = "─".repeat(200000), utf8Files = {};
+  rpc.prependListener("message", (d) => { const m = JSON.parse(d); if (m.file !== "tmp/utf8.txt") return;
+    if (m.op === "write") utf8Files[m.file] = m.data;
+    rpc.send(JSON.stringify({ id: m.id, ok: true, value: m.op === "read" ? utf8Files[m.file] : true })); });
+  const utf8Write = await api("/api/write", { method: "POST", body: JSON.stringify({ file: "tmp/utf8.txt", data: BIG }) });
+  const utf8Read = await api("/api/read", { method: "POST", body: JSON.stringify({ file: "tmp/utf8.txt" }) });
   const bb = async (...a) => (await promisify(execFile)("node", ["server/cli.js", ...a], { env })).stdout.trim();
   const out = { status: await bb("status"), eval: await bb("eval", "return 1"), checkin: await bb("checkin"), backup: await bb("backup"), rpcPushed: !!files["agent/rpc.js"] };
   const callsAfterCheckin = checkinJsCalls;
@@ -90,6 +98,7 @@ try {
   for (let i = 0; i < 30 && !fs.existsSync(MARK); i++) await sleep(200);
 
   const checks = {
+    utf8Body: utf8Write.status === 200 && utf8Files["tmp/utf8.txt"] === BIG && utf8Read.json.value === BIG,
     status: out.status.includes('"rpc": true'),
     eval: out.eval.includes("eval:return 1"),
     checkin: out.checkin.startsWith("REPORT"),
