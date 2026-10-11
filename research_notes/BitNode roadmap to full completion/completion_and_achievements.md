@@ -50,7 +50,7 @@ v3.0.x has **15 BitNodes and 15 Source-Files**. SF1–SF11 and SF13–SF15 cap a
 ## Q2. Full achievement list (109 on dev), grouped by the BitNode, Source-File or mechanic each needs
 
 ### Takeaway
-Of the 109, about **45 are reachable in any BitNode** with hacking + Singularity automation plus small add-ons (stock trading, gym, crime, hacknet). **15 are per-SF "first destruction"** achievements. **12 are BN challenges**. **19 need a specific mechanic** we don't automate: gang 4, corporation 5, Bladeburner 3, hacknet servers 5, sleeves 1, IPvGO 2, Darknet 2 (that sums to 22; INTELLIGENCE_255 also needs SF5 or BN5). **13 are secret exploit/meta achievements**, several of which need editing the save or developer tools. Everything below is verbatim from [AD] (name/description) and [AT] (condition) unless another source is given.
+Of the 109: **43 are reachable in any BitNode** with hacking + Singularity automation plus small add-ons (13 faction/program, 26 general, 4 hacknet-node; add-ons are stock trading, gym, crime, hacknet). **15 are per-SF "first destruction"** achievements. **3 are BitVerse/meta** (INDECISIVE, FAST_BN, BN_DESTROYER). **12 are BN challenges**. **23 need a specific mechanic**: gang 4, corporation 5, Bladeburner 3, hacknet servers 5, sleeves 1, IPvGO 2, Darknet 2, plus INTELLIGENCE_255 (BN5/SF5; we have SF5). **13 are secret exploit/easter-egg achievements** (11 exploits, UNACHIEVABLE, THE_VOID), several of which need editing the save or developer tools. Everything below is verbatim from [AD] (name/description) and [AT] (condition) unless another source is given.
 
 ### Cited Findings
 
@@ -60,7 +60,7 @@ Of the 109, about **45 are reachable in any BitNode** with hacking + Singularity
 | CYBERSEC, NITESEC, THE_BLACK_HAND, BITRUNNERS, DAEDALUS, THE_COVENANT, ILLUMINATI | CyberSec, avmnite-02h, I.I.I.I, run4theh111z, fl1ght.exe, The Covenant, Illuminati | `Player.factions.includes(<faction>)`. Covenant and Illuminati also need combat stats (per PLAYBOOK: Illuminati needs all combat 1200, Covenant 850) |
 | BRUTESSH.EXE, FTPCRACK.EXE, RELAYSMTP.EXE, HTTPWORM.EXE, SQLINJECT.EXE, FORMULAS.EXE | (same names) | the program is on home |
 
-**B. Any BitNode, general (25)**
+**B. Any BitNode, general (26)**
 | ID | Name: description | Exact condition / note |
 |---|---|---|
 | MONEY_1Q | Here comes the money!: $1Q on home | `Player.money >= 1e18` |
@@ -109,7 +109,7 @@ Of the 109, about **45 are reachable in any BitNode** with hacking + Singularity
 | FAST_BN | Speed demon: Destroy a BitNode in under 2 days | `isBitNodeFinished() && Player.playtimeSinceLastBitnode < 2 days` |
 | BN_DESTROYER | More BitNodes, please! | all SF1–SF15 ≥ 3 |
 
-**F. Mechanic-specific (22)**
+**F. Mechanic-specific (23)**
 | Mechanic (unlocked by) | IDs: condition |
 |---|---|
 | Gang (BN2 / SF2) | GANG (form a gang); FULL_GANG (12 members, `MaximumGangMembers: 12`); GANG_TERRITORY (territory ≥ 0.999); GANG_MEMBER_POWER (a member with 10,000 in one stat) |
@@ -128,7 +128,7 @@ Of the 109, about **45 are reachable in any BitNode** with hacking + Singularity
 **H. Secret / exploit / easter-egg (13).** See Q5.
 
 ### Inferences
-- Count check: 13 + 25 + 4 + 15 + 3 + 22 + 12 + 13 + THE_VOID(1) = 108. The table splits differ by one from that sum because THE_VOID is listed in Q5. ID total = 109.
+- Count check: A 13 + B 26 + C 4 + D 15 + E 3 + F 23 + G 12 + H 12 (11 exploits + UNACHIEVABLE) + THE_VOID 1 = **109**, matching the 109 IDs in AchievementData.json.
 - **Repo bug spotted:** `game/tools/goals.js` checks Wolf of Wall Street at `stockNet >= 1e18`. The game condition is `moneySourceB.stock >= 1e15` ("1q" = quadrillion). The local check is 1000x too strict.
 - **Hacknet-node trap:** after SF9.3, hacknet servers always replace hacknet nodes, unless the `disableHacknetServer` BitNode option is set. So get the four hacknet-*node* achievements before SF9.3, or in a node entered with that option. Achieving the server versions also grants them via AdditionalUnlock, which is the easier path once in BN9.
 - Hacking-only automation already covers or can cheaply add: all of A; most of B (KARMA needs crime automation; COMBAT_3000 needs gym; STOCK_1q needs stock trading; MONEY_M1B needs a way into $1b of debt); C; D/E as nodes fall.
@@ -263,7 +263,7 @@ There are 15 `Secret` achievements: MONEY_M1B, KARMA_1000000, 11 "SF −1" explo
 ## Q6. Roadmap ranking implications (feasibility, wall-clock, SF value, diminishing returns)
 
 ### Takeaway
-From the code facts above, rank nodes by "can hacking-only automation finish it, and does the challenge come free". BN2, BN3, BN6, BN7, BN10, BN13 and BN14 each give SF + challenge in one hacking-only run. BN9 is the same with the hacknet hook disabled. BN1 is a 128GB challenge run, ideally after SF4.3, so Singularity is cheap. BN11 is hacking-reachable but slow. BN8 needs stock automation, and BN15 needs darknet automation (plus no heartbleed). BN12 ×50 is the long tail. The mechanic achievements (22) need new automation for gang, corporation, Bladeburner, hacknet servers, sleeves, IPvGO and darknet.
+From the code facts above, rank nodes by "can hacking-only automation finish it, and does the challenge come free". BN2, BN3, BN6, BN7, BN10, BN13 and BN14 each give SF + challenge in one hacking-only run. BN9 is the same with the hacknet hook disabled. BN1 is a 128GB challenge run, ideally after SF4.3, so Singularity is cheap. BN11 is hacking-reachable but slow. BN8 needs stock automation, and BN15 needs darknet automation (plus no heartbleed). BN12 ×50 is the long tail. The mechanic achievements (22 excluding INTELLIGENCE_255) need new automation for gang, corporation, Bladeburner, hacknet servers, sleeves, IPvGO and darknet.
 
 ### Cited Findings
 - Official guidance: "BN1, BN2, and BN5 are great starters"; "Due to the RAM cost, it's strongly recommended to complete BN4.3 before using the Singularity API in other BitNodes"; "BN9, BN13, BN14, and BN15 are tough"; "BN3 has a very tough mechanic to automate but gives unparalleled power"; "BN8 and BN11 are tough but offer little benefit to new players"; "BN12 is easy to start but quickly ramps up in difficulty"; BN8 "there's no other way to make money" than stocks, and "Completing at least BN10.1 is highly recommended in order to have Grafting"; BN9.2 gives 128GiB starting home RAM. — [GUIDE]
@@ -273,7 +273,7 @@ From the code facts above, rank nodes by "can hacking-only automation finish it,
 ### Inferences
 - **Achievements bundled per first run.** First destruction of each new node gives SF{n}.1 (+1). Challenge-free nodes: BN2, BN3, BN6, BN7, BN9 (hook off), BN10, BN13, BN14 each give +2 achievements per hacking-only run. FAST_BN (< 2 days playtime since last BitNode) will come naturally on an easy node once multipliers stack, e.g. BN1.2/1.3. INDECISIVE comes if one destruction sits on the BitVerse for 61+ minutes. The node.destroyDelayMin veto window happens before destroying, so this needs an extra wait after it.
 - **Total runs** for SF completion: 42 more SF levels (all nodes to 3, minus SF1.1, SF4.1, SF5.1 owned), plus 47 extra BN12 runs for CHALLENGE_BN12. Later SF levels add little to other runs (e.g. SF1 +16% → +24% → +28%). After about level 2 of the speed-relevant SFs (SF1, SF4, SF5, SF9.2 for 128GB start, SF10 for grafting/sleeves), 3rd levels are mostly "for completion".
-- The mechanic achievements could mostly be gathered *inside the node that unlocks the mechanic*, but only on a **repeat** run (e.g. BN2.2) or after the SF, so the first run keeps the challenge. Note gang/corp/Bladeburner/hacknet-server/sleeve automation doesn't exist yet. These 19–22 achievements plus BN8/BN15 are where new engineering is needed.
+- The mechanic achievements could mostly be gathered *inside the node that unlocks the mechanic*, but only on a **repeat** run (e.g. BN2.2) or after the SF, so the first run keeps the challenge. Note gang/corp/Bladeburner/hacknet-server/sleeve automation doesn't exist yet. These 22 achievements plus BN8/BN15 are where new engineering is needed.
 
 ### Gaps
 - Wall-clock estimates per node were not derived here (depends on the predictor and other researchers' data).
