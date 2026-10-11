@@ -45,7 +45,7 @@ export async function main(ns) {
     `  ${mark(hn.numNodes() >= 30)} Big network — ${hn.numNodes()}/30 hacknet nodes`,
     `  ${mark(maxedNode)} That's the limit — a fully upgraded hacknet node`,
     `  ${mark(ns.stock.has4SData())} 4S — 4S market data${stocks ? ` | holdings $${f(stocks.holdings)}, realized $${f(stocks.realized)}, ${stocks.trades} trades` : ""}`,
-    `  ${mark(stockNet >= 1e18)} Wolf of wall street — stock net (incl. open positions) $${f(stockNet)}/$1q`,
+    `  ${mark(stockNet >= 1e15)} Wolf of wall street — stock net (incl. open positions) $${f(stockNet)}/$1q`,
     `  ${mark(p.money >= 1e18)} Here comes the money! — $${f(p.money)}/$1Q on hand`,
     `  ${mark(hack >= 100_000)} Power Overwhelming — hack ${hack}/100k (XP mode: ${cfg.xp.enabled ? `on → ${cfg.xp.target}` : "off"})`,
     `  ${mark(home.maxRam >= cfg.hooks.milestones.homeMaxRamGb)} Download more ram — home ${ns.format.ram(home.maxRam)} (buy at City → Alpha Enterprises)`,
