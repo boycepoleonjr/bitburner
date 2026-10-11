@@ -29,6 +29,10 @@ History: BN1 destroyed 2026-09-26 (SF1.1). BN4 destroyed 2026-10-03 01:39 UTC (S
 - Debt is OK early.
 - Rep: faction hacking contracts, not the Algorithms course.
 - Never: delete saves, change game options, touch real money / Steam / logins.
+  The BitVerse portal's per-node BitNode options (home RAM/core caps, disabling gangs/corp/Bladeburner/4S/hacknet,
+  SF overrides) count as game options: never set them. Challenge runs enforce their limits in our own scripts.
+- Achievements that need browser devtools / page tampering (DEVMENU, TIMECOMPRESSION, PROTOTYPETAMPERING,
+  REALITYALTERATION, UNCLICKABLE, etc.) are allowed. Save-file edits (EDITSAVEFILE, UNACHIEVABLE) are not.
 - BitNode destruction only via settings node.autoDestroy, after a save-backup ack and a node.destroyDelayMin veto
   window. Veto: `bb settings set node.autoDestroy=false`.
 - Check-ins: frequent and driven by ETAs. Standard report (r.report verbatim) plus one "**Notes:**" line. Owner wants terse replies.
