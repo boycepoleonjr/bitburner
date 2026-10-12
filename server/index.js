@@ -16,6 +16,9 @@ import { createState } from "./state.js";
 import { createNotifier } from "./notify.js";
 import { createCheckin } from "./checkin.js";
 import { createWatchdog, spawnRestart, PING_TIMEOUT_MS } from "./watchdog.js";
+import { createSettingsApi } from "./settings.js";
+import { createNodeControl, readPlan } from "./node-control.js";
+import { createDashboardApi } from "./dashboard.js";
 
 const TOKEN = loadToken();
 const log = (...a) => console.log(new Date().toISOString(), ...a);
@@ -69,7 +72,7 @@ await state.ensureDir();
 for (const l of C.configSummary()) log(l);
 const notifier = createNotifier({ webhookUrl: C.DISCORD_ON ? C.DISCORD_WEBHOOK_URL : "", escalateUrl: C.ESCALATE_URL, escalateToken: C.ESCALATE_TOKEN, log });
 const checkin = createCheckin({
-  rpc, isUp, log, state, auto: C.CHECKIN_AUTO, escalationEnabled: notifier.escalationEnabled,
+  rpc, isUp, log, state, auto: C.CHECKIN_AUTO, escalationEnabled: notifier.escalationEnabled, readyEscalateMs: C.READY_ESCALATE_MIN * 60000,
   notify: (rec) => notifier.discordReport(rec), escalate: (text) => notifier.fireRoutine(text),
 });
 const watchdog = createWatchdog({
@@ -78,9 +81,15 @@ const watchdog = createWatchdog({
   watchdogMin: C.WATCHDOG_MIN, intervalMs: C.WATCHDOG_INTERVAL_MS,
 });
 if (isUp()) checkin.onRpcUp();
+const settingsApi = createSettingsApi({ rpc });
+// BitNode-destroy backup handshake: backs up the save when the game asks, never destroys anything itself.
+const nodeControl = createNodeControl({ rpc, isUp, state, log, backup: () => backup({ rpc: rpcSock ? rpc : null, remote: game ? remote : null }),
+  pollMs: Number(process.env.BB_NODE_POLL_MS) || undefined });
+nodeControl.start();
+const dashboardApi = createDashboardApi({ rpc });
 
 // ---------- HTTP API ----------
-const body = (req) => new Promise((res) => { let b = ""; req.on("data", (c) => (b += c)); req.on("end", () => { try { res(b ? JSON.parse(b) : {}); } catch { res({}); } }); });
+const body = (req) => new Promise((res) => { const chunks = []; req.on("data", (c) => chunks.push(c)); req.on("end", () => { const b = Buffer.concat(chunks).toString("utf8"); try { res(b ? JSON.parse(b) : {}); } catch { res({}); } }); }); // decode once: a multi-byte char can straddle chunks
 const routes = {
   "GET /api/status": async () => ({ game: !!game, rpc: !!rpcSock, port: PORT }),
   "POST /api/eval": async (b) => rpc("eval", { code: b.code, timeoutMs: b.timeoutMs }),
@@ -104,6 +113,13 @@ const routes = {
     const r = await notifier.fireRoutine("[TEST] Bitburner escalation test — no action needed. Reply with the current report and 'Notes: escalation test OK'.");
     return r.ok ? { ok: true, url: r.url } : { ok: false, error: "routine fire failed (see server log)" };
   },
+  // Settings (schema: game/lib/settings-schema.js). GET returns schema + effective values; POST {set, unset, rev?} patches.
+  "GET /api/settings": async () => settingsApi.get(),
+  "POST /api/settings": async (b) => settingsApi.patch(b),
+  // Aug planner output (data/aug-plan.txt). Read-only: destruction is controlled by settings only, never by an endpoint.
+  "GET /api/plan": async () => readPlan(rpc),
+  // KPIs shown by the in-game dashboard (game/lib/kpi.js), computed from the same small files. Read-only.
+  "GET /api/dashboard": async () => dashboardApi.get(),
   "POST /api/remote": async (b) => remote(b.method, b.params || {}),
   "POST /api/pull": async (b) => pull(remote, b),
   "POST /api/push": async (b) => push(remote, b),

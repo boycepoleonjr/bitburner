@@ -1,0 +1,146 @@
+>>> READ AGENTS.txt (home root) FIRST: vision, goals, current architecture, handoff. It supersedes stale parts below.
+BITBURNER AGENT PLAYBOOK (read at every check-in)
+Goal: maximize long-run progress (money -> augs -> installs -> BitNode destruction) with no human input.
+
+CONTROL SURFACES (Bitburner tab in Chrome, via Claude in Chrome javascript_tool / clicks)
+- window.bb (agent/bridge.js): bb.status(), bb.eval(code) runs arbitrary ns code on home and returns {ok,value|error},
+  bb.read/write/ls/rm/ps/run/kill/logs, bb.note(msg) appends to data/agent-log.txt, bb.tail(n).
+- No Source-File 4: ns.singularity.* is unavailable. Faction work, aug purchases, installs, travel,
+  home upgrades, crimes, university/gym = click the UI.
+- daemon.js --reset (user's autopilot) already handles: rooting, backdoors, HWGW batching, pservs, hacknet,
+  darkweb programs, auto-joining factions. tools/stocks.js trades stocks. Do NOT edit or kill these
+  unless broken; prefer config via data/config-overrides.txt (JSON).
+- Terminal helper (define if missing): window.__run(cmd) types a terminal command (Terminal page must be open).
+
+EACH CHECK-IN
+1. Health: if window.bb missing or !bb.alive() -> open Terminal, `run agent/bridge.js`.
+   If daemon.js not in bb.status().scripts -> `run daemon.js --reset`. Same for tools/stocks.js.
+2. Read: bb.status(), last 30 lines of data/events.txt, bb.tail(20).
+3. Act (highest value first, spend at most ~80% of cash; keep stock positions alone):
+   a. Upgrade home RAM / cores (City > Alpha Enterprises or ECorp) when cost < 10% of cash.
+   b. Faction rep: if not working, start Hacking Contracts (focus) for the faction whose next needed aug
+      is closest in rep. Prefer factions leading to The Red Pill / Daedalus.
+   c. Buy augs per AUG BUYING RULE below: highest rep requirement first, NeuroFlux LAST (old "always include NF when cheap" rule is WRONG — superseded).
+   d. Install augs when >= 6 queued, or queued augs include The Red Pill, or >= 4 queued and no new
+      affordable aug in 2 check-ins. After install: run daemon.js --reset, tools/stocks.js, agent/bridge.js.
+      Sell stock positions first (tools/stocks.js may have a liquidate flag; check its source).
+   e. BitNode: when The Red Pill installed and w0r1d_d43m0n hackable, destroy it; pick next BitNode
+      SF4 (Singularity) first, then SF5, SF2.
+4. Log: bb.note("checkin: <what you saw> | <what you did> | <next goal>").
+5. Never: delete saves, change game options, touch real-money/Steam/login flows.
+
+LESSONS
+- Buy NeuroFlux LAST: every aug purchase (incl. each NF level) multiplies all remaining prices x1.9.
+- Before install: set data/config-overrides.txt stocks.liquidate=true, wait for $0 positions; spend leftover cash on home RAM/cores (they persist). After install: liquidate=false.
+- After install: run agent/bridge.js, run daemon.js --reset; buy TOR at Alpha Enterprises (Sector-12); take Rothman Algorithms course until a faction needs work.
+- Long javascript_tool calls (>~3s or dialogs) fail in the extension; keep each call short and re-check state.
+
+CADENCE (dynamic; replaces fixed 60 min)
+- At the END of every check-in call: const c = bb.snapshot({actions: <count of actions you took>, etaMin: <your estimate of minutes until the next thing worth acting on, e.g. rep for next aug / cash for next home upgrade / faction invite; omit if unknown>, note: '<short>'})
+- Then send_later with delay_minutes = c.nextMin, and include c.why in your one-line reply.
+- Rules (in bridge): base 10m <30min after install, 20m <2h, 40m <6h, 60m after; fast growth (hack >2%/min or money x10) caps at 15m; 2+ idle check-ins after 2h back off x1.5 each up to 180m; your etaMin+2 wins if sooner; clamp 5-180m.
+- Snapshots are stored one JSON per line in data/agent-snapshots.txt (compare with the previous one for rates).
+
+AUG BUYING RULE (user directive, overrides 3c)
+- Do NOT buy augs piecemeal as they unlock. Accumulate rep, then buy the whole batch in one sitting right before install.
+- Order: highest rep requirement first (== most expensive first), descending; NeuroFlux levels LAST. Every buy multiplies remaining prices x1.9.
+- Current target: BitRunners 275k rep -> buy Artificial Bio-neural Network Implant, CSP Gen V, Neural Accelerator (in that order), then NF, then install.
+
+PLAN C (user-approved 2026-09-25)
+- This run: grind BitRunners to 275k rep, then pre-install sequence: liquidate stocks, spend cash on home cores/RAM (cores first), buy ABNI -> CSP Gen V -> Neural Accelerator -> NF levels, install.
+- Next run: work BitRunners until the faction page shows favor-after-install >= 150 (check the Details page / ns.getFactionFavor + projected gain), then install. After that run: donate money to BitRunners for rep (Details page Donate) and buy its 875k/1m-rep augs outright.
+- Always read actual favor numbers from the game UI before deciding; the ~460k-lifetime-rep estimate is from older formulas.
+- Once any faction hits 150 favor, prefer donations over grinding for that faction.
+
+SHARE RAM: data/config-overrides.txt homeReserveGb=10500 keeps ~10TB free on home for agent/share.js (target 2560 threads). After each install, once RAM frees up, (re)launch share.js up to 2560 threads total.
+
+POST-INSTALL: daemon buys programs and backdoors by typing into the Terminal, so after an install keep the Terminal page open (study/work unfocused via 'Do something else simultaneously') until port openers + Formulas.exe are owned and factions rejoined; then go back to focused faction work.
+
+AUG TARGETS (from bitburner-src repo data, 2026-09-24 build; rep = base repCost)
+- THIS RUN (batch before install, highest rep first):
+  * Tian Di Hui: Neuroreceptor Management Implant 75k (USER PRIORITY: removes unfocused-work penalty). Join: be in Chongqing/New Tokyo/Ishima, hack>=50, $1m. Travel to Chongqing, accept invite, work hacking contracts ~20m at current rates, then return to BitRunners.
+  * Chongqing: Neuregen Gene Modification 37.5k (hacking exp x1.4). Join: in Chongqing + $20m. Enemies: Sector-12, Aevum, Volhaven (fine - only Aevum PCMatrix lost, non-hacking).
+  * BitRunners Neurolink 875k + ENM Core V2 1m -> via donations once BitRunners favor >=150.
+  * Daedalus (hack 2500, $100b, 30 augs): The Red Pill 2.5m, ENM Core V3 1.75m, ENM DMA 1m, ENM Analyze 625k (Core V3 needs Core V2 first).
+- LATER: Illuminati QLink 1.875m (hack x1.75, money x4!) needs 30 augs, $150b, hack 1500, ALL combat 1200. Covenant needs combat 850. Corp factions need 200k company rep (work at company).
+ACHIEVEMENT QUICK WINS (25/108 done): Ouch! (visit Hospital), Donate! (first donation), fl1ght.exe (join Daedalus), Well liked (10m rep in a faction - via donations), It's time to install (40 augs queued - NF levels count), Download more cores? (8 cores; at 7, next $1.335q), Source Genesis (destroy BN1), The Void.
+
+NEXT BITNODE (user decision): after destroying BN1 (w0r1d_d43m0n), choose BN4 (The Singularity) in the BitVerse. Do not pick any other node.
+
+DAEDALUS PLAN (2026-09-26): joined Daedalus at hack 2500. Favor math (repo src/Faction/formulas/favor.ts): favorToRep(f)=25000*(e^(0.0198*f)-1); 150 favor = 462k rep.
+- BitRunners already has enough rep this run to exceed 150 favor after install (~164).
+- Work DAEDALUS hacking contracts until ~470k Daedalus rep this run (~4h at ~31/s + share), then batch-buy (Neuroreceptor, Neuregen, NF...) and install.
+- Next run: donate cash to Daedalus (Red Pill 2.5m, ENM Core V3/DMA/Analyze) and BitRunners (Neurolink, ENM Core V2 first). Then destroy BN1 -> BN4.
+- share-keeper.js keeps ~500TB of home RAM in share.js (homeReserveGb=600000). Restart it after installs.
+
+RUN 3 (post-install 2026-09-26 ~04:01 ET) = FINAL BN1 RUN:
+1. Wait for daemon to rejoin factions (Terminal open, study unfocused). Donate! achievement already unlocked (Daedalus/BitRunners >=150 favor).
+2. Once cash allows: DONATE to Daedalus for 2.5m+ rep (Details page -> Donate), buy The Red Pill (+ ENM Analyze/DMA, and Core V3 after Core V2 from BitRunners). Donate to BitRunners for Neurolink 875k + ENM Core V2 1m. Buy highest-rep first, NF last. Aim for 10m rep in one faction for "Well liked".
+3. Install. Then when hack >= w0r1d_d43m0n requirement (check ns.getServerRequiredHackingLevel('w0r1d_d43m0n')), backdoor/hack it -> BitVerse -> choose BN4.
+
+RUN 4 (Red Pill INSTALLED 2026-09-26 07:42 ET): no more aug buying needed. Each check-in: keep daemon/Terminal running; check hacking vs ns.getServerRequiredHackingLevel('w0r1d_d43m0n'). When met: terminal `connect` path to w0r1d_d43m0n (scan-analyze / daemon path), run backdoor (or hack) -> BitVerse screen -> choose BitNode-4 (Singularity). Then rerun bridge; ns.singularity becomes available.
+
+BN4.1 (entered 2026-09-26 07:49 ET): window.bb is agent/bridge-lite.js (4.1GB) -> use `await bb.status()` and `await bb.snapshot()`; bb.eval jobs need free home RAM (may fail at 32GB; retry or run with {host} on a rooted server). Do NOT call bb.ns.* functions directly (dynamic RAM kill). When home RAM >= 128GB, can switch back to agent/bridge.js. ns.singularity is available in BN4 (1x RAM) -> can script faction work, aug buys, installs, home upgrades, TOR/programs. Goal: destroy BN4 (w0r1d_d43m0n) for SF4.1, then consider BN4 again (SF4.3 = 1x singularity everywhere) or BN5.
+FIRST STEPS BN4: TOR ($200k) + programs, home RAM upgrades (singularity.upgradeHomeRam), join CyberSec/NiteSec/BitRunners, CS->Algorithms when cash allows.
+
+USER: going into debt is OK -> always take Algorithms (Rothman) over free CS early in a run.
+
+BN4 NOTE: crime pays badly here (Rob Store $93k/60s). homeReserveGb must be small in BN4 (set 8); raise to share RAM only when home is huge.
+
+BN4 PROGRAM PLAN: create BruteSSH -> FTPCrack (free, unblocks rooting = more RAM), then Algorithms to hack 250 -> create relaySMTP; 500 HTTPWorm; 750 SQLInject (unless cash buys them first).
+
+PREDICTION EXPERIMENT (started 2026-09-26 10:35 ET) — every check-in:
+ 1. Telemetry health: __run('run agent/tele-launch.js') (no-op if running; else starts agent/telemetry.js on home or the rooted server with most free RAM). Host in /data/telemetry-host.txt. Installs kill it -> relaunch after every install/BN change.
+ 2. eval(bb.read('agent/predict-lib.txt')) -> window.__pred. Then __pred.resolve() (scores hits, voids on install).
+ 3. Keep ~3-5 open predictions for the next actionable milestones, e.g. __pred.predict({kind:'level',skill:'hacking',target:250}), {kind:'money',target:<next purchase cost>}, {kind:'rep',faction:'X',target:<aug rep>}. Don't duplicate an open spec unless the regime changed (new work/course, install, big purchase) — then add a fresh one.
+ 4. __pred.report() -> include scored count / MAPE / band coverage in bb.note; use open ETAs as snapshot etaMin when sooner.
+ Data: /data/telemetry.txt (60s JSONL), /data/predictions.txt (pred/res JSONL). Later: install simulator + waste ledger (BN4 first aug batch).
+
+EXPERIMENT NOTE: after a purchase wait >=60s (one telemetry tick) before predicting money milestones, else cur is stale.
+
+BN4 BACKDOORS: daemon only flags them ('open Terminal (empty input)'); do manually when hack allows: I.I.I.I (req 360) path home>joesguns>zer0>silver-helix>the-hub>I.I.I.I ; run4theh111z (req 519) path home>n00dles>nectar-net>phantasy>avmnite-02h>zb-institute>lexo-corp>galactic-cyber>omnia>univ-energy>nova-med>run4theh111z. Then accept invite dialogs (Join).
+
+CADENCE v2 (2026-09-26 14:10 ET, data-driven): old cadence (40-60m after 2h) left work waiting: 28/46 check-ins had actions; purchase lag after affordability ~6-53m (median ~13m).
+ Rule (bridge-lite v2 snapshot): base 10m (<0.5h since install) / 15m (<2h) / 20m after; idle backoff only after 3 no-action check-ins AND no known ETA, max 30m; if etaMin known, next = etaMin+1; clamp 5-30.
+ Each check-in: etaMin = __pred.nextEta([...next actionable specs...]).min — include next purchase cost(s) (program / home RAM / aug when rep met), hack thresholds (backdoor reqs, program unlocks), faction rep for next aug.
+
+=== CHECK-IN v3 (2026-09-26 15:00 ET) — AUTOPILOT + ONE-CALL CHECK-IN (supersedes manual steps above for routine work) ===
+agent/autopilot.js (52GB, home, 30s loop, Singularity) now does: TOR + port programs, home RAM (when affordable) + cores (<=25% cash),
+ faction-server backdoors (CSEC, avmnite-02h, I.I.I.I, run4theh111z), non-city faction invites. It NEVER buys augs, installs, or destroys BitNodes.
+ Status: /data/autopilot-status.txt {flags, next[], augs{buyable,top,redPill}, recent[]}. Config: /data/autopilot-config.txt (JSON: reserve, homeRamMaxFrac, work:"keep"|"study"|"faction:X", enabled...).
+ homeReserveGb=72 in config-overrides so daemon leaves room for autopilot (52GB) + eval jobs.
+ROUTINE CHECK-IN: eval(bb.read('agent/checkin-lib.txt')); const r = await __checkin();
+ -> restarts autopilot/telemetry if stale, scores predictions, ETA over autopilot 'next' targets, writes snapshot + bb.note. 
+ If r.attention is empty: reschedule r.nextMin and stop (no other tool calls).
+ If not empty: handle each item using the sections above (aug batch buying rules: highest rep first, NF last; installs; BitNode decisions; city factions), then reschedule.
+ Attention triggers: autopilot flags (errors, city invites, w0r1d_d43m0n ready, missing root), Red Pill buyable, >=6 augs buyable.
+AFTER INSTALL: run agent/bridge-lite.js, daemon.js --reset, then __checkin() (it starts autopilot + telemetry).
+
+WORK POLICY (2026-09-26 18:35 ET, user correction): Algorithms had run all day (only passive rep, no aug progress). Autopilot config work="auto-faction" now does hacking contracts for the first faction in factionPriority (CyberSec, NiteSec, BitRunners, Black Hand, Daedalus, Tian Di Hui, Sector-12, Netburners) whose aug list isn't rep-complete. Check-ins: verify r.work is FACTION:<x>; if all factions rep-complete -> buy aug batch (highest rep first, NF last) then install.
+
+=== CORE STRATEGY — CARRIES ACROSS ALL BITNODES (distilled from BN1, 2026-09-26) ===
+1. Aug batches: buy highest-rep-requirement first (price x1.9 per purchase), NeuroFlux LAST; install when batch is worth it (>=6 queued / Red Pill / stalled).
+2. Rep: work hacking contracts for the priority faction; once favor >= 150 at a faction, DONATE money for rep instead (rep = $ / 1e6 * faction_rep mult). Plan installs so key factions cross 150 favor (favor gain ~ ln(1+rep/25000)/0.0198).
+3. Before install: liquidate stocks (config-overrides stocks.liquidate=true, then false after), spend leftover cash on NF / home RAM.
+4. Endgame per node: Daedalus (30 augs + $100b + hack 2500) -> The Red Pill -> install -> hack w0r1d_d43m0n when hack >= its requirement.
+5. Early run: TOR + port programs first (buy or create), home RAM next, Algorithms only while nothing better; debt OK early (user).
+BN1-specific numbers (Plan C BitRunners 275k, Daedalus favor plan, RUN 3 plan) above are historical — don't apply them literally to BN4.
+
+
+=== HARDENING (2026-09-27, SWOT recs 3-6) ===
+SAVE BACKUPS: __checkin() copies the save (IndexedDB bitburnerSave/savestring/"save", ~170KB) into IndexedDB "agentBackups"/"saves" hourly; keeps 24h hourly + first-of-day for 14 days. Same browser profile only (does NOT survive clearing site data) - off-browser copies need the user's Export/Backup download. RESTORE is destructive: only with explicit user OK (put backup .data into bitburnerSave "save", reload tab).
+MONEY LEDGER: telemetry records src = ns.getMoneySources().sinceInstall (non-zero categories). __pred.ledger() -> earned/spent/net/hacknetROI. Money predictor adds a "ledger net" rate = earnings + continuous daemon spend (servers+hacknet), excluding one-offs (augs, programs/other, class, stock).
+HACKNET ROI GATE: BN4 install #1 hacknet spent $1.69b to earn $0.14b (ROI 0.08). lib/hooks.js hacknetHook now buys best gain/cost first and only if payback <= hooks.hacknet.maxPayoffHours (override = 2h). Backup of old hook: archive/hooks.pre-roi.bak.js. Revisit in BitNodes with strong hacknet mults (BN9) - raise maxPayoffHours there.
+WASTE RULE: any automated spend category whose sinceInstall ROI < 1 and can't pay back before the next expected install is waste - gate it by payback time.
+
+AUTO-INSTALL (2026-09-27, user chose "both"): autopilot config autoInstall:true. On Red Pill / >=6 augs buyable / stalled (no rep work left & >=1 buyable): loop 1 sets stocks.liquidate, loop 2 buys every rep-met aug highest-rep-first (prereqs respected), then NeuroFlux until broke, logs /data/install-log.txt {why,bought,leftover,src}, then installAugmentations("agent/post-install.js") which clears liquidate and restarts bridge-lite, autopilot, telemetry, daemon --reset. Donations: autopilot donates to the current work faction once favor>=150 (<=50% cash). Autopilot is 75GB -> homeReserveGb 128. Agent still owns: w0r1d_d43m0n / BitNode choice, city factions, anything flagged.
+OFF-BROWSER EXPORT: user picked /Users/bpj/Documents/Bitburner/MySaves via the green "Agent: pick backup folder" button (File System Access API; handle in IndexedDB agentMeta). __checkin exports bitburnerSave_<iso>_BN<n>.json.gz every 6h (import via Options > Import). If Chrome drops the permission, __checkin re-shows the button and sets r.warn -> tell the user to click it (only a human click can re-grant).
+WATCHDOG: routine check-ins move to fresh cheap-model sessions (see scheduled task "Bitburner watchdog"); the big session is only for decisions.
+WATCHDOG RESULT (02:15Z): fresh scheduled sessions have NO Chrome access (test wrote nothing) -> routine check-ins stay in the main session; with autoInstall they run at >=45 min.
+
+INCIDENT 2026-09-27 02:37Z: auto-install left Cranial Signal Processors Gen II (CyberSec, rep met) unbought. Cause: buyBatch sorted by rep desc, Gen II skipped for missing prereq (Gen I bought later), then x1.9 ramp made it ~$3.1b vs $957m cash. Also counted a Hacknet aug toward the 6-aug trigger. Fix: prereqs placed immediately before dependents; skipHacknetAugs; /data/audit.txt logs trigger, plan, buy/skip (with price+money), flag changes, install leftBehind. AUDIT TRAIL: /data/audit.txt (decisions), /data/events.txt (actions), /data/install-log.txt (per install), /data/agent-log.txt (agent notes).
+
+CHECK-IN REPORT FORMAT (2026-09-27, user request): reply = r.report pasted verbatim (header + table generated by __report in checkin-lib), then one line "**Notes:** ..." written by the agent — only what the table cannot say (decisions made, anomalies, things the user must do, experiment findings); "**Notes:** —" if nothing. Chrome unreachable: reply "**Bitburner check-in · <time> ET** — Status: DOWN (Chrome unreachable, retry +30m)" + Notes.
+
+PREDICTOR v2 (2026-09-27): agent/predictor.txt (window.__pred2) replaces predict-lib in __checkin. Components: state x(t), target (levels->exp), rate models {s5,s15,s45,quad,income,ledger,med}, runs split at installs + tab-freeze gaps >3m, error = ln(actual/pred) per kind x horizon bucket. Learning: walk-forward backtest over all telemetry (~1.2k samples) + every live prediction (logged each check-in to /data/pred2.txt, resolved from telemetry, weighted x3), recency half-life 12h. Meta-policy (from out-of-sample eval): per kind use calibrated-best-model or plain median, band = empirical 80th pct |log err|. Calibration /data/pred-calib.txt, refreshed when outcomes resolve or >2h old. Tools: __pred2.evaluate() honest score, __pred2.report(). Baseline 2026-09-27 walk-forward: rep within25 96%/mape 10; level 67%/23; money 34%/60 (money is the weak metric: purchases make cash lumpy).
+SPEND PLAN (2026-09-27): autopilot status.plan = [{what, thr, cost}] for TOR/programs/home RAM (3 steps, x3.16)/cores; telemetry copies it each minute (rec.plan); predictor model "planned" walks the queue (purchases with thr < target fire first and subtract cost) using the ledger net rate. Daemon pserver buying stays in the ledger rate (continuous). Old telemetry has no plan, so "planned" starts uncalibrated and earns weight as outcomes resolve.

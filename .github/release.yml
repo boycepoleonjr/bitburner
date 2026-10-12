@@ -7,6 +7,10 @@ changelog:
       labels: [autopilot]
     - title: Server & hosting
       labels: [server]
+    - title: Planner & node control
+      labels: [planner]
+    - title: Dashboard
+      labels: [dashboard]
     - title: Predictions
       labels: [predictor]
     - title: Fixes

@@ -1,10 +1,12 @@
 // Scheduled, cached check-in. Runs checkin-lib's __checkin() in the page on its own ETA-driven cadence, persists
-// each result, posts it to Discord, and wakes Claude (routine API trigger) only for new or long-open attention
-// (owner-decision items excepted).
+// each result, posts it to Discord, and wakes Claude (routine API trigger) only for new or long-open attention.
+// Owner-decision items (w0r1d READY) are held back until they have been open for readyEscalateMs: with node.autoDestroy
+// on a destroy finishes in ~30 min, so READY that lingers means a stuck destroy or an owner who hasn't decided.
 import { createHash } from "node:crypto";
 import { buildEscalationText, sanitize } from "./notify.js";
 
 export const ESCALATION_INTERVAL_MS = 120 * 60 * 1000;
+export const READY_ESCALATE_MS = 120 * 60 * 1000; // default for BB_READY_ESCALATE_MIN; 0 = never escalate READY
 export const FIRST_RUN_DELAY_MS = 2 * 60 * 1000;
 export const RETRY_MS = 5 * 60 * 1000;
 export const ORDERING_HEAD_START_MS = 500;
@@ -18,7 +20,7 @@ export const cadenceMs = (r) => clamp(Number(r?.nextMin) || 60, 5, 120) * 60 * 1
 export function normalizeAttention(a) {
   return [...new Set((Array.isArray(a) ? a : []).map((x) => String(x).replace(/\s+/g, " ").trim()).filter(Boolean))].sort((x, y) => x.localeCompare(y));
 }
-// Attention the owner decides on (destroying a BitNode): shown in Discord, never escalated to Claude.
+// Attention the owner decides on (destroying a BitNode): shown in Discord, escalated only once overdue (readyEscalateMs).
 export const OWNER_DECISION = [/w0r1d_d43m0n READY/i];
 export const escalatable = (a) => normalizeAttention(a).filter((x) => !OWNER_DECISION.some((re) => re.test(x)));
 export const attentionKey = (a) => createHash("sha256").update(JSON.stringify(normalizeAttention(a))).digest("hex");
@@ -40,7 +42,7 @@ export const failRecord = (atMs, msg) => ({ t: new Date(atMs).toISOString(), atM
 export function createCheckin({
   rpc, isUp, log = () => {}, notify = async () => {}, escalate = async () => ({ ok: false }), escalationEnabled = false,
   state, auto = false, nowMs = () => Date.now(), setTimer = setTimeout, clearTimer = clearTimeout,
-  orderingMs = ORDERING_HEAD_START_MS,
+  orderingMs = ORDERING_HEAD_START_MS, readyEscalateMs = READY_ESCALATE_MS,
 }) {
   let latest, latestLoaded = false, inflight = null, timer = null, timerDueAt = null, connectedOnce = false;
   let escState = null, escChain = Promise.resolve();
@@ -69,7 +71,7 @@ export function createCheckin({
   async function loadEsc() {
     if (escState) return escState;
     const v = await state.readJson(ESC, null, { versioned: true });
-    escState = { version: 1, attentionKey: null, firstSeenAt: null, lastEscalatedAt: null, lastResolvedAt: null, ...(v && typeof v === "object" ? v : {}), version: 1 };
+    escState = { version: 1, attentionKey: null, firstSeenAt: null, lastEscalatedAt: null, lastResolvedAt: null, ownerSince: null, ...(v && typeof v === "object" ? v : {}), version: 1 };
     return escState;
   }
 
@@ -77,20 +79,37 @@ export function createCheckin({
   function maybeEscalate(rec) {
     const job = escChain.then(async () => {
       if (!rec.ok) return;
-      const esc = await loadEsc(), now = nowMs(), attention = escalatable(rec.attention);
+      const esc = await loadEsc(), now = nowMs();
+      // ownerSince: when the owner-decision items (READY) were first seen in this unbroken stretch of check-ins
+      const held = rec.attention.filter((x) => OWNER_DECISION.some((re) => re.test(x)));
+      const ownerSince = held.length ? (esc.ownerSince ?? now) : null;
+      const ownerChanged = ownerSince !== esc.ownerSince;
+      esc.ownerSince = ownerSince;
+      const overdue = held.length > 0 && readyEscalateMs > 0 && now - ownerSince >= readyEscalateMs;
+      const attention = normalizeAttention([...escalatable(rec.attention), ...(overdue ? held : [])]);
       if (!attention.length) {
-        if (esc.attentionKey) { Object.assign(esc, { attentionKey: null, firstSeenAt: null, lastResolvedAt: now }); await state.writeJsonAtomic(ESC, esc); }
+        if (esc.attentionKey) Object.assign(esc, { attentionKey: null, firstSeenAt: null, lastResolvedAt: now });
+        else if (!ownerChanged) return;
+        await state.writeJsonAtomic(ESC, esc);
         return;
       }
       const key = attentionKey(attention);
       if (key !== esc.attentionKey) Object.assign(esc, { attentionKey: key, firstSeenAt: now, lastEscalatedAt: null });
-      else if (esc.lastEscalatedAt != null && now - esc.lastEscalatedAt < ESCALATION_INTERVAL_MS) return;
+      else if (esc.lastEscalatedAt != null && now - esc.lastEscalatedAt < ESCALATION_INTERVAL_MS) {
+        if (ownerChanged) await state.writeJsonAtomic(ESC, esc);
+        return;
+      }
       if (!escalationEnabled) { await state.writeJsonAtomic(ESC, esc); return; }
       esc.lastEscalatedAt = now;
       await state.writeJsonAtomic(ESC, esc);
-      // The report's status line still lists every flag, so say which ones are the owner's.
-      const held = rec.attention.filter((x) => !attention.includes(x));
-      const report = held.length ? `(Owner decision, not for the agent: ${held.join("; ")})\n\n${rec.report}` : rec.report;
+      // The report's status line still lists every flag, so say which ones are the owner's (or why READY is now ours).
+      const h = Math.round(((now - (ownerSince ?? now)) / 3600000) * 10) / 10;
+      const note = overdue
+        ? `(w0r1d_d43m0n READY for ${h}h, past the ${Math.round(readyEscalateMs / 60000)}-min limit. node.autoDestroy on: the destroy is stuck; ` +
+          "check node.pending in data/aug-plan.txt, data/node-request.txt + node-ack.txt and server/node-control. node.autoDestroy off: " +
+          "remind the owner (veto/enable via bb settings). Never destroy any other way than node.autoDestroy.)"
+        : held.length ? `(Owner decision, not for the agent: ${held.join("; ")})` : "";
+      const report = note ? `${note}\n\n${rec.report}` : rec.report;
       await escalate(buildEscalationText({ ...rec, attention, report }));
     });
     escChain = job.catch(() => {});

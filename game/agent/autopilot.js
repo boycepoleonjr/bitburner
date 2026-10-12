@@ -1,6 +1,8 @@
 /** agent/autopilot.js — in-game autopilot (needs Singularity: BN4 or SF4).
  * Every 30s: TOR + port programs, home RAM/cores, faction-server backdoors, faction invites,
- *   work policy, donations, and (autoInstall) aug batch + install. Never destroys a BitNode — it FLAGS that.
+ *   work policy, donations, and (autoInstall) aug batch + install. BitNode destruction: lib/nodectl.js (node.autoDestroy,
+ *   default off = it only FLAGS w0r1d_d43m0n READY; on = backup handshake with the bb server, then agent/sl-destroy.js).
+ *   Settings (data/settings.txt via lib/settings.js) win over autopilot-config.txt for augs.* keys.
  * Decisions are appended to /data/audit.txt (JSONL). Status: /data/autopilot-status.txt. Config: /data/autopilot-config.txt.
  * NeuroFlux mode: once every other aug is owned, idle work goes to the top NeuroFlux faction, buyBatch donates for
  *   NeuroFlux rep (favor >= donateFavor), and an install fires when >= augTrigger levels are affordable, unless
@@ -8,7 +10,26 @@
  * City invites are blocked when all non-NeuroFlux augmentations are owned or queued; otherwise configured
  *   `joinCity` factions auto-join and other city invites are flagged.
  */
+import { readSettings } from "lib/settings.js";
+import { decideNode, parseJson, REQUEST_FILE, ACK_FILE, DESTROY_SCRIPT, NO_RAM } from "lib/nodectl.js";
 const NEUROFLUX = "NeuroFlux Governor";
+export const PLAN_SCRIPT = "agent/sl-plan.js", PLAN_FILE = "/data/aug-plan.txt";
+/** Settings (data/settings.txt) win over the legacy autopilot-config.txt for the same concept. Exported for tests. */
+export function withSettings(c, s) {
+  return { ...c, autoInstall: s["augs.autoInstall"], augTrigger: s["augs.installAt"], donateFavor: s["augs.donateAtFavor"],
+    nfgHoldFrac: s["augs.nfgHoldFrac"], installPolicy: s["augs.installPolicy"] };
+}
+/** Install policy "eta" (lib/augplan.js installDecision via /data/aug-plan.txt): a count trigger waits while the plan
+ * says the next aug is closer than a reset costs; a plan "install now" with >= 1 buyable fires on its own. Red Pill and
+ * NeuroFlux/stall triggers are unchanged. A missing or stale (> 5 min) plan falls back to the count trigger.
+ * @returns {{why:string|null, held:string|null}} Exported for tests. */
+export function etaGate({ why, countWhy, buyable, policy, plan, now }) {
+  if (policy !== "eta" || !plan || !plan.install || !(now - plan.t < 5 * 60000)) return { why, held: null };
+  const nx = plan.install.next || {};
+  if (why && why === countWhy && nx.etaMin !== 0) return { why: null, held: nx.reason || "eta: wait" };
+  if (!why && nx.etaMin === 0 && buyable >= 1 && /^eta:/.test(nx.reason || "")) return { why: nx.reason, held: null };
+  return { why, held: null };
+}
 export const CITY_FACTIONS = new Set(["Sector-12", "Aevum", "Volhaven", "Chongqing", "New Tokyo", "Ishima"]);
 export const cityDone = (augsOf, owned, f) => augsOf(f).filter((a) => a !== NEUROFLUX).every((a) => owned.has(a));
 /** @returns {"join"|"flag"|"block"} */
@@ -80,14 +101,15 @@ export async function main(ns) {
   const BACKDOORS = ["CSEC", "avmnite-02h", "I.I.I.I", "run4theh111z"];
   const recent = [];
   const blockedLogged = new Set(); // cityBlocked audited once per city per run
-  let liquidatedByMe = false, nfgHoldLogged = false;
+  let liquidatedByMe = false, nfgHoldLogged = false, loopN = 0, etaHeldLogged = "";
   const rpcMemo = { failed: false };
   const act = (msg) => {
     const line = `${new Date().toLocaleTimeString("en-US", { hour12: false })} [autopilot] ${msg}`;
     recent.push({ t: Date.now(), msg }); while (recent.length > 20) recent.shift();
     ns.write(EV, line + "\n", "a");
   };
-  const cfg = () => { try { return { ...DEFAULTS, ...JSON.parse(ns.read(CFG) || "{}") }; } catch { return DEFAULTS; } };
+  const cfgLegacy = () => { try { return { ...DEFAULTS, ...JSON.parse(ns.read(CFG) || "{}") }; } catch { return DEFAULTS; } };
+  const cfg = () => withSettings(cfgLegacy(), readSettings(ns));
   const path = (target) => {
     const prev = { home: null }, q = ["home"];
     while (q.length) { const h = q.shift(); if (h === target) break; for (const n of ns.scan(h)) if (!(n in prev)) { prev[n] = h; q.push(n); } }
@@ -202,10 +224,25 @@ export async function main(ns) {
             try { await S.installBackdoor(); act(`backdoored ${t}`); } catch (e) { flags.push(`backdoor ${t} failed: ${e}`); }
             S.connect("home");
           }
+        }
+        // 3b. w0r1d_d43m0n: node control (lib/nodectl.js). autoDestroy off (default) = the READY flag, as before.
+        {
+          let ready = false;
           if (ns.serverExists("w0r1d_d43m0n")) {
             const req = ns.getServerRequiredHackingLevel("w0r1d_d43m0n");
-            if (hack >= req && ns.hasRootAccess("w0r1d_d43m0n")) flags.push("w0r1d_d43m0n READY — agent decides BitNode destruction");
-            else next.push({ kind: "level", skill: "hacking", target: req, label: "w0r1d_d43m0n" });
+            ready = hack >= req && ns.hasRootAccess("w0r1d_d43m0n");
+            if (!ready) next.push({ kind: "level", skill: "hacking", target: req, label: "w0r1d_d43m0n" });
+          }
+          const ri = ns.getResetInfo(), request = parseJson(ns.read(REQUEST_FILE));
+          if (ready || request) {
+            const nd = decideNode({ ready, bn: ri.currentNode, sourceFiles: [...(ri.ownedSF || new Map())].map(([n, lvl]) => ({ n, lvl })), now: Date.now(),
+              request, ack: parseJson(ns.read(ACK_FILE)) }, readSettings(ns));
+            flags.push(...nd.attention);
+            if (nd.writeRequest) { ns.write(REQUEST_FILE, JSON.stringify(nd.writeRequest), "w"); audit("node", { ...nd.writeRequest, detail: nd.node.pending.detail }); act(`node: ${nd.writeRequest.action} -> BN${nd.writeRequest.nextBn} (${nd.node.pending.detail})`); }
+            if (nd.action === "destroy" && !ns.isRunning(DESTROY_SCRIPT, "home")) {
+              const pid = ns.run(DESTROY_SCRIPT, 1, nd.node.pending.id, nd.nextBn);
+              if (pid) act(`node: ${DESTROY_SCRIPT} started (BN${ri.currentNode} -> BN${nd.nextBn})`); else flags.push(NO_RAM);
+            }
           }
         }
         // 4. Faction invitations (non-city auto; exhausted cities blocked; other cities joinCity-only, else flagged)
@@ -299,7 +336,11 @@ export async function main(ns) {
               }
             } else if (hack < wdReq && nfgTrigger(n, nfQ, c.augTrigger)) nfgWhy = `stalled: NeuroFlux x${n} affordable + ${nfQ} queued`;
           }
-          const why = augs.redPill ? "Red Pill" : augs.buyable >= c.augTrigger ? `${augs.buyable} augs buyable` : (!repWorkLeft && augs.buyable >= 1) ? "stalled (all rep-complete)" : nfgWhy;
+          const countWhy = `${augs.buyable} augs buyable`;
+          const why0 = augs.redPill ? "Red Pill" : augs.buyable >= c.augTrigger ? `${augs.buyable} augs buyable` : (!repWorkLeft && augs.buyable >= 1) ? "stalled (all rep-complete)" : nfgWhy;
+          const gate = etaGate({ why: why0, countWhy, buyable: augs.buyable, policy: c.installPolicy, plan: parseJson(ns.read(PLAN_FILE)), now: Date.now() });
+          const why = gate.why;
+          if (gate.held && gate.held !== etaHeldLogged) { etaHeldLogged = gate.held; audit("etaHold", { countWhy, reason: gate.held }); }
           if (why) {
             const cfgO = (() => { try { return JSON.parse(ns.read(OVR) || "{}"); } catch { return {}; } })();
             if (!(cfgO.stocks && cfgO.stocks.liquidate)) {
@@ -333,6 +374,8 @@ export async function main(ns) {
         }
       }
     } catch (e) { flags.push("autopilot error: " + e); }
+    // Aug planner snapshot (16x Singularity calls live in agent/sl-plan.js, not here): every 4th loop, if home has room.
+    try { if (loopN++ % 4 === 0 && !ns.isRunning(PLAN_SCRIPT, "home") && ns.getServerMaxRam("home") - ns.getServerUsedRam("home") >= ns.getScriptRam(PLAN_SCRIPT, "home")) ns.run(PLAN_SCRIPT); } catch { }
     // Spend plan for the predictor: every purchase the autopilot will make, as {what, thr (money level that fires it), cost}.
     // Repeatables (home RAM) are projected 3 steps ahead with the observed x3.16 cost ramp.
     const plan = [];

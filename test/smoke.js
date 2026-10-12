@@ -22,11 +22,10 @@ await new Promise((r) => sinkSrv.listen(0, "127.0.0.1", r));
 const S = `http://127.0.0.1:${sinkSrv.address().port}`;
 
 const PORT = 13525, TMP = fs.mkdtempSync(path.join(os.tmpdir(), "bbk-")), MARK = path.join(TMP, "watchdog-fired");
-// Drop the caller's remote-target settings (a cloud session may export BB_URL / BB_TOKEN_VIA_PROXY for the hosted game):
-// the CLI under test must talk to the local server started below.
-const { BB_URL, BB_TOKEN_VIA_PROXY, ...baseEnv } = process.env;
+// The CLI under test must only reach this local server, never a real game named by the caller's environment.
+const { BB_URL, BB_TOKEN_VIA_PROXY, ...callerEnv } = process.env;
 const env = {
-  ...baseEnv, NODE_ENV: "test", BB_TOKEN: "smoketoken", BB_PORT: String(PORT), BB_BACKUP_DIR: path.join(TMP, "backups"), BB_BACKUP_MIN: "0",
+  ...callerEnv, NODE_ENV: "test", BB_TOKEN: "smoketoken", BB_PORT: String(PORT), BB_BACKUP_DIR: path.join(TMP, "backups"), BB_BACKUP_MIN: "0",
   BB_STATE_DIR: path.join(TMP, "state"), DISCORD_WEBHOOK_URL: `${S}/discord`, BB_ESCALATE_URL: `${S}/fire`, BB_ESCALATE_TOKEN: "esc",
   BB_WATCHDOG_MIN: "0.02", BB_WATCHDOG_CMD: "/usr/bin/touch", BB_WATCHDOG_ARGS: JSON.stringify([MARK]), BB_WATCHDOG_INTERVAL_MS: "200",
 };
@@ -51,16 +50,36 @@ try {
   await sleep(500);
   const cfg = JSON.parse(files["agent/rpc-config.txt"]);
   const rpc = new WebSocket(`ws://127.0.0.1:${cfg.port}/rpc?token=${cfg.token}`);
-  rpc.on("message", (d) => { const m = JSON.parse(d); const idb = m.op === "js" && m.code.includes("indexedDB"); // backup reads the save from IndexedDB
+  const rpcFiles = {}; // in-game files the settings API reads/writes
+  rpc.on("message", (d) => { const m = JSON.parse(d);
+    if ((m.op === "read" || m.op === "write") && String(m.file).startsWith("data/settings")) {
+      if (m.op === "write") rpcFiles[m.file] = m.mode === "a" ? (rpcFiles[m.file] ?? "") + m.data : m.data;
+      return rpc.send(JSON.stringify({ id: m.id, ok: true, value: m.op === "read" ? (rpcFiles[m.file] ?? "") : true }));
+    }
+    const idb = m.op === "js" && m.code.includes("indexedDB"); // backup reads the save from IndexedDB
     if (m.op === "js" && m.code.includes("__checkin")) checkinJsCalls++;
     const value = idb ? { b64: SAVE_B64 } : m.op === "ping" ? { t: 1 } : m.op === "js" ? { report: REPORT, attention: ["x"], warn: "w", nextMin: 20, did: [] } : `${m.op}:${m.code || m.file || ""}`;
     rpc.send(JSON.stringify({ id: m.id, ok: true, value })); });
   await sleep(300);
+  // UTF-8 request body: ~600KB of a 3-byte character arrives in many chunks and must reach the game (and read back) intact.
+  // This listener answers first for its file; the generic reply that follows has a used id and is ignored.
+  const BIG = "─".repeat(200000), utf8Files = {};
+  rpc.prependListener("message", (d) => { const m = JSON.parse(d); if (m.file !== "tmp/utf8.txt") return;
+    if (m.op === "write") utf8Files[m.file] = m.data;
+    rpc.send(JSON.stringify({ id: m.id, ok: true, value: m.op === "read" ? utf8Files[m.file] : true })); });
+  const utf8Write = await api("/api/write", { method: "POST", body: JSON.stringify({ file: "tmp/utf8.txt", data: BIG }) });
+  const utf8Read = await api("/api/read", { method: "POST", body: JSON.stringify({ file: "tmp/utf8.txt" }) });
   const bb = async (...a) => (await promisify(execFile)("node", ["server/cli.js", ...a], { env })).stdout.trim();
   const out = { status: await bb("status"), eval: await bb("eval", "return 1"), checkin: await bb("checkin"), backup: await bb("backup"), rpcPushed: !!files["agent/rpc.js"] };
   const callsAfterCheckin = checkinJsCalls;
   out.report = await bb("report");
   const callsAfterReport = checkinJsCalls;
+  const setOut = await bb("settings", "set", "strategy.mid=0.25", "node.autoDestroy=false");
+  const getOut = await bb("settings", "get", "strategy.mid");
+  const setBad = await api("/api/settings", { method: "POST", body: JSON.stringify({ set: { "strategy.mid": 9 } }) });
+  const setGet = await api("/api/settings");
+  const dash = await api("/api/dashboard");
+  const dashCli = await bb("dashboard");
   const legacy = await api("/api/checkin", { method: "POST", body: "{}" });
   await sleep(900); // let detached Discord/escalation dispatch finish
   const rep = await api("/api/report");
@@ -79,6 +98,7 @@ try {
   for (let i = 0; i < 30 && !fs.existsSync(MARK); i++) await sleep(200);
 
   const checks = {
+    utf8Body: utf8Write.status === 200 && utf8Files["tmp/utf8.txt"] === BIG && utf8Read.json.value === BIG,
     status: out.status.includes('"rpc": true'),
     eval: out.eval.includes("eval:return 1"),
     checkin: out.checkin.startsWith("REPORT"),
@@ -96,6 +116,10 @@ try {
     notifyRelay: notifyOk.status === 200 && sink.discord.slice(nBefore).some((p) => p.content === "hello from test"),
     notifyBadRequest: notifyBad.status === 400,
     watchdogFired: fs.existsSync(MARK),
+    dashboardApi: dash.status === 200 && dash.json.ok === true && typeof dash.json.value.kpis.destroy === "object" && dashCli.startsWith("Dashboard"),
+    settingsCli: setOut.includes("changed strategy.mid: 0.5 -> 0.25") && getOut.includes("* strategy.mid = 0.25"),
+    settingsApi: setBad.status === 400 && setGet.json.value.values["strategy.mid"] === 0.25 && setGet.json.value.rev === 1 && Array.isArray(setGet.json.value.schema)
+      && /"by":"cli"/.test(rpcFiles["data/settings-log.txt"] || ""),
   };
   console.log(JSON.stringify(checks, null, 1));
   const ok = Object.values(checks).every(Boolean);

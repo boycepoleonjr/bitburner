@@ -19,4 +19,4 @@ game (Steam/browser) ──Remote API ws──▶ bb server (127.0.0.1:12525) �
 | `docs/` | setup and troubleshooting |
 | `test/` | `npm test`: smoke test with a fake game |
 
-Status: `game/agent/` is a partial snapshot. The first `npx bb pull` brings in the rest (autopilot, daemon, etc.), so commit after it.
+Status: `game/` is a full mirror of the in-game home code as of 2026-10-08 (daemon.js, lib/, tools/, agent/, workers/). Logs (`data/`), `tmp/`, `archive/` and `*.pre-*` recovery copies stay in-game only. Run `npx bb pull` before editing and commit any drift.

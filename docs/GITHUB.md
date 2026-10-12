@@ -8,7 +8,7 @@ What the repo uses on GitHub, and the one-time settings that only the owner can 
 |---|---|
 | `.github/workflows/ci.yml` | `npm test` + a parse check of every in-game script (`.github/scripts/check-syntax.js`) on every PR and every push to main. Check name: `test`. |
 | `.github/workflows/monitor.yml` | Every 30 min: checks `/healthz` and the cached check-in (`/api/report`), and opens/closes issues: `incident` (game unreachable, check-ins stalled), `attention` and `owner-decision` (the latest check-in's attention items). All carry the `monitor` label; each one closes itself when the problem clears. Logic: `.github/scripts/monitor.js`, tests: `test/monitor.js`. |
-| `.github/workflows/release.yml` | Push a tag (`bn5-destroyed`, `v2026.10.07`) or run it from the Actions tab: publishes a release with notes generated from merged PRs (`.github/release.yml` groups them by label). |
+| `.github/workflows/release.yml` | Push a tag (`bn4.2-destroyed`, `v2026.10.12`) or run it from the Actions tab: publishes a release with notes generated from merged PRs (`.github/release.yml` groups them by label). |
 | `.github/workflows/repo-setup.yml` | Creates/updates the labels in `.github/labels.json` and milestones in `.github/milestones.json` (never deletes). Runs when either file changes on main, or by hand. |
 | `.github/workflows/claude-review.yml` | Claude reviews every non-draft PR (bugs, AGENTS.md rules, security, missing tests). Skipped until a Claude secret is set. |
 | `.github/workflows/claude.yml` | `@claude` in an issue, PR comment or review runs Claude on the request (owner/collaborators only). |
@@ -42,7 +42,8 @@ Do these after the PR that adds the files above is merged.
 
 ## Conventions
 
-- Milestones track the AGENTS.md goals (BN5.1 bootstrap, BN5 destroyed, Ops & reliability); put issues and PRs on them.
-- Label PRs `autopilot` / `server` / `predictor` / `bug` so release notes group them; `skip-changelog` hides one.
-- Tag a release at each BitNode destroyed (`bnN-destroyed`) so there is always a known-good version to roll back to.
+- Milestones track the BitNode run and the AGENTS.md goals (`.github/milestones.json`); put issues and PRs on them and
+  update the file when a BitNode is destroyed.
+- Label PRs `autopilot` / `server` / `planner` / `dashboard` / `predictor` / `bug` so release notes group them; `skip-changelog` hides one.
+- Tag a release at each BitNode destroyed (`bn4.2-destroyed`: BitNode.level) so there is always a known-good version to roll back to.
 - Monitor issues are owned by the workflow: comment on them freely, but let it open and close them.
