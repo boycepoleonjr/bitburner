@@ -49,6 +49,17 @@ export const escalationStatus = ESCALATE_ON ? "enabled"
   : ESCALATE_URL ? "misconfigured: missing token"
   : ESCALATE_TOKEN ? "misconfigured: missing routine id" : "disabled";
 
+// Minutes w0r1d_d43m0n READY may stay open before the check-in escalates it to Claude (0 = never; owner decides).
+export function parseReadyEscalateMin(e = env) {
+  const v = e.BB_READY_ESCALATE_MIN;
+  if (v == null || v === "") return { min: 120, err: null };
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? { min: n, err: null } : { min: 120, err: `BB_READY_ESCALATE_MIN invalid (${String(v).slice(0, 20)})` };
+}
+const ready = parseReadyEscalateMin();
+if (ready.err) configErrors.push(ready.err);
+export const READY_ESCALATE_MIN = ready.min;
+
 // Watchdog: restart action is an allowlisted executable run with argv and no shell.
 export const WATCHDOG_CMD_ALLOW = new Set(["pkill", "/usr/bin/pkill", ...(TEST ? ["/usr/bin/touch"] : [])]);
 export function parseWatchdog(e = env) {
@@ -81,6 +92,7 @@ export function configSummary() {
     `state directory: ${STATE_DIR}`,
     `discord notifications: ${DISCORD_ON ? "enabled" : "disabled"}`,
     `claude escalation: ${escalationStatus}`,
+    `READY escalation: ${READY_ESCALATE_MIN > 0 ? `after ${READY_ESCALATE_MIN} minutes` : "disabled"}`,
     `watchdog interval: ${WATCHDOG_MIN > 0 ? `${WATCHDOG_MIN} minutes` : "disabled"}`,
     ...configErrors.map((e) => `config error: ${e}`),
   ];
