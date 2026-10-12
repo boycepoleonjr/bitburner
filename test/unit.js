@@ -4,10 +4,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createState } from "../server/state.js";
-import { createCheckin, OWNER_DECISION, FIRST_RUN_DELAY_MS, RETRY_MS, ESCALATION_INTERVAL_MS, ORDERING_HEAD_START_MS } from "../server/checkin.js";
+import { createCheckin, OWNER_DECISION, FIRST_RUN_DELAY_MS, RETRY_MS, ESCALATION_INTERVAL_MS, ORDERING_HEAD_START_MS, READY_ESCALATE_MS } from "../server/checkin.js";
 import { createWatchdog, RESTART_WINDOW_MS, RPC_ALERT_MS, RPC_ESCALATE_MS } from "../server/watchdog.js";
 import { buildReportEmbed, buildEscalationText, sanitize, createNotifier, LIMITS, ESCALATE_MAX_BYTES } from "../server/notify.js";
-import { parseWatchdog, cliAuthHeader } from "../server/config.js";
+import { parseWatchdog, parseReadyEscalateMin, cliAuthHeader } from "../server/config.js";
 
 const tests = [];
 const test = (name, fn) => tests.push([name, fn]);
@@ -28,13 +28,13 @@ function clock(start = Date.UTC(2026, 8, 29, 12)) {
 }
 
 const REPORT = "**Bitburner check-in · 8:00 AM ET** · BN4\n\n| | |\n|---|---|\n| Status | OK |\n| Money | $1.0m |\n| Activity | x |";
-function harness({ attention = [], warn = "", up = true, auto = true, dir = tmp(), notifyImpl, escalateImpl, rpcImpl, c = clock() } = {}) {
+function harness({ attention = [], warn = "", up = true, auto = true, dir = tmp(), notifyImpl, escalateImpl, rpcImpl, c = clock(), readyEscalateMs } = {}) {
   const calls = { rpc: 0, notify: [], escalate: [], order: [] };
   const h = { up, attention, warn };
   const state = createState({ dir });
   const ci = createCheckin({
     rpc: rpcImpl || (async (op) => { calls.rpc++; return { ok: true, value: { report: REPORT, attention: h.attention, warn: h.warn, nextMin: 20, did: ["x", " "] } }; }),
-    isUp: () => h.up, state, auto, nowMs: c.nowMs, setTimer: c.setTimer, clearTimer: c.clearTimer, escalationEnabled: true,
+    isUp: () => h.up, state, auto, nowMs: c.nowMs, setTimer: c.setTimer, clearTimer: c.clearTimer, escalationEnabled: true, readyEscalateMs,
     notify: notifyImpl || (async (rec) => { calls.notify.push(rec); calls.order.push("report"); }),
     escalate: escalateImpl || (async (text) => { calls.escalate.push(text); calls.order.push("escalate"); return { ok: true }; }),
   });
@@ -186,14 +186,38 @@ test("checkin: getReport reads disk once, never rpc; stale math uses atMs", asyn
   assert.equal((await b.ci.getReport()).stale, true);
 });
 
-test("checkin: owner-decision attention (w0r1d READY) posts to Discord but never escalates", async () => {
+test("checkin: w0r1d READY posts to Discord but escalates only once open past readyEscalateMs", async () => {
   const READY = "w0r1d_d43m0n READY — agent decides BitNode destruction";
   const c = clock(), a = harness({ attention: [READY], c });
   await a.ci.run(); await a.ci._settle();
   assert.equal(a.calls.notify.length, 1); assert.deepEqual(a.calls.notify[0].attention, [READY]);
   assert.equal(a.calls.escalate.length, 0);
-  c.advance(ESCALATION_INTERVAL_MS); await a.ci.run(); await a.ci._settle();
-  assert.equal(a.calls.escalate.length, 0, "no 2h re-escalation either");
+  c.advance(READY_ESCALATE_MS - MIN); await a.ci.run(); await a.ci._settle();
+  assert.equal(a.calls.escalate.length, 0, "not before the limit");
+  c.advance(MIN); await a.ci.run(); await a.ci._settle();
+  assert.equal(a.calls.escalate.length, 1, "escalates once READY has been open for the limit");
+  assert.match(a.calls.escalate[0], /Attention:\n- w0r1d_d43m0n READY/);
+  assert.match(a.calls.escalate[0], /READY for 2h, past the 120-min limit/);
+  c.advance(ESCALATION_INTERVAL_MS - MIN); await a.ci.run(); await a.ci._settle();
+  assert.equal(a.calls.escalate.length, 1, "deduped like other attention");
+  c.advance(MIN); await a.ci.run(); await a.ci._settle();
+  assert.equal(a.calls.escalate.length, 2, "re-escalates every ESCALATION_INTERVAL_MS while still open");
+});
+test("checkin: READY clock survives a server restart and resets when READY clears; 0 disables", async () => {
+  const READY = "w0r1d_d43m0n READY — agent decides BitNode destruction";
+  const dir = tmp(), c = clock();
+  const a = harness({ attention: [READY], c, dir });
+  await a.ci.run(); await a.ci._settle();
+  c.advance(READY_ESCALATE_MS);
+  const b = harness({ attention: [READY], c, dir }); // restarted server, same state dir
+  await b.ci.run(); await b.ci._settle();
+  assert.equal(b.calls.escalate.length, 1, "first-seen time was persisted");
+  b.h.attention = []; await b.ci.run(); await b.ci._settle();
+  b.h.attention = [READY]; c.advance(READY_ESCALATE_MS - MIN); await b.ci.run(); await b.ci._settle();
+  assert.equal(b.calls.escalate.length, 1, "a cleared READY restarts the clock");
+  const off = harness({ attention: [READY], c: clock(), readyEscalateMs: 0 });
+  await off.ci.run(); off.c.advance(100 * READY_ESCALATE_MS); await off.ci.run(); await off.ci._settle();
+  assert.equal(off.calls.escalate.length, 0, "readyEscalateMs=0 keeps READY owner-only");
 });
 test("checkin: READY alongside other attention escalates without READY; READY coming/going doesn't re-fire", async () => {
   const READY = "w0r1d_d43m0n READY — agent decides BitNode destruction";
@@ -344,6 +368,12 @@ test("watchdog: short rpc gap clears quietly; game socket down still takes the r
   h.gameSock = false; h.rpcSock = false;
   await wd.tick(); c.advance(10 * MIN); await wd.tick(); await flush();
   assert.equal(calls.restarts, 1); assert.deepEqual(calls.texts, ["watchdog: restarting Chromium (rpc socket absent)"]);
+});
+test("config: BB_READY_ESCALATE_MIN defaults to 120, 0 disables, junk falls back with an error", () => {
+  assert.deepEqual(parseReadyEscalateMin({}), { min: 120, err: null });
+  assert.deepEqual(parseReadyEscalateMin({ BB_READY_ESCALATE_MIN: "0" }), { min: 0, err: null });
+  assert.equal(parseReadyEscalateMin({ BB_READY_ESCALATE_MIN: "45" }).min, 45);
+  for (const v of ["abc", "-5", "Infinity"]) { const r = parseReadyEscalateMin({ BB_READY_ESCALATE_MIN: v }); assert.equal(r.min, 120); assert.ok(r.err); }
 });
 test("config: watchdog allowlist and finite minutes", () => {
   assert.equal(parseWatchdog({ BB_WATCHDOG_MIN: "10" }).min, 10);

@@ -76,6 +76,14 @@ It writes `data/aug-plan.txt`. It also writes `data/aug-plan-state.txt` (previou
 | autoDestroy, autoSelect or readiness turns off while a request is open | `{action:"cancel"}` written; nothing destroyed |
 | `node.backupBeforeDestroy=false` | no ack needed; the veto window still applies |
 
+**READY escalation (server/checkin.js, added 2026-10-12).** The READY flag is held back from Claude only while it is fresh.
+Once it has stayed in the check-in attention for `BB_READY_ESCALATE_MIN` minutes (default 120; `0` restores owner-only),
+it escalates like any other attention, then re-escalates every 2 h while still open. With autoDestroy on, a destroy takes
+about 30 min (backup + veto window), so a 2 h READY means the destroy is stuck or the owner hasn't decided. The escalation
+text says which: it tells the agent to inspect node control, or to remind the owner, and never to destroy outside
+`node.autoDestroy`. The first-seen time is kept in `state/checkin-escalation.json` (`ownerSince`) so a server restart
+doesn't reset the clock; READY disappearing does.
+
 `sl-destroy.js` is the only caller of `ns.singularity.destroyW0r1dD43m0n(nextBn, "agent/post-install.js")`. That signature was checked in the bitburner-src dev `NetscriptDefinitions.d.ts`: `nextBN?`, `callbackScript?`, `bitNodeOptions?`; 32 GB x16 outside BN4. Right before calling it, the script re-reads settings, the request and the ack (`destroyGate`) and aborts on any mismatch, so a late veto always wins. Every decision is written to `data/audit.txt` (`kind: node|destroy`), `data/events.txt` and `data/agent-log.txt`.
 
 **Server side.** `server/node-control.js` polls `data/node-request.txt` every 60 s (`BB_NODE_POLL_MS`) while rpc is up:

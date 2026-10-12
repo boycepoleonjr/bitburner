@@ -72,7 +72,7 @@ await state.ensureDir();
 for (const l of C.configSummary()) log(l);
 const notifier = createNotifier({ webhookUrl: C.DISCORD_ON ? C.DISCORD_WEBHOOK_URL : "", escalateUrl: C.ESCALATE_URL, escalateToken: C.ESCALATE_TOKEN, log });
 const checkin = createCheckin({
-  rpc, isUp, log, state, auto: C.CHECKIN_AUTO, escalationEnabled: notifier.escalationEnabled,
+  rpc, isUp, log, state, auto: C.CHECKIN_AUTO, escalationEnabled: notifier.escalationEnabled, readyEscalateMs: C.READY_ESCALATE_MIN * 60000,
   notify: (rec) => notifier.discordReport(rec), escalate: (text) => notifier.fireRoutine(text),
 });
 const watchdog = createWatchdog({

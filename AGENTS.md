@@ -94,7 +94,9 @@ PREDICTOR v2, SPEND PLAN, CHECK-IN REPORT FORMAT).
    `bb report` (GET /api/report; instant, no game call). `bb checkin` still forces a fresh one.
    Escalation: only for NEW attention (or the same attention still open after 2h), the container fires the claude.ai
    routine "Bitburner escalation (hosted)" via its API trigger (BB_ESCALATE_ROUTINE_ID + BB_ESCALATE_TOKEN). That routine
-   has the Railway connector for diagnosis and posts its summary back via POST /api/notify.
+   has the Railway connector for diagnosis and posts its summary back via POST /api/notify. w0r1d_d43m0n READY is held
+   back until it has been open BB_READY_ESCALATE_MIN minutes (default 120, 0 = never): then the destroy is stuck or the
+   owner hasn't decided, and it escalates like other attention.
    Test the whole path on demand: POST /api/escalate-test (auth) fires the routine with a "[TEST]" message.
    Watchdog (BB_WATCHDOG_MIN=10): if game/rpc is down or the rpc ping fails for 10 min it restarts Chromium (max 2
    attempts per outage), then escalates once and only probes until recovery. /healthz = bb server liveness (no auth).
