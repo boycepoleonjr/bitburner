@@ -13,7 +13,7 @@ const tmp = path.join(dir, "autopilot.mjs");
 fs.copyFileSync(src, tmp);
 let mod;
 try { mod = await import(pathToFileURL(tmp).href); } finally { fs.rmSync(dir, { recursive: true, force: true }); }
-const { cityInviteDecision, handleInvites, nfgAffordable, nfgHold, nfgTrigger } = mod;
+const { cityInviteDecision, handleInvites, nfgAffordable, nfgHold, nfgTrigger, installFreeze, expRate } = mod;
 
 const AUGS = {
   "Sector-12": ["CashRoot Starter Kit", "NeuroFlux Governor"],
@@ -93,5 +93,45 @@ t("nfgTrigger: queued levels count toward the trigger", () => {
   assert.equal(nfgTrigger(0, 6, 6), true);  // full batch already queued
   assert.equal(nfgTrigger(5, 0, 6), false);
   assert.equal(nfgTrigger(0, 0, 0), false);
+});
+// installFreeze: exp for a level at multiplier m is the inverse of the game's calculateSkill
+const expAt = (level, m) => Math.exp((level / m + 200) / 32) - 534.6;
+t("installFreeze: late in a run, a 1-level install (BN4.1's tail) loses to holding; a 6-level batch can still win", () => {
+  const m = 15, exp = expAt(8800, m), runMin = 14 * 60;          // 14 h into the run, 200 levels short of 9000
+  const rate = (expAt(8903, m) - expAt(8719, m)) / 360;           // BN4.2: 8719 -> 8903 took ~6 h
+  const base = { hack: 8800, exp, rate, avgRate: exp / runMin, wdReq: 9000 };
+  const one = installFreeze({ ...base, gain: 1.01 });
+  assert.equal(one.freeze, true, one.why);
+  assert.ok(one.etaHold < one.etaInstall);
+  assert.match(one.why, /without an install/);
+  // +6% level multiplier cuts the exp for 9000 ~3x at m=15, so the batch beats ~8 h of holding
+  assert.equal(installFreeze({ ...base, gain: Math.pow(1.01, 6) }).freeze, false);
+  // with a higher multiplier the same batch helps less and holding wins
+  const m2 = 30, exp2 = expAt(8800, m2);
+  assert.equal(installFreeze({ hack: 8800, exp: exp2, rate: (expAt(8903, m2) - expAt(8719, m2)) / 360, avgRate: exp2 / runMin, wdReq: 9000, gain: Math.pow(1.01, 6) }).freeze, true);
+});
+t("installFreeze: early in a run a NeuroFlux batch still pays off", () => {
+  const m = 15, exp = expAt(7214, m);                              // BN4.2: 7214 reached 15 min after an install
+  const r = installFreeze({ hack: 7214, exp, rate: exp / 15, avgRate: exp / 15, wdReq: 9000, gain: Math.pow(1.01, 6) });
+  assert.equal(r.freeze, false, r.why);
+  assert.match(r.why, /install pays off/);
+});
+t("installFreeze: no decision without a rate, a requirement, or once it is met", () => {
+  const exp = expAt(8000, 15);
+  assert.equal(installFreeze({ hack: 8000, exp, rate: null, avgRate: 1, wdReq: 9000 }).freeze, false);
+  assert.equal(installFreeze({ hack: 8000, exp, rate: 0, wdReq: 9000 }).freeze, false);
+  assert.equal(installFreeze({ hack: 8000, exp, rate: 1e6, wdReq: Infinity }).freeze, false);
+  assert.equal(installFreeze({ hack: 9100, exp, rate: 1e6, wdReq: 9000 }).freeze, false);
+});
+t("installFreeze: bigger gain makes an install more attractive (monotonic)", () => {
+  const m = 15, exp = expAt(8500, m), a = { hack: 8500, exp, rate: exp / 300, avgRate: exp / 600, wdReq: 9000 };
+  assert.ok(installFreeze({ ...a, gain: 1.2 }).etaInstall < installFreeze({ ...a, gain: 1.01 }).etaInstall);
+});
+t("expRate: exp/min over the window, null until it spans 5 min", () => {
+  const now = 100 * 60000;
+  assert.equal(expRate([{ t: now - 60000, exp: 1 }, { t: now, exp: 2 }], now), null);
+  assert.equal(expRate([{ t: now - 10 * 60000, exp: 100 }, { t: now, exp: 1100 }], now), 100);
+  assert.equal(expRate([{ t: now - 40 * 60000, exp: 0 }, { t: now - 10 * 60000, exp: 100 }, { t: now, exp: 1100 }], now), 100, "older than 30 min dropped");
+  assert.equal(expRate([{ t: now - 10 * 60000, exp: 5 }, { t: now, exp: 5 }], now), null, "no gain = no rate");
 });
 console.log(`AUTOPILOT OK (${n})`);
