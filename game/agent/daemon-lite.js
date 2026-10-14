@@ -4,8 +4,9 @@
  *   1. roots everything it can, runs a phase-based hack/grow/weaken loop over home + rooted servers + purchased servers
  *   2. buys a small purchased server ("pserv-sing") that is kept free of workers (and of anything else: foreign scripts
  *      are killed) and used to run one-shot Singularity scripts (agent/sl-*.js): TOR, port programs, home RAM, home
- *      cores, faction backdoors (sl-backdoor.js) and joins/work (sl-work.js; both need pserv-sing at 512GB) — Singularity is far too big
- *      for 32GB home
+ *      cores, faction backdoors (sl-backdoor.js) and joins/work (sl-work.js). pserv-sing is sized from the sl-* scripts'
+ *      actual RAM (Singularity costs 16x/4x/1x RAM at SF4.1/4.2/4.3 outside BN4), first for the small purchase scripts,
+ *      then for all of them — Singularity is far too big for 32GB home
  *   3. spends leftover cash on purchased servers (workers), but only while the workers are mostly busy
  *   4. hands over: once home fits agent/autopilot.js it starts it; once home also fits daemon.js it starts
  *      `daemon.js --reset` and exits. Status: /data/daemon-lite-status.txt. Events: /data/events.txt.
@@ -14,7 +15,32 @@ const WK = { hack: "workers/hack.js", grow: "workers/grow.js", weaken: "workers/
 const SING = "pserv-sing", AP = "agent/autopilot.js", DAEMON = "daemon.js";
 const STATUS = "/data/daemon-lite-status.txt", EV = "/data/events.txt", PORT = 21;
 const SL = ["agent/sl-tor.js", "agent/sl-prog.js", "agent/sl-ram.js", "agent/sl-cores.js", "agent/sl-info.js", "agent/sl-work.js", "agent/sl-backdoor.js"];
-const SING_RAM = 512, MAXT = 15, BUY_UTIL = 0.6; // pserv-sing size (fits sl-work.js), max targets, worker utilization needed to buy more
+const SL_FIRST = ["agent/sl-tor.js", "agent/sl-prog.js", "agent/sl-ram.js", "agent/sl-info.js"]; // what the first pserv-sing must fit
+const MAXT = 15, BUY_UTIL = 0.6; // max targets, worker utilization needed to buy more worker servers
+/** Smallest purchasable server size (power of two, >= 8GB) that fits the largest of `rams`. Exported for tests. */
+export function hostRamFor(rams) {
+  const need = Math.max(0, ...rams.filter((r) => Number.isFinite(r)));
+  let r = 8; while (r < need) r *= 2;
+  return r;
+}
+/** One pass of the purchase ladder. `items` are in priority order: {k, cost, need, blocked}. Saves for the first
+ * unaffordable item (goal; hold = goal is within 6x of cash) and still allows later items costing <= 25% of the goal
+ * (home RAM is always "needed": a plain stop at it meant nothing after it was ever bought). `picks` = affordable items
+ * to try in order (the caller stops at the first success). Exported for tests. */
+export function ladderStep(items, money) {
+  let goal = 0, hold = false, saving = null;
+  const picks = [];
+  for (const it of items) {
+    if (!it.need || it.blocked) continue;
+    if (money < it.cost) { if (!goal) { goal = it.cost; hold = it.cost <= money * 6; saving = it.k; } continue; }
+    if (goal && it.cost > goal * 0.25) continue;
+    picks.push(it);
+  }
+  return { picks, goal, hold, saving };
+}
+/** Spend leftover cash on worker servers only when nothing is being saved for, pserv-sing exists, and the workers are
+ * busy (idle workers: more RAM wouldn't earn anything). Exported for tests. */
+export const workerSpendOk = ({ hold, singHost, money, util, buyUtil = BUY_UTIL }) => !hold && singHost && money > 1e6 && util >= buyUtil;
 export const RPC = "agent/rpc.js", RPC_CFG = "agent/rpc-config.txt";
 /** Keeps agent/rpc.js alive. Same copy as in agent/autopilot.js (see there); exported for tests. */
 export function ensureRpc({ running, hasConfig, run, act, memo }) {
@@ -119,31 +145,28 @@ export async function main(ns) {
       let hold = false;
       if (!apRunning) {
         stage = "ladder";
-        const c64 = 64 * GB;
+        const firstRam = hostRamFor(SL_FIRST.map((f) => ns.getScriptRam(f, "home"))), cFirst = firstRam * GB;
         if (!ns.serverExists(SING)) {
           stage = "need sing host";
-          if (money >= c64 * 1.05 && pserv.length < LIMIT) { if (await buy("buy", SING, 64)) { ns.scp(SL, SING, "home"); log(`bought ${SING} (64GB) as Singularity host`); } }
-          else hold = money * 6 >= c64; // saving for it
+          if (money >= cFirst * 1.05 && pserv.length < LIMIT) { if (await buy("buy", SING, firstRam)) { ns.scp(SL, SING, "home"); log(`bought ${SING} (${firstRam}GB) as Singularity host`); } }
+          else hold = money * 6 >= cFirst; // saving for it
         } else {
           if (Date.now() - infoT > 60000) { const r = await sing("info", "agent/sl-info.js"); if (r && r.op === "info") { info = r; infoT = Date.now(); } else infoT = Date.now() - 45000; }
+          const singRam = hostRamFor(SL.map((f) => ns.getScriptRam(f, "home")));
           const LADDER = [
             ["tor", 200e3, !ns.hasTorRouter(), ["agent/sl-tor.js"]],
             ...PROGS.slice(0, 2).map(([p, c]) => [p, c, !ns.fileExists(p, "home"), ["agent/sl-prog.js", p]]),
+            ["singRam", singRam * GB, ns.getServerMaxRam(SING) < singRam, null],
             ["homeRam", info.ram, Number.isFinite(info.ram), ["agent/sl-ram.js"]],
             ...PROGS.slice(2).map(([p, c]) => [p, c, !ns.fileExists(p, "home"), ["agent/sl-prog.js", p]]),
             ["homeCores", info.cores, Number.isFinite(info.cores), ["agent/sl-cores.js"]],
-          ];
-          LADDER.splice(3, 0, ["singRam", SING_RAM * GB, ns.getServerMaxRam(SING) < SING_RAM, null]);
-          // save for the first unaffordable item, but keep buying later ones that cost <= 25% of it (home RAM is always
-          // "needed", so a plain break meant nothing after it was ever bought unless the home-RAM script failed)
-          let goal = 0;
-          for (const [k, cost, need, run] of LADDER) {
-            if (!need) continue;
-            if (k !== "tor" && PROGS.some(([p]) => p === k) && !ns.hasTorRouter()) continue;
-            if ((fail[k] || 0) > Date.now()) continue;
-            if (money < cost) { if (!goal) { goal = cost; hold = cost <= money * 6; stage = `saving for ${k} ($${fmt(cost)})`; } continue; }
-            if (goal && cost > goal * 0.25) continue;
-            const r = run ? await sing(k, ...run) : { ok: await buy("up", SING, SING_RAM) };
+          ].map(([k, cost, need, run]) => ({ k, cost, need, run,
+            blocked: (k !== "tor" && PROGS.some(([p]) => p === k) && !ns.hasTorRouter()) || (fail[k] || 0) > Date.now() }));
+          const step = ladderStep(LADDER, money);
+          hold = step.hold;
+          if (step.saving) stage = `saving for ${step.saving} ($${fmt(step.goal)})`;
+          for (const { k, cost, run } of step.picks) {
+            const r = run ? await sing(k, ...run) : { ok: await buy("up", SING, singRam) };
             if (r && r.ok) { log(`bought ${k} ($${fmt(cost)})`); infoT = 0; break; }
             fail[k] = Date.now() + 60000; lastErr = `${k} purchase failed`;
           }
@@ -213,7 +236,7 @@ export async function main(ns) {
       const util = all0 ? 1 - cap / all0 : 1;
 
       // ---- spend leftover on worker servers ------------------------------------------------------------------
-      if (!hold && ns.serverExists(SING) && money > 1e6 && util >= BUY_UTIL) { // idle workers: more RAM wouldn't earn anything
+      if (workerSpendOk({ hold, singHost: ns.serverExists(SING), money, util })) {
         const ws = pserv.filter((h) => h !== SING), lim = LIMIT - 1;
         let r = 16; while (r < 1048576 && (r * 2) * GB <= money * 0.5) r *= 2;
         if (r * GB <= money * 0.5) {
