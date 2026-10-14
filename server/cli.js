@@ -12,6 +12,7 @@ import fs from "node:fs";
 import { spawnSync } from "node:child_process";
 import { PORT, HOST, cliAuthHeader } from "./config.js";
 import { formatDashboard } from "./dashboard.js";
+import { pushPath } from "./sync.js";
 
 const [cmd, ...args] = process.argv.slice(2);
 let auth;
@@ -26,6 +27,13 @@ export function parseAssignments(list) {
   const out = {};
   for (const a of list) { const i = a.indexOf("="); if (i <= 0) throw new Error(`expected key=value, got "${a}"`); out[a.slice(0, i).trim()] = a.slice(i + 1); }
   return out;
+}
+// Requested push paths the server didn't report as pushed. Checked client-side too, because an older server (e.g. a
+// hosted container not yet redeployed) answers an unmatched path with ok:true and pushed:[].
+export function pushShortfall(requested, r) {
+  if (!requested.length || !r?.ok) return [];
+  const sent = new Set(r.pushed || []);
+  return [...new Set(requested.map(pushPath))].filter((f) => !sent.has(f));
 }
 // Human view of GET /api/settings: one line per key, "*" marks a value changed from its default.
 export function formatSettings(v, only) {
@@ -87,5 +95,7 @@ map[cmd]().then((r) => {
   else if (cmd === "checkin" && r.ok && r.value) console.log(r.value.report + (r.value.attention?.length ? `\n\nATTENTION: ${JSON.stringify(r.value.attention)}` : "") + `\nnextMin=${r.value.nextMin}`);
   else console.log(JSON.stringify(r, null, 2));
   if (r && r.ok === false && (cmd === "report" || cmd === "push")) process.exitCode = 1;
+  const unpushed = cmd === "push" ? pushShortfall(args, r) : [];
+  if (unpushed.length) { console.error(`bb push: not pushed (paths are relative to game/): ${unpushed.join(", ")}`); process.exitCode = 1; }
 }).catch((e) => { console.error("bb server unreachable:", e.message); process.exit(2); });
 }

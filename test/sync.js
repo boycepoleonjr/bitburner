@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { push, pushPath } from "../server/sync.js";
+import { pushShortfall } from "../server/cli.js";
 
 const tests = [];
 const test = (name, fn) => tests.push([name, fn]);
@@ -67,6 +68,15 @@ test("no paths: pushes all code, skips data/, adds AGENTS.txt from AGENTS.md", a
   assert.equal(r.ok, true);
   assert.deepEqual(sent(calls).sort(), ["AGENTS.txt", "tools/goals.js", "tools/status.js"]);
   assert.notEqual(calls.find((c) => c.filename === "AGENTS.txt").content, "stale copy");
+});
+
+// CLI-side check: an older server says ok:true but pushed nothing (or only some) for unmatched paths.
+test("pushShortfall flags old-server no-op and partial pushes", () => {
+  assert.deepEqual(pushShortfall(["game/tools/goals.js"], { ok: true, pushed: [] }), ["tools/goals.js"]);
+  assert.deepEqual(pushShortfall(["tools/goals.js", "tools/nope.js"], { ok: true, pushed: ["tools/goals.js"] }), ["tools/nope.js"]);
+  assert.deepEqual(pushShortfall(["game/tools/goals.js", "tools/goals.js"], { ok: true, pushed: ["tools/goals.js"] }), []);
+  assert.deepEqual(pushShortfall([], { ok: true, pushed: ["a.js", "AGENTS.txt (from AGENTS.md)"] }), []); // full push
+  assert.deepEqual(pushShortfall(["tools/nope.js"], { ok: false, error: "x", pushed: [] }), []); // server already failed it
 });
 
 let failed = 0;
