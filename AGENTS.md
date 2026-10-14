@@ -97,6 +97,10 @@ PREDICTOR v2, SPEND PLAN, CHECK-IN REPORT FORMAT).
    has the Railway connector for diagnosis and posts its summary back via POST /api/notify. w0r1d_d43m0n READY is held
    back until it has been open BB_READY_ESCALATE_MIN minutes (default 120, 0 = never): then the destroy is stuck or the
    owner hasn't decided, and it escalates like other attention.
+   Drift check (BB_DRIFT_CHECK, default on): every check-in hashes the game's code files (one rpc eval) against the
+   deployed repo copy and adds attention "game code drift: N file(s) differ from deployed main <sha> (...)" until
+   someone runs `bb push` and restarts the scripts. On demand: GET /api/drift. Merges to main auto-deploy (Railway
+   GitHub App; watch paths server/ deploy/ game/ Dockerfile package*.json railway.toml).
    Test the whole path on demand: POST /api/escalate-test (auth) fires the routine with a "[TEST]" message.
    Watchdog (BB_WATCHDOG_MIN=10): if game/rpc is down or the rpc ping fails for 10 min it restarts Chromium (max 2
    attempts per outage), then escalates once and only probes until recovery. /healthz = bb server liveness (no auth).
