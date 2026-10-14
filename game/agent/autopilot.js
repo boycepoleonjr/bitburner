@@ -17,7 +17,7 @@ export const PLAN_SCRIPT = "agent/sl-plan.js", PLAN_FILE = "/data/aug-plan.txt";
 /** Settings (data/settings.txt) win over the legacy autopilot-config.txt for the same concept. Exported for tests. */
 export function withSettings(c, s) {
   return { ...c, autoInstall: s["augs.autoInstall"], augTrigger: s["augs.installAt"], donateFavor: s["augs.donateAtFavor"],
-    nfgHoldFrac: s["augs.nfgHoldFrac"], installPolicy: s["augs.installPolicy"] };
+    nfgHoldFrac: s["augs.nfgHoldFrac"], installPolicy: s["augs.installPolicy"], freezeAfterRedPill: s["augs.freezeAfterRedPill"] };
 }
 /** Install policy "eta" (lib/augplan.js installDecision via /data/aug-plan.txt): a count trigger waits while the plan
  * says the next aug is closer than a reset costs; a plan "install now" with >= 1 buyable fires on its own. Red Pill and
@@ -54,6 +54,34 @@ export function nfgTrigger(affordable, queued, trigger) {
  * hacking and would throw away the finish. Exported for tests. */
 export function nfgHold(hack, wdReq, frac = 0.9) {
   return Number.isFinite(wdReq) && wdReq > 0 && hack >= frac * wdReq;
+}
+/** Hacking exp for `level` at effective level multiplier `m` (inverse of the game's calculateSkill). */
+const expFor = (level, m) => Math.exp((level / m + 200) / 32) - 534.6;
+/** Install freeze after The Red Pill (docs/specs/aug-planner.md): an install resets hacking to 0, so it must reach
+ * w0r1d_d43m0n's requirement sooner than holding. Holding climbs at the current exp `rate` (per min); after an install
+ * the climb restarts from 0 at about this run's average rate `avgRate` (exp / minutes since the last reset, which
+ * includes the slow early ramp), with level and exp multipliers x`gain`. No usable rate => {freeze:false} (the nfgHold
+ * backstop still applies). Exported for tests. */
+export function installFreeze({ hack, exp, rate, avgRate, wdReq, gain = 1 }) {
+  const no = (why) => ({ freeze: false, why, etaHold: null, etaInstall: null });
+  if (!(Number.isFinite(wdReq) && wdReq > 0) || hack >= wdReq) return no("w0r1d_d43m0n requirement met or unknown");
+  if (!(rate > 0) || !(exp > 0)) return no("no exp rate yet");
+  const m = hack / (32 * Math.log(exp + 534.6) - 200);
+  if (!(m > 0) || !Number.isFinite(m)) return no("level multiplier unknown");
+  const g = Math.max(1, gain || 1), climb = avgRate > 0 ? avgRate : rate;
+  const etaHold = Math.max(0, expFor(wdReq, m) - exp) / rate;
+  const etaInstall = Math.max(0, expFor(wdReq, m * g)) / (climb * g);
+  const r = (x) => Math.round(x);
+  return etaHold <= etaInstall
+    ? { freeze: true, why: `w0r1d_d43m0n in ~${r(etaHold)}m without an install vs ~${r(etaInstall)}m after one`, etaHold, etaInstall }
+    : { freeze: false, why: `install pays off: ~${r(etaInstall)}m after one vs ~${r(etaHold)}m holding`, etaHold, etaInstall };
+}
+/** Hacking exp/min over the samples ({t, exp}) in the last `windowMs`; null until they span >= `minMs`. Exported for tests. */
+export function expRate(samples, now, windowMs = 30 * 60000, minMs = 5 * 60000) {
+  const s = samples.filter((x) => now - x.t <= windowMs);
+  if (s.length < 2) return null;
+  const a = s[0], b = s[s.length - 1];
+  return b.t - a.t >= minMs && b.exp > a.exp ? (b.exp - a.exp) / ((b.t - a.t) / 60000) : null;
 }
 /** Handles pending faction invites, pushing flags into `flags` as it goes (kept if a later join throws).
  * `blockedLogged` is created in main(), so cityBlocked is audited once per city per autopilot run
@@ -101,7 +129,8 @@ export async function main(ns) {
   const BACKDOORS = ["CSEC", "avmnite-02h", "I.I.I.I", "run4theh111z"];
   const recent = [];
   const blockedLogged = new Set(); // cityBlocked audited once per city per run
-  let liquidatedByMe = false, nfgHoldLogged = false, loopN = 0, etaHeldLogged = "";
+  let liquidatedByMe = false, nfgHoldLogged = false, loopN = 0, etaHeldLogged = "", freezeLogged = null;
+  const expSamples = []; // {t, exp}: hacking exp each loop, for installFreeze's rate (reset by every install: new script run)
   const rpcMemo = { failed: false };
   const act = (msg) => {
     const line = `${new Date().toLocaleTimeString("en-US", { hour12: false })} [autopilot] ${msg}`;
@@ -185,6 +214,7 @@ export async function main(ns) {
       ensureRpc({ running: () => ns.isRunning(RPC, "home"), hasConfig: () => ns.fileExists(RPC_CFG, "home"), run: () => ns.run(RPC), act, memo: rpcMemo });
       if (c.enabled) {
         const hack = ns.getHackingLevel();
+        { const now = Date.now(); expSamples.push({ t: now, exp: ns.getPlayer().exp.hacking }); while (expSamples.length && now - expSamples[0].t > 30 * 60000) expSamples.shift(); }
         const spendable = () => Math.max(0, money() - c.reserve);
 
         // 1. TOR + programs (cheapest first)
@@ -338,8 +368,22 @@ export async function main(ns) {
           }
           const countWhy = `${augs.buyable} augs buyable`;
           const why0 = augs.redPill ? "Red Pill" : augs.buyable >= c.augTrigger ? `${augs.buyable} augs buyable` : (!repWorkLeft && augs.buyable >= 1) ? "stalled (all rep-complete)" : nfgWhy;
-          const gate = etaGate({ why: why0, countWhy, buyable: augs.buyable, policy: c.installPolicy, plan: parseJson(ns.read(PLAN_FILE)), now: Date.now() });
-          const why = gate.why;
+          const planNow = parseJson(ns.read(PLAN_FILE));
+          const gate = etaGate({ why: why0, countWhy, buyable: augs.buyable, policy: c.installPolicy, plan: planNow, now: Date.now() });
+          let why = gate.why;
+          // Install freeze after The Red Pill: an install must reach w0r1d_d43m0n sooner than holding (docs/specs/aug-planner.md)
+          if (why && why !== "Red Pill" && c.freezeAfterRedPill !== false && S.getOwnedAugmentations(false).includes("The Red Pill")) {
+            const wdReq = ns.serverExists("w0r1d_d43m0n") ? ns.getServerRequiredHackingLevel("w0r1d_d43m0n") : Infinity;
+            const queuedN = S.getOwnedAugmentations(true).length - S.getOwnedAugmentations(false).length;
+            const levels = Math.max(1, queuedN + (why === nfgWhy ? nfgAffordable(S.getAugmentationPrice(NEUROFLUX), spendable(), c.nfgPriceGrowth) : augs.buyable));
+            const expNow = ns.getPlayer().exp.hacking, runMin = (Date.now() - ns.getResetInfo().lastAugReset) / 60000;
+            const fz = installFreeze({ hack, exp: expNow, rate: expRate(expSamples, Date.now()), avgRate: runMin > 0 ? expNow / runMin : 0,
+              wdReq, gain: Math.pow(1.01, levels) });
+            if (fz.freeze) {
+              if (freezeLogged !== fz.why.replace(/\d+/g, "#")) { freezeLogged = fz.why.replace(/\d+/g, "#"); audit("installFreeze", { why, hack, wdReq, levels, ...fz }); act(`install held (${why}): ${fz.why}`); }
+              why = null;
+            } else if (freezeLogged) { freezeLogged = null; audit("installFreeze", { why, hack, wdReq, levels, ...fz, freeze: false }); }
+          }
           if (gate.held && gate.held !== etaHeldLogged) { etaHeldLogged = gate.held; audit("etaHold", { countWhy, reason: gate.held }); }
           if (why) {
             const cfgO = (() => { try { return JSON.parse(ns.read(OVR) || "{}"); } catch { return {}; } })();

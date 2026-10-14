@@ -76,6 +76,28 @@ It writes `data/aug-plan.txt`. It also writes `data/aug-plan-state.txt` (previou
 | autoDestroy, autoSelect or readiness turns off while a request is open | `{action:"cancel"}` written; nothing destroyed |
 | `node.backupBeforeDestroy=false` | no ack needed; the veto window still applies |
 
+**Install freeze after The Red Pill (agent/autopilot.js `installFreeze`, added 2026-10-13).** An install resets
+hacking to 0. Once The Red Pill is installed, every install only exists to speed the climb to w0r1d_d43m0n, so it
+must beat simply holding. Measured cost: BN4.1 had a ~57 h tail; BN4.2 installed NeuroFlux batches every 20-30 min at hack ~7k of 9000,
+because `augs.nfgHoldFrac` (90%) is a fixed line, not a comparison.
+- Inputs: hacking level and exp, the current exp rate (last <= 30 min of autopilot loops), this run's average exp rate
+  (exp / minutes since the last reset), w0r1d's requirement, and the install's gain (1.01^levels: NeuroFlux adds 1% to
+  hacking and hacking exp per level; other augs also count as 1.01, which under-counts them and leans to holding).
+- Effective level multiplier from the game's own formula: `m = level / (32 ln(exp + 534.6) - 200)`;
+  exp for a level: `e^((level / m + 200) / 32) - 534.6`.
+- `etaHold = (exp(req) - exp) / currentRate`; `etaInstall = exp(req at m*gain) / (averageRate * gain)`. The average
+  rate stands in for the climb from 0 after a reset, slow early ramp included. A fixed recovery constant was rejected:
+  BN4.2 climbed back to 7.2k in 15 min after an install but took ~6 h from 8.7k to 8.9k.
+- What this means in practice: the exp-to-level curve is exponential, so +1% multiplier per NeuroFlux level cuts the
+  exp needed sharply (6 levels: ~3x less at an effective multiplier of 15). A 6-level batch usually still beats holding,
+  even late; a 1-level or 1-aug install (BN4.1's tail) does not. The freeze mainly blocks those small, late installs.
+  The average-rate stand-in is the weak point: calibrate it against install-log climbs after a few runs.
+- Freeze every trigger ("N augs buyable", stalled, NeuroFlux) while `etaHold <= etaInstall`. No rate yet (fewer than
+  5 min of samples) = no freeze decision, so the 90% `nfgHold` backstop still applies. The Red Pill itself is never
+  frozen (the freeze starts only once it is installed).
+- Setting `augs.freezeAfterRedPill` (default true) turns it off. Every freeze/unfreeze change is audited (`installFreeze`)
+  and logged to events.
+
 **READY escalation (server/checkin.js, added 2026-10-12).** The READY flag is held back from Claude only while it is fresh.
 Once it has stayed in the check-in attention for `BB_READY_ESCALATE_MIN` minutes (default 120; `0` restores owner-only),
 it escalates like any other attention, then re-escalates every 2 h while still open. With autoDestroy on, a destroy takes
