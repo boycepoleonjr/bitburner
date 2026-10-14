@@ -22,9 +22,16 @@ export async function pull(remote, { server = "home" } = {}) {
   return { ok: true, pulled: files.length, changed: wrote };
 }
 
-export async function push(remote, { server = "home", only } = {}) {
+/** The repo's in-game code files (paths relative to game/): what push sends, never data/ (live state) or AGENTS.txt
+ * (generated from AGENTS.md). Shared with the drift check (server/drift.js). */
+export function codeFiles(root = ROOT) {
+  const dir = path.join(root, "game");
   const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]));
-  let files = walk(DIR).map((p) => path.relative(DIR, p).split(path.sep).join("/")).filter((f) => !f.startsWith("data/") && f !== "AGENTS.txt");
+  return walk(dir).map((p) => path.relative(dir, p).split(path.sep).join("/")).filter((f) => !f.startsWith("data/") && f !== "AGENTS.txt").sort();
+}
+
+export async function push(remote, { server = "home", only } = {}) {
+  let files = codeFiles();
   if (only) files = files.filter((f) => [].concat(only).includes(f));
   const sent = [];
   for (const f of files) { await remote("pushFile", { server, filename: f, content: fs.readFileSync(path.join(DIR, f), "utf8") }); sent.push(f); }

@@ -28,13 +28,13 @@ function clock(start = Date.UTC(2026, 8, 29, 12)) {
 }
 
 const REPORT = "**Bitburner check-in · 8:00 AM ET** · BN4\n\n| | |\n|---|---|\n| Status | OK |\n| Money | $1.0m |\n| Activity | x |";
-function harness({ attention = [], warn = "", up = true, auto = true, dir = tmp(), notifyImpl, escalateImpl, rpcImpl, c = clock(), readyEscalateMs } = {}) {
+function harness({ attention = [], warn = "", up = true, auto = true, dir = tmp(), notifyImpl, escalateImpl, rpcImpl, c = clock(), readyEscalateMs, driftCheck } = {}) {
   const calls = { rpc: 0, notify: [], escalate: [], order: [] };
   const h = { up, attention, warn };
   const state = createState({ dir });
   const ci = createCheckin({
     rpc: rpcImpl || (async (op) => { calls.rpc++; return { ok: true, value: { report: REPORT, attention: h.attention, warn: h.warn, nextMin: 20, did: ["x", " "] } }; }),
-    isUp: () => h.up, state, auto, nowMs: c.nowMs, setTimer: c.setTimer, clearTimer: c.clearTimer, escalationEnabled: true, readyEscalateMs,
+    isUp: () => h.up, state, auto, nowMs: c.nowMs, setTimer: c.setTimer, clearTimer: c.clearTimer, escalationEnabled: true, readyEscalateMs, driftCheck,
     notify: notifyImpl || (async (rec) => { calls.notify.push(rec); calls.order.push("report"); }),
     escalate: escalateImpl || (async (text) => { calls.escalate.push(text); calls.order.push("escalate"); return { ok: true }; }),
   });
@@ -231,6 +231,37 @@ test("checkin: READY alongside other attention escalates without READY; READY co
   assert.equal(a.calls.escalate.length, 1);
 });
 
+test("checkin: drift check adds its line to attention (and escalates); a failing drift check never breaks the check-in", async () => {
+  const DRIFT = "game code drift: 1 file(s) differ from deployed main abc1234 (daemon.js); run bb push + restart the scripts";
+  const a = harness({ driftCheck: async () => DRIFT });
+  const rec = await a.ci.run(); await a.ci._settle();
+  assert.deepEqual(rec.attention, [DRIFT]);
+  assert.equal(a.calls.escalate.length, 1);
+  const b = harness({ attention: ["x"], driftCheck: async () => null });
+  assert.deepEqual((await b.ci.run()).attention, ["x"]);
+  const c = harness({ attention: ["x"], driftCheck: async () => { throw new Error("rpc eval timeout"); } });
+  const r = await c.ci.run();
+  assert.equal(r.ok, true); assert.deepEqual(r.attention, ["x"]);
+  const d = harness({ up: false, driftCheck: async () => { throw new Error("must not run"); } });
+  assert.equal((await d.ci.run()).ok, false, "no drift check when the check-in itself failed");
+});
+test("drift: in-game hash code matches the server's, flags differing and missing files, stable message", async () => {
+  const { fnv, gameHashCode, checkDrift, driftAttention, repoManifest } = await import("../server/drift.js");
+  assert.equal(fnv("abc"), "1a47e90b"); assert.equal(fnv(""), "811c9dc5");
+  const m = repoManifest(), files = Object.keys(m).sort();
+  assert.ok(files.includes("daemon.js") && files.includes("AGENTS.txt") && !files.some((f) => f.startsWith("data/")));
+  // run the exact eval body against a fake ns holding the repo's files, with one edited and one missing
+  const content = (f) => fs.readFileSync(f === "AGENTS.txt" ? "AGENTS.md" : path.join("game", f), "utf8");
+  const fakeNs = { fileExists: (f) => f !== "dashboard.js", read: (f) => (f === "daemon.js" ? content(f) + "// hotfix" : content(f)) };
+  const rpcFake = async (op, args) => ({ ok: true, value: await new Function("ns", `return (async () => { ${args.code} })()`)(fakeNs) });
+  const r = await checkDrift({ rpc: rpcFake });
+  assert.equal(r.checked, files.length);
+  assert.deepEqual(r.differ, ["daemon.js"]); assert.deepEqual(r.missing, ["dashboard.js"]);
+  assert.equal(driftAttention(r, "97a4e4bb42c9"), "game code drift: 2 file(s) differ from deployed main 97a4e4b (daemon.js, dashboard.js); run bb push + restart the scripts");
+  assert.equal(driftAttention({ differ: ["e", "d", "c", "b", "a"] }), "game code drift: 5 file(s) differ from deployed main (a, b, c +2 more); run bb push + restart the scripts");
+  assert.equal(driftAttention({ differ: [], missing: [] }), null);
+  await assert.rejects(checkDrift({ rpc: async () => ({ ok: false, error: "rpc down" }) }), /drift check failed: rpc down/);
+});
 test("checkin: OWNER_DECISION still matches the flag text the autopilot raises (READY_FLAG in lib/augplan.js)", () => {
   const src = fs.readFileSync(new URL("../game/lib/augplan.js", import.meta.url), "utf8");
   const flags = [...src.matchAll(/export const READY_FLAG = "([^"]*)"/g)].map((m) => m[1]);

@@ -8,6 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { WebSocketServer } from "ws";
 import { pull, push } from "./sync.js";
+import { checkDrift, driftAttention } from "./drift.js";
 import { backup } from "./backup.js";
 import { importSave } from "./cdp.js";
 import * as C from "./config.js";
@@ -73,6 +74,7 @@ for (const l of C.configSummary()) log(l);
 const notifier = createNotifier({ webhookUrl: C.DISCORD_ON ? C.DISCORD_WEBHOOK_URL : "", escalateUrl: C.ESCALATE_URL, escalateToken: C.ESCALATE_TOKEN, log });
 const checkin = createCheckin({
   rpc, isUp, log, state, auto: C.CHECKIN_AUTO, escalationEnabled: notifier.escalationEnabled, readyEscalateMs: C.READY_ESCALATE_MIN * 60000,
+  driftCheck: C.DRIFT_CHECK ? async () => driftAttention(await checkDrift({ rpc }), C.GIT_SHA) : null,
   notify: (rec) => notifier.discordReport(rec), escalate: (text) => notifier.fireRoutine(text),
 });
 const watchdog = createWatchdog({
@@ -92,6 +94,7 @@ const dashboardApi = createDashboardApi({ rpc });
 const body = (req) => new Promise((res) => { const chunks = []; req.on("data", (c) => chunks.push(c)); req.on("end", () => { const b = Buffer.concat(chunks).toString("utf8"); try { res(b ? JSON.parse(b) : {}); } catch { res({}); } }); }); // decode once: a multi-byte char can straddle chunks
 const routes = {
   "GET /api/status": async () => ({ game: !!game, rpc: !!rpcSock, port: PORT }),
+  "GET /api/drift": async () => { const d = await checkDrift({ rpc }); return { ...d, sha: C.GIT_SHA || null, attention: driftAttention(d, C.GIT_SHA) }; },
   "POST /api/eval": async (b) => rpc("eval", { code: b.code, timeoutMs: b.timeoutMs }),
   "POST /api/js": async (b) => rpc("js", { code: b.code }),
   "POST /api/read": async (b) => rpc("read", { file: b.file }),
