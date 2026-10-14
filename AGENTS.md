@@ -115,7 +115,10 @@ B. CLAUDE IN CHROME (legacy fallback): the javascript tool in the Bitburner tab,
 The repo is canonical. `game/` mirrors the in-game home server.
 1. `bb pull` (game → repo) before editing, in case the game changed.
 2. Edit in the repo and commit.
-3. `bb push [files]` (repo → game; never touches data/).
+3. `bb push [files]` (repo → game; never touches data/). Paths are relative to game/ (`bb push tools/goals.js`; a
+   `game/` prefix is accepted). Any path that matches nothing fails the whole push with exit 1, so `bb push … && bb note …`
+   is safe. On hosted, push sends the files from the deployed container, not your checkout: merge to main and wait for the
+   Railway deploy first.
 4. Restart the script in-game, then `bb note` what changed. (daemon: `kill daemon.js; run daemon.js`, state is kept.)
 5. `npm test` must stay green; new test/*.js files are picked up by test/run-all.js. test/helpers/game-import.js lets
    Node import in-game modules. Write the spec in docs/specs/ first (Boyce's pre-execution plan improvement: plan →

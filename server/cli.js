@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // bb CLI — talks to the local bb server.
 //   bb status | checkin | report | pull | push [file..] | backup | import-save <save.json.gz>   (BB_URL=https://<host> for hosted)
+//   push paths are relative to game/ ("tools/goals.js"; "game/tools/goals.js" works too); any unmatched path fails the push, exit 1
 //   Auth: BB_TOKEN, else the local .bb-token; BB_TOKEN_VIA_PROXY=1 sends no header (an egress proxy injects it;
 //   needs Node >= 22.21, whose fetch only uses HTTPS_PROXY with NODE_USE_ENV_PROXY=1, so the CLI re-runs itself with it)
 //   bb eval '<ns code, async body, use return>'      bb js '<page JS, async body>'
@@ -85,6 +86,6 @@ map[cmd]().then((r) => {
   }
   else if (cmd === "checkin" && r.ok && r.value) console.log(r.value.report + (r.value.attention?.length ? `\n\nATTENTION: ${JSON.stringify(r.value.attention)}` : "") + `\nnextMin=${r.value.nextMin}`);
   else console.log(JSON.stringify(r, null, 2));
-  if (r && r.ok === false && cmd === "report") process.exitCode = 1;
+  if (r && r.ok === false && (cmd === "report" || cmd === "push")) process.exitCode = 1;
 }).catch((e) => { console.error("bb server unreachable:", e.message); process.exit(2); });
 }
