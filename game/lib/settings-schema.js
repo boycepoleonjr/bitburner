@@ -90,6 +90,8 @@ export const SCHEMA = [
     label: "Donate at favor", help: "Donate money for rep once faction favor reaches this (scaled by the BitNode multiplier)." },
   { key: "augs.nfgHoldFrac", group: "augs", type: "number", default: 0.9, min: 0, max: 1, step: 0.01, ui: "slider", owner: "autopilot",
     label: "NeuroFlux hold near finish", help: "No NeuroFlux-only install once hacking reaches this fraction of w0r1d_d43m0n's requirement (an install would reset the finish)." },
+  { key: "augs.freezeAfterRedPill", group: "augs", type: "bool", default: true, ui: "toggle", owner: "autopilot",
+    label: "Install freeze after Red Pill", help: "Once The Red Pill is installed, hold every install while reaching w0r1d_d43m0n's requirement without one is faster than resetting." },
   { key: "augs.neuroFluxLast", group: "augs", type: "bool", default: true, ui: "toggle", owner: "autopilot",
     label: "NeuroFlux last", help: "Owner rule: buy NeuroFlux Governor only after every other purchasable aug." },
 

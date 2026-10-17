@@ -42,7 +42,7 @@ export const failRecord = (atMs, msg) => ({ t: new Date(atMs).toISOString(), atM
 export function createCheckin({
   rpc, isUp, log = () => {}, notify = async () => {}, escalate = async () => ({ ok: false }), escalationEnabled = false,
   state, auto = false, nowMs = () => Date.now(), setTimer = setTimeout, clearTimer = clearTimeout,
-  orderingMs = ORDERING_HEAD_START_MS, readyEscalateMs = READY_ESCALATE_MS,
+  orderingMs = ORDERING_HEAD_START_MS, readyEscalateMs = READY_ESCALATE_MS, driftCheck = null,
 }) {
   let latest, latestLoaded = false, inflight = null, timer = null, timerDueAt = null, connectedOnce = false;
   let escState = null, escChain = Promise.resolve();
@@ -142,6 +142,11 @@ export function createCheckin({
           if (r && r.ok) rec = makeRecord(nowMs(), r.value);
           else { log("checkin failed: " + sanitize(r?.error || "unknown", 500)); rec = failRecord(nowMs(), r?.error || "check-in failed"); }
         } catch (e) { log("checkin failed: " + sanitize(e, 500)); rec = failRecord(nowMs(), e); }
+        // repo -> game drift (server/drift.js): an unpushed merge becomes attention, so it is escalated like any other
+        if (rec.ok && driftCheck) {
+          try { const d = await driftCheck(); if (d) rec.attention = normalizeAttention([...rec.attention, d]); }
+          catch (e) { log("drift check failed: " + sanitize(e, 300)); }
+        }
       }
       await persist(rec);
       if (!manual && auto && isUp()) scheduleNext(rec);
