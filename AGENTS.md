@@ -124,7 +124,11 @@ The repo is canonical. `game/` mirrors the in-game home server.
 2. Edit in the repo on a branch, commit, open a PR. main is protected: CI (`npm test`) must pass, and Railway deploys
    main only after CI passes. Put the PR on the current milestone and label it
    (autopilot/server/planner/dashboard/predictor/bug).
-3. `bb push [files]` (repo → game; never touches data/).
+3. `bb push [files]` (repo → game; never touches data/). Paths are relative to game/ (`bb push tools/goals.js`; a
+   `game/` prefix is accepted). Any path that matches nothing fails the whole push with exit 1, so `bb push … && bb note …`
+   is safe. On hosted, push sends the files from the deployed container, not your checkout: merge to main, then confirm
+   the live Railway deployment's commit includes your merge before pushing (a merge-triggered deploy once shipped an
+   older commit, 2026-10-12).
 4. Restart the script in-game, then `bb note` what changed. (daemon: `kill daemon.js; run daemon.js`, state is kept.)
 5. `npm test` must stay green; new test/*.js files are picked up by test/run-all.js. test/helpers/game-import.js lets
    Node import in-game modules. Write the spec in docs/specs/ first (Boyce's pre-execution plan improvement: plan →
