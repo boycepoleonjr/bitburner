@@ -80,6 +80,10 @@ try {
   const setGet = await api("/api/settings");
   const dash = await api("/api/dashboard");
   const dashCli = await bb("dashboard");
+  // bb push: repo-style path works; an unmatched path exits non-zero and pushes nothing (so `bb push x && bb note` stops)
+  const bbExit = async (...a) => { try { await promisify(execFile)("node", ["server/cli.js", ...a], { env }); return 0; } catch (e) { return e.code; } };
+  const pushGood = await bb("push", "game/tools/goals.js");
+  const pushBadExit = await bbExit("push", "tools/goals.js", "tools/nope.js");
   const legacy = await api("/api/checkin", { method: "POST", body: "{}" });
   await sleep(900); // let detached Discord/escalation dispatch finish
   const rep = await api("/api/report");
@@ -116,6 +120,7 @@ try {
     notifyRelay: notifyOk.status === 200 && sink.discord.slice(nBefore).some((p) => p.content === "hello from test"),
     notifyBadRequest: notifyBad.status === 400,
     watchdogFired: fs.existsSync(MARK),
+    pushCli: pushGood.includes('"tools/goals.js"') && typeof files["tools/goals.js"] === "string" && pushBadExit === 1 && !("tools/nope.js" in files),
     dashboardApi: dash.status === 200 && dash.json.ok === true && typeof dash.json.value.kpis.destroy === "object" && dashCli.startsWith("Dashboard"),
     settingsCli: setOut.includes("changed strategy.mid: 0.5 -> 0.25") && getOut.includes("* strategy.mid = 0.25"),
     settingsApi: setBad.status === 400 && setGet.json.value.values["strategy.mid"] === 0.25 && setGet.json.value.rev === 1 && Array.isArray(setGet.json.value.schema)
