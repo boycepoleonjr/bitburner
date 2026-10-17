@@ -11,6 +11,8 @@ export const FACTIONS = ["CyberSec", "Tian Di Hui", "Netburners", "Sector-12", "
   "NiteSec", "The Black Hand", "BitRunners", "ECorp", "MegaCorp", "KuaiGong International", "Four Sigma", "NWO", "Blade Industries",
   "OmniTek Incorporated", "Bachman & Associates", "Clarke Incorporated", "Fulcrum Secret Technologies", "Slum Snakes", "Tetrads",
   "Silhouette", "Speakers for the Dead", "The Dark Army", "The Syndicate", "The Covenant", "Daedalus", "Illuminati"];
+/** FACTIONS plus the factions the player has joined, de-duplicated (a gang faction not in the list is still planned). Exported for tests. */
+export const factionUnion = (listed, joined) => [...new Set([...listed, ...(joined || [])])];
 const PLAN = "/data/aug-plan.txt", STATE = "/data/aug-plan-state.txt", INSTALLS = "/data/install-log.txt";
 
 /** Recovery heuristic: 25% of the median install cycle (last 5 installs), clamped 15..240 min; 60 with < 2 installs. */
@@ -28,7 +30,7 @@ export async function main(ns) {
   const prev = parseJson(ns.read(STATE)) || { t: 0, rep: {} };
   const dt = (now - (prev.t || 0)) / 1000;
   const factions = {}, augs = {}, rep = {};
-  for (const f of FACTIONS) {
+  for (const f of factionUnion(FACTIONS, joined)) {
     let list; try { list = S.getAugmentationsFromFaction(f); } catch { continue; }
     const isJoined = joined.includes(f), r = isJoined ? S.getFactionRep(f) : 0;
     rep[f] = r;
@@ -36,12 +38,14 @@ export async function main(ns) {
     factions[f] = { joined: isJoined, rep: r, favor: S.getFactionFavor(f), augs: list, repRate: rate };
     for (const a of list) if (!augs[a]) augs[a] = { repReq: S.getAugmentationRepReq(a), price: S.getAugmentationPrice(a), prereqs: S.getAugmentationPrereq(a), mults: S.getAugmentationStats(a) };
   }
+  let gangFaction = null; // 2 GB, only when in a gang: its faction can't be worked for or donated to
+  try { if (ns.gang.inGang()) gangFaction = ns.gang.getGangInformation().faction; } catch { }
   const wdExists = ns.serverExists("w0r1d_d43m0n");
   const installed = S.getOwnedAugmentations(false);
   const reset = ns.getResetInfo();
   const sourceFiles = [...(reset.ownedSF || new Map())].map(([n, lvl]) => ({ n, lvl }));
   const snap = {
-    t: now, bn: reset.currentNode, hack: ns.getHackingLevel(), money: ns.getServerMoneyAvailable("home"), income: ns.getTotalScriptIncome()[0],
+    t: now, bn: reset.currentNode, gangFaction, hack: ns.getHackingLevel(), money: ns.getServerMoneyAvailable("home"), income: ns.getTotalScriptIncome()[0],
     mults: { faction_rep: p.mults.faction_rep }, installed, owned: S.getOwnedAugmentations(true), invites, factions, augs,
     bnMults: ns.getBitNodeMultipliers(), favorToDonate: ns.getFavorToDonate(), sourceFiles,
     worldDaemon: { exists: wdExists, req: wdExists ? ns.getServerRequiredHackingLevel("w0r1d_d43m0n") : null, root: wdExists && ns.hasRootAccess("w0r1d_d43m0n") },

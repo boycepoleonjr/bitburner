@@ -22,10 +22,13 @@ export const GROUPS = [
   { id: "strategy", label: "Strategy" },
   { id: "ram", label: "RAM manager" },
   { id: "augs", label: "Augmentations" },
+  { id: "gang", label: "Gang" },
   { id: "ui", label: "Dashboard" },
 ];
 
 const MONEY_REP = ["Money", "Faction rep"];
+/** The seven factions that can host a gang (bitburner-src Gang/data/Constants.ts Names). */
+export const GANG_FACTIONS = Object.freeze(["Slum Snakes", "Tetrads", "The Syndicate", "The Dark Army", "Speakers for the Dead", "NiteSec", "The Black Hand"]);
 
 /** @type {Array<{key:string,group:string,type:string,default:any,label:string,help:string,ui:string,min?:number,max?:number,step?:number,options?:string[],ends?:string[],owner:string}>} */
 export const SCHEMA = [
@@ -94,6 +97,36 @@ export const SCHEMA = [
     label: "Install freeze after Red Pill", help: "Once The Red Pill is installed, hold every install while reaching w0r1d_d43m0n's requirement without one is faster than resetting." },
   { key: "augs.neuroFluxLast", group: "augs", type: "bool", default: true, ui: "toggle", owner: "autopilot",
     label: "NeuroFlux last", help: "Owner rule: buy NeuroFlux Governor only after every other purchasable aug." },
+
+  // ── Gang (docs/specs/gang.md) ──────────────────────────────────────────────
+  { key: "gang.enabled", group: "gang", type: "bool", default: true, ui: "toggle", owner: "gang",
+    label: "Gang module", help: "Off: agent/gang.js exits and never creates a gang (challenge runs)." },
+  { key: "gang.dryRun", group: "gang", type: "bool", default: false, ui: "toggle", owner: "gang",
+    label: "Gang dry run", help: "Log decisions to data/gang-status.txt without creating, recruiting, assigning, buying or ascending." },
+  { key: "gang.faction", group: "gang", type: "enum", default: "auto", options: ["auto", ...GANG_FACTIONS], ui: "select", owner: "gang",
+    label: "Gang faction", help: "auto = joined combat gang (Speakers > Dark Army > Syndicate > Tetrads > Slum Snakes), else Slum Snakes via a crime/gym bootstrap." },
+  { key: "gang.bootstrapTimeoutMin", group: "gang", type: "int", default: 60, min: 0, max: 100000, ui: "number", owner: "gang",
+    label: "Combat bootstrap timeout (min)", help: "Fall back to a hacking gang (The Black Hand / NiteSec) if Slum Snakes is not joined by then." },
+  { key: "gang.trainUntil", group: "gang", type: "int", default: 150, min: 1, max: 100000, ui: "number", owner: "gang",
+    label: "Train until (avg stat)", help: "Members train until their average primary stat reaches this." },
+  { key: "gang.ascendMult", group: "gang", type: "number", default: 1.5, min: 1, max: 100, step: 0.05, ui: "number", owner: "gang",
+    label: "Ascension ratio", help: "Base primary-stat ratio needed to ascend; plus 0.05 x (11 - rank by earned respect)." },
+  { key: "gang.ascendMaxRespectShare", group: "gang", type: "number", default: 0.1, min: 0, max: 1, step: 0.01, ui: "slider", owner: "gang",
+    label: "Ascension respect guard", help: "Never ascend a member holding more than this share of the gang's respect." },
+  { key: "gang.clashEngage", group: "gang", type: "number", default: 0.6, min: 0, max: 1, step: 0.01, ui: "slider", owner: "gang",
+    label: "Engage warfare at", help: "Engage territory warfare when the minimum win chance over rival gangs is at least this." },
+  { key: "gang.clashDisengage", group: "gang", type: "number", default: 0.5, min: 0, max: 1, step: 0.01, ui: "slider", owner: "gang",
+    label: "Disengage warfare below", help: "Disengage when the minimum win chance falls below this." },
+  { key: "gang.warfareShare", group: "gang", type: "number", default: 0.5, min: 0, max: 1, step: 0.05, ui: "slider", owner: "gang",
+    label: "Warfare share", help: "Share of eligible members (def >= gang.minDefForWar) on Territory Warfare." },
+  { key: "gang.minDefForWar", group: "gang", type: "int", default: 300, min: 0, max: 1000000, ui: "number", owner: "gang",
+    label: "Min defense for warfare", help: "Death guard: members below this defense never join Territory Warfare." },
+  { key: "gang.wantedPenaltyMax", group: "gang", type: "number", default: 0.05, min: 0, max: 1, step: 0.01, ui: "slider", owner: "gang",
+    label: "Wanted cleanup threshold", help: "Start wanted cleanup (Vigilante Justice) when the wanted penalty drops below 1 minus this." },
+  { key: "gang.augSpendFraction", group: "gang", type: "number", default: 0.2, min: 0, max: 1, step: 0.01, ui: "slider", owner: "gang",
+    label: "Member augmentation budget", help: "Per shop run, share of spendable cash (money minus the aug planner's reserve) for member augmentations." },
+  { key: "gang.equipmentSpendFraction", group: "gang", type: "number", default: 0.1, min: 0, max: 1, step: 0.01, ui: "slider", owner: "gang",
+    label: "Equipment budget", help: "Per shop run, share of spendable cash for non-augmentation equipment." },
 
   // ── Dashboard ──────────────────────────────────────────────────────────────
   { key: "ui.refreshMs", group: "ui", type: "int", default: 1000, min: 250, max: 60000, ui: "number", owner: "dashboard",
