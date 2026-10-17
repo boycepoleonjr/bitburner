@@ -8,13 +8,17 @@
  *      actual RAM (Singularity costs 16x/4x/1x RAM at SF4.1/4.2/4.3 outside BN4), first for the small purchase scripts,
  *      then for all of them — Singularity is far too big for 32GB home
  *   3. spends leftover cash on purchased servers (workers), but only while the workers are mostly busy
+ *   3b. gang (docs/specs/gang.md): where a gang is possible (BN2, SF2, already in one) and gang.enabled, it keeps room for
+ *      agent/gang.js on home, starts it once it fits, and while data/gang-status.txt says the combat bootstrap needs gym/crime
+ *      runs agent/sl-crime.js (instead of sl-work) on pserv-sing
  *   4. hands over: once home fits agent/autopilot.js it starts it; once home also fits daemon.js it starts
  *      `daemon.js --reset` and exits. Status: /data/daemon-lite-status.txt. Events: /data/events.txt.
  * @param {NS} ns */
 const WK = { hack: "workers/hack.js", grow: "workers/grow.js", weaken: "workers/weaken.js" };
 const SING = "pserv-sing", AP = "agent/autopilot.js", DAEMON = "daemon.js";
 const STATUS = "/data/daemon-lite-status.txt", EV = "/data/events.txt", PORT = 21;
-const SL = ["agent/sl-tor.js", "agent/sl-prog.js", "agent/sl-ram.js", "agent/sl-cores.js", "agent/sl-info.js", "agent/sl-work.js", "agent/sl-backdoor.js"];
+const SL = ["agent/sl-tor.js", "agent/sl-prog.js", "agent/sl-ram.js", "agent/sl-cores.js", "agent/sl-info.js", "agent/sl-work.js", "agent/sl-backdoor.js", "agent/sl-crime.js"];
+const GANG = "agent/gang.js", GANG_SHOTS = ["agent/gang-act.js", "agent/gang-shop.js", "agent/gang-info.js"], GANG_STATUS = "data/gang-status.txt";
 const SL_FIRST = ["agent/sl-tor.js", "agent/sl-prog.js", "agent/sl-ram.js", "agent/sl-info.js"]; // what the first pserv-sing must fit
 const MAXT = 15, BUY_UTIL = 0.6; // max targets, worker utilization needed to buy more worker servers
 /** Smallest purchasable server size (power of two, >= 8GB) that fits the largest of `rams`. Exported for tests. */
@@ -57,6 +61,18 @@ export function bestWorkerRam(costOf, budget) {
 /** Spend leftover cash on worker servers only when nothing is being saved for, pserv-sing exists, and the workers are
  * busy (idle workers: more RAM wouldn't earn anything). Exported for tests. */
 export const workerSpendOk = ({ hold, singHost, money, util, buyUtil = BUY_UTIL }) => !hold && singHost && money > 1e6 && util >= buyUtil;
+/** Home RAM kept free for the gang module: gang.js itself until it runs, plus room for its largest one-shot (act/shop/info).
+ * 0 when no gang is wanted. Exported for tests. */
+export function gangReserve({ wanted, running, gangRam, shotRam }) {
+  return wanted ? (running ? 0 : gangRam) + shotRam : 0;
+}
+/** Same rule as lib/gangplan.js gangCrimeAction (daemon-lite has no imports): "gym" | "crime" while the fresh, non-dry-run status
+ * says the combat bootstrap needs it. Exported for tests. */
+export function gangCrimeFromStatus(text, now) {
+  let st; try { st = JSON.parse(text || "null"); } catch { return null; }
+  if (!st || st.phase !== "bootstrap" || st.dryRun || !(now - (Number(st.t) || 0) < 120000)) return null;
+  return st.bootstrapAction === "gym" || st.bootstrapAction === "crime" ? st.bootstrapAction : null;
+}
 export const RPC = "agent/rpc.js", RPC_CFG = "agent/rpc-config.txt";
 /** Keeps agent/rpc.js alive. Same copy as in agent/autopilot.js (see there); exported for tests. */
 export function ensureRpc({ running, hasConfig, run, act, memo }) {
@@ -79,6 +95,7 @@ export async function main(ns) {
   let srv = cloudModel(null), quoteT = 0;
   const fmt = (n) => (n >= 1e9 ? (n / 1e9).toFixed(1) + "b" : n >= 1e6 ? (n / 1e6).toFixed(1) + "m" : (n / 1e3).toFixed(0) + "k");
   const fail = {}; // op -> retry-after ms
+  let gangWanted = false, gangFaction = null, crimeT = 0, crimeMode = "", gangFailed = false;
   let dbg = {}, info = { ram: Infinity, cores: Infinity }, infoT = 0, workT = 0, work = "", bdPending = null, bdPid = 0, seq = 0, stage = "start", lastErr = "", target = "", apPid = 0;
   log(`started (home ${ns.getServerMaxRam("home")}GB, worker ${rpt}GB/thread)`);
 
@@ -96,7 +113,8 @@ export async function main(ns) {
   };
   const apRam = () => ns.getScriptRam(AP, "home");
   const dRam = () => ns.getScriptRam(DAEMON, "home");
-  const homeReserve = () => {
+  const homeReserve = () => homeReserve0() + gangReserve({ wanted: gangWanted, running: ns.isRunning(GANG, "home"), gangRam: ns.getScriptRam(GANG, "home"), shotRam: Math.max(0, ...GANG_SHOTS.map((f) => ns.getScriptRam(f, "home"))) });
+  const homeReserve0 = () => {
     const mx = ns.getServerMaxRam("home");
     if (!ns.isRunning(AP, "home") && mx >= apRam() + 40) return apRam() + 8; // drain home so autopilot fits
     // no cloud servers (BN9): the sl-* scripts run on home, so keep room for the biggest one
@@ -148,6 +166,17 @@ export async function main(ns) {
     try {
       ensureRpc({ running: () => ns.isRunning(RPC, "home"), hasConfig: () => ns.fileExists(RPC_CFG, "home"), run: () => ns.run(RPC), act: log, memo: rpcMemo });
       drain(null);
+      { // gang module: wanted where a gang is possible and gang.enabled; start it once it fits (RAM reserved in homeReserve above)
+        let on = true; try { on = (JSON.parse(ns.read("data/settings.txt") || "{}").values || {})["gang.enabled"] !== false; } catch { }
+        const ri = ns.getResetInfo();
+        gangWanted = on && (ri.currentNode === 2 || ns.gang.inGang() || (ri.ownedSF && ri.ownedSF.has(2)));
+        try { const gs = JSON.parse(ns.read(GANG_STATUS) || "null"); gangFaction = gs && gs.inGang ? gs.faction : null; } catch { gangFaction = null; }
+        if (gangWanted && !ns.isRunning(GANG, "home") && ns.getServerMaxRam("home") - ns.getServerUsedRam("home") >= ns.getScriptRam(GANG, "home")) {
+          const pid = ns.run(GANG);
+          if (pid) { gangFailed = false; log(`started ${GANG} (pid ${pid})`); }
+          else if (!gangFailed) { gangFailed = true; log(`${GANG} could not be started`); }
+        }
+      }
       if (!srv.quoted && Date.now() - quoteT > 60000) {
         quoteT = Date.now();
         const pid = ns.run("agent/dl-buy.js", 1, "quote");
@@ -202,13 +231,24 @@ export async function main(ns) {
             fail[k] = Date.now() + 60000; lastErr = `${k} purchase failed`;
           }
           // faction work: autopilot normally does this; without it the player sat idle for the whole BN5 bootstrap
+          const crime = gangCrimeFromStatus(ns.read(GANG_STATUS), Date.now());
+          if (crime && Date.now() - crimeT > 60000 && singHost() && ns.getServerMaxRam(singHost()) >= ns.getScriptRam("agent/sl-crime.js", "home")) {
+            // combat-gang bootstrap: gym / Mug instead of faction work (sl-crime also joins pending non-city invites)
+            crimeT = Date.now();
+            const r = await sing("crime", "agent/sl-crime.js");
+            if (r && r.op === "crime") { if (r.mode !== crimeMode) log(`gang bootstrap: ${r.mode}${r.stat ? ` (${r.stat})` : ""}${r.err ? ` — ${r.err}` : ""}`); crimeMode = r.mode; for (const f of r.joined || []) log(`joined ${f}`); work = `CRIME:${r.mode}`; }
+          }
           if (Date.now() - workT > 300000 && singHost() && ns.getServerMaxRam(singHost()) >= ns.getScriptRam("agent/sl-work.js", "home")) {
             workT = Date.now();
-            // backdoors (NiteSec/Black Hand/BitRunners invites need them): fire and forget, one copy at a time; drain() records it
+            // backdoors (NiteSec/Black Hand/BitRunners invites need them): fire and forget, one copy at a time; drain() records it.
+            // Kept running during the crime bootstrap: the NiteSec fallback needs that invite.
             if ((bdPending === null || bdPending.length) && !(bdPid && ns.isRunning(bdPid)) && singPrep()) bdPid = ns.exec("agent/sl-backdoor.js", singHost(), 1);
-            let c = {}; try { c = JSON.parse(ns.read("/data/autopilot-config.txt") || "{}"); } catch { }
-            const r = await sing("work", "agent/sl-work.js", JSON.stringify({ prio: c.factionPriority || [], joinCity: c.joinCity || [], skipHacknet: !!c.skipHacknetAugs }));
-            if (r && r.op === "work") { if (r.work !== work) log(`work: ${r.work}`); work = r.work; for (const f of r.joined || []) log(`joined ${f}`); }
+            if (!crime) {
+              crimeMode = "";
+              let c = {}; try { c = JSON.parse(ns.read("/data/autopilot-config.txt") || "{}"); } catch { }
+              const r = await sing("work", "agent/sl-work.js", JSON.stringify({ prio: c.factionPriority || [], joinCity: c.joinCity || [], skipHacknet: !!c.skipHacknetAugs, gang: gangFaction }));
+              if (r && r.op === "work") { if (r.work !== work) log(`work: ${r.work}`); work = r.work; for (const f of r.joined || []) log(`joined ${f}`); }
+            }
           }
         }
       }

@@ -1,7 +1,7 @@
 /** agent/sl-work.js — bootstrap faction work while autopilot can't run. Run on pserv-sing by daemon-lite.
  * Joins invites (city factions only if in joinCity), then works for the highest factionPriority faction that is not
  * rep-complete (rep < the highest rep requirement of its unowned, non-NeuroFlux augs; Hacknet augs ignored when
- * skipHacknetAugs). Hacking contracts, else field work. args: [JSON {prio, joinCity, skipHacknet}]. Result on port 21.
+ * skipHacknetAugs). Hacking contracts, else field work. Never the gang faction. args: [JSON {prio, joinCity, skipHacknet, gang}]. Result on port 21.
  * @param {NS} ns */
 const CITY = ["Sector-12", "Aevum", "Volhaven", "Chongqing", "New Tokyo", "Ishima"];
 export async function main(ns) {
@@ -15,7 +15,8 @@ export async function main(ns) {
     return Math.max(0, ...reqs) - S.getFactionRep(f);
   };
   const rank = (f) => { const i = prio.indexOf(f); return i < 0 ? 999 : i; };
-  const facs = [...ns.getPlayer().factions].sort((a, b) => rank(a) - rank(b));
+  const gang = o.gang || null; // gang faction (daemon-lite passes it: this runs on pserv-sing, which has no data/ files); the game refuses work for it
+  const facs = [...ns.getPlayer().factions].filter((f) => f !== gang).sort((a, b) => rank(a) - rank(b));
   const best = facs.find((f) => gap(f) > 0) || facs[0]; // all rep-complete: keep the top one (NeuroFlux rep)
   let w = S.getCurrentWork();
   const onBest = w && w.type === "FACTION" && w.factionName === best;

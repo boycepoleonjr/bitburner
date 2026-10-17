@@ -70,7 +70,7 @@ export function createController(ns, store, { now = () => Date.now(), clock = ()
     const rawFile = ui().rawFile;
     if (view === "raw" && rawFile && (slowDue || st.rawKey !== rawFile)) { st.rawKey = rawFile; patch.raw = readRaw(rawFile); }
 
-    patch.kpis = computeKpis({ latest: hot.latest, ring: hot.ring, ramStatus: hot.ramStatus, augPlan: hot.augPlan, autopilot: hot.autopilot,
+    patch.kpis = computeKpis({ latest: hot.latest, ring: hot.ring, ramStatus: hot.ramStatus, augPlan: hot.augPlan, autopilot: hot.autopilot, gang: hot.gang,
       pred2Tail: patch.pred || store.get("pred") || [], settings: s, now: tNow });
     const changed = store.set(patch);
     store.set({ meta: { tickMs: clock() - t0, lastTick: tNow, reads: st.reads } }, { deep: false });

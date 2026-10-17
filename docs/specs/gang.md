@@ -229,3 +229,16 @@ The money vs respect split follows `strategy.*`, so there's no separate slider.
   - "Homicide if success ≥ 0.5" became gym training to 30 combat, then Mug. Mug also trains combat, and karma −9 needs only ~36 crimes.
   - Dashboard reduced to KPIs + data source in scope; the full view is a follow-up.
 - **Stopped after 1 round:** v2 plus the source checks left no ambiguous step or unverified API.
+
+## 11. Implementation notes (added with the code; the sections above are unchanged)
+Deviations from the text above, each forced by RAM, an API rename or a game rule found while building it:
+- **`getOtherGangInformation` is `ns.gang.getAllGangInformation()` in v3** (bitburner-src `dev` typings). It includes our own faction; `lib/gangplan.js` drops it by name before taking the minimum win chance.
+- **gang.js is read-only; two more one-shots.** `createGang` (1), `recruitMember` (2), `setMemberTask` (2) and `setTerritoryWarfare` (2) put `gang.js` at ~19 GB, above the 16 GB gate, so they live in `agent/gang-act.js` (8.6 GB), which `gang.js` runs only when something changed (the §4.3 "only when the task changes" rule is unchanged). `agent/gang-info.js` (8.6 GB, run once) caches `getTaskStats` / `getEquipmentType` / `getEquipmentStats` in `data/gang-tasks.txt`. Static RAM (test/gang-static.js, costs from RamCostGenerator.ts): gang.js 13.6 GB, gang-shop.js 9.6 GB, gang-act.js 8.6 GB, gang-info.js 8.6 GB.
+- **No `getAscensionResult` call (2 GB).** The ratio is computed from `getMemberInformation` with `ascensionPointsGain` / `ascensionMult`, which is what the game's `getAscensionResults` does.
+- **Wanted cleanup also requires wanted > 1 to enter** (wanted is floored at 1, so cleanup could not help at 1 and a fresh gang, with penalty 0.5, would otherwise start in cleanup).
+- **Territory Warfare share** = floor(share × eligible), but at least one eligible member when the share is > 0.
+- **`reserve`** skips free steps (The Red Pill costs $0): it is the price of the first buyable or needMoney step that costs something.
+- **`dryRun`** still runs `gang-info.js` (it only reads and writes the cache) and also suppresses the gym / crime bootstrap, because that changes what the player is doing.
+- **Daemon-lite passes the gang faction to `sl-work.js` in its JSON args**: `sl-work.js` runs on pserv-sing, which has no `data/` files and no `lib/`. `sl-crime.js` also joins pending non-city invites, since `sl-work` is skipped while the bootstrap runs; the backdoor runs continue so the NiteSec fallback invite still arrives.
+- **`repRate` ignores the faction favor bonus** (reading favor needs Singularity, which gang.js does not have).
+- **Training time:** at 5.3 exp/s (Train Combat) a stat of 50 takes ~6 min, 100 ~36 min and 150 ~2.9 h from zero, so `gang.trainUntil` (default 150) is the main knob for how fast the first members start earning respect.

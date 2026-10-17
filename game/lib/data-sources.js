@@ -10,6 +10,7 @@ export const HOT_FILES = Object.freeze({
   ramStatus: "data/ram-status.txt",
   augPlan: "data/aug-plan.txt",
   autopilot: "data/autopilot-status.txt",
+  gang: "data/gang-status.txt",
 });
 /** Large/append-only files: read at most every ui.slowRefreshMs, tails only, only when a view needs them. */
 export const SLOW_FILES = Object.freeze({
@@ -23,7 +24,7 @@ export const SLOW_FILES = Object.freeze({
 /** Files offered in the Raw view. data/telemetry.txt (~19 MB) is deliberately absent: the UI never reads it. */
 export const RAW_FILES = Object.freeze([
   "data/telemetry-latest.txt", "data/telemetry-ring.txt", "data/ram-status.txt", "data/aug-plan.txt",
-  "data/autopilot-status.txt", "data/autopilot-config.txt", "data/settings.txt", "data/settings-log.txt",
+  "data/autopilot-status.txt", "data/autopilot-config.txt", "data/gang-status.txt", "data/settings.txt", "data/settings-log.txt",
   "data/daemon-state.txt", "data/config-overrides.txt", "data/daemon-lite-status.txt", "data/stocks.txt",
   "data/pred2.txt", "data/pred-calib.txt", "data/install-log.txt", "data/audit.txt", "data/events.txt", "data/agent-log.txt",
 ]);

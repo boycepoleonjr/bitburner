@@ -12,6 +12,7 @@
  */
 import { readSettings } from "lib/settings.js";
 import { decideNode, parseJson, REQUEST_FILE, ACK_FILE, DESTROY_SCRIPT, NO_RAM } from "lib/nodectl.js";
+import { gangPossible, gangFactionFromStatus, gangCrimeAction } from "lib/gangplan.js";
 const NEUROFLUX = "NeuroFlux Governor";
 export const PLAN_SCRIPT = "agent/sl-plan.js", PLAN_FILE = "/data/aug-plan.txt";
 /** Settings (data/settings.txt) win over the legacy autopilot-config.txt for the same concept. Exported for tests. */
@@ -111,6 +112,19 @@ export function ensureRpc({ running, hasConfig, run, act, memo }) {
   return pid;
 }
 
+export const GANG = "agent/gang.js", GANG_STATUS = "data/gang-status.txt", CRIME = "agent/sl-crime.js";
+/** Keeps agent/gang.js alive (docs/specs/gang.md): when gang.enabled, a gang is possible in this BitNode and it is not running,
+ * start it. A failed start is logged once until a start succeeds. Never kills anything. Exported for tests. */
+export function ensureGang({ enabled, possible, running, run, act, memo }) {
+  if (!enabled || !possible || running()) return 0;
+  const pid = run();
+  if (pid) { memo.failed = false; act(`${GANG} was not running: restarted it (pid ${pid})`); }
+  else if (!memo.failed) { memo.failed = true; act(`${GANG} is not running and could not be started (RAM on home?)`); }
+  return pid;
+}
+/** Faction the autopilot may not work for or donate to: the gang faction (the game refuses both). */
+export const workable = (factions, gangFaction) => factions.filter((f) => f !== gangFaction);
+
 /** @param {NS} ns */
 export async function main(ns) {
   ns.disableLog("ALL");
@@ -136,7 +150,7 @@ export async function main(ns) {
   const blockedLogged = new Set(); // cityBlocked audited once per city per run
   let liquidatedByMe = false, nfgHoldLogged = false, loopN = 0, etaHeldLogged = "", freezeLogged = null;
   const expSamples = []; // {t, exp}: hacking exp each loop, for installFreeze's rate (reset by every install: new script run)
-  const rpcMemo = { failed: false };
+  const rpcMemo = { failed: false }, gangMemo = { failed: false }, crimeMemo = { failed: false };
   const act = (msg) => {
     const line = `${new Date().toLocaleTimeString("en-US", { hour12: false })} [autopilot] ${msg}`;
     recent.push({ t: Date.now(), msg }); while (recent.length > 20) recent.shift();
@@ -151,6 +165,7 @@ export async function main(ns) {
     const p = []; for (let h = target; h; h = prev[h]) p.unshift(h); return p;
   };
   const money = () => ns.getServerMoneyAvailable("home");
+  const gangFac = () => gangFactionFromStatus(ns.read(GANG_STATUS)); // the gang faction can't be worked for or donated to
   const OVR = "/data/config-overrides.txt", POST = "agent/post-install.js", AUDIT = "/data/audit.txt";
   // Append-only decision log: every purchase/skip/trigger/flag change with inputs, so installs can be reconstructed.
   const audit = (kind, data) => ns.write(AUDIT, JSON.stringify({ t: Date.now(), iso: new Date().toISOString(), kind, ...data }) + "\n", "a");
@@ -192,7 +207,7 @@ export async function main(ns) {
       // yielded (BitNode multipliers make the real rate lower; 2026-10-02 the formula under-donated every time).
       let rate = ns.getPlayer().mults.faction_rep / 1e6;
       for (let i = 0; i < 100 && money() >= S.getAugmentationPrice(name); i++) {
-        for (let k = 0; k < 6 && cb.donate && S.getFactionFavor(nf) >= donateAt(cb); k++) {
+        for (let k = 0; k < 6 && cb.donate && nf !== gangFac() && S.getFactionFavor(nf) >= donateAt(cb); k++) {
           const gap = S.getAugmentationRepReq(name) - S.getFactionRep(nf);
           if (gap <= 0) break;
           const amt = Math.ceil((gap / rate) * 1.02);
@@ -218,6 +233,16 @@ export async function main(ns) {
     let augs = { buyable: 0, top: [], redPill: false };
     try {
       ensureRpc({ running: () => ns.isRunning(RPC, "home"), hasConfig: () => ns.fileExists(RPC_CFG, "home"), run: () => ns.run(RPC), act, memo: rpcMemo });
+      const gangSettings = readSettings(ns), gangF = gangFac();
+      { const ri = ns.getResetInfo();
+        ensureGang({ enabled: gangSettings["gang.enabled"] !== false, possible: gangPossible({ bn: ri.currentNode, inGang: ns.gang.inGang(), ownedSF: ri.ownedSF }),
+          running: () => ns.isRunning(GANG, "home"), run: () => ns.run(GANG), act, memo: gangMemo }); }
+      // combat-gang bootstrap (Slum Snakes): while gang.js says gym/crime, that replaces faction work (docs/specs/gang.md §4.4)
+      const crimeMode = !!gangCrimeAction(parseJson(ns.read(GANG_STATUS)), Date.now());
+      if (crimeMode && !ns.isRunning(CRIME, "home")) {
+        if (ns.run(CRIME)) crimeMemo.failed = false;
+        else if (!crimeMemo.failed) { crimeMemo.failed = true; act(`${CRIME} could not start (RAM on home?)`); } // logged once, not an attention flag
+      }
       if (c.enabled) {
         const hack = ns.getHackingLevel();
         { const now = Date.now(); expSamples.push({ t: now, exp: ns.getPlayer().exp.hacking }); while (expSamples.length && now - expSamples[0].t > 30 * 60000) expSamples.shift(); }
@@ -290,7 +315,7 @@ export async function main(ns) {
           });
         }
         // 5. Work policy (only when configured; "keep" never touches current work)
-        if (c.work !== "keep") {
+        if (c.work !== "keep" && !crimeMode) {
           const w = S.getCurrentWork();
           if (c.work === "study" && !(w && w.type === "CLASS" && /algorithms/i.test(w.classType || ""))) {
             if (ns.getPlayer().city !== "Sector-12") S.travelToCity("Sector-12");
@@ -299,7 +324,7 @@ export async function main(ns) {
             // work for the first faction in factionPriority whose aug list isn't rep-complete (tie: smallest gap)
             const owned0 = new Set(S.getOwnedAugmentations(true));
             let best = null;
-            for (const f of ns.getPlayer().factions) {
+            for (const f of workable(ns.getPlayer().factions, gangF)) {
               const rep = S.getFactionRep(f);
               const need = Math.max(0, ...S.getAugmentationsFromFaction(f).filter((a) => !owned0.has(a) && !a.startsWith("NeuroFlux")).map((a) => S.getAugmentationRepReq(a)));
               const gap = need - rep;
@@ -307,7 +332,7 @@ export async function main(ns) {
               if (gap > 0 && (!best || rank < best.rank || (rank === best.rank && gap < best.gap))) best = { f, gap, rank };
             }
             if (!best) { // everything but NeuroFlux owned: hacking contracts for the top NeuroFlux faction (rep + hacking exp)
-              const nfF = ns.getPlayer().factions.filter((f) => S.getAugmentationsFromFaction(f).includes(NEUROFLUX)).sort((a, b) => S.getFactionRep(b) - S.getFactionRep(a))[0];
+              const nfF = workable(ns.getPlayer().factions, gangF).filter((f) => S.getAugmentationsFromFaction(f).includes(NEUROFLUX)).sort((a, b) => S.getFactionRep(b) - S.getFactionRep(a))[0];
               if (nfF) best = { f: nfF, gap: Math.max(0, S.getAugmentationRepReq(NEUROFLUX) - S.getFactionRep(nfF)), rank: 999 };
             }
             if (best && !(w && w.type === "FACTION" && w.factionName === best.f)) {
@@ -316,7 +341,7 @@ export async function main(ns) {
             }
           } else if (c.work.startsWith("faction:")) {
             const f = c.work.slice(8);
-            if (!(w && w.type === "FACTION" && w.factionName === f) && ns.getPlayer().factions.includes(f)) {
+            if (!(w && w.type === "FACTION" && w.factionName === f) && f !== gangF && ns.getPlayer().factions.includes(f)) {
               if (S.workForFaction(f, "hacking", false)) act(`working for ${f} (hacking)`);
             }
           }
@@ -343,7 +368,7 @@ export async function main(ns) {
         if (c.donate) {
           const w = S.getCurrentWork();
           const f = w && w.type === "FACTION" ? w.factionName : null;
-          if (f && S.getFactionFavor(f) >= donateAt(c)) {
+          if (f && f !== gangF && S.getFactionFavor(f) >= donateAt(c)) {
             const need = Math.max(0, ...S.getAugmentationsFromFaction(f).filter((a) => !owned.has(a) && !a.startsWith("NeuroFlux")).map((a) => S.getAugmentationRepReq(a)));
             const gap = need - S.getFactionRep(f);
             if (gap > 0) {
@@ -359,7 +384,7 @@ export async function main(ns) {
           if (!repWorkLeft && augs.buyable === 0) {
             const wdReq = ns.serverExists("w0r1d_d43m0n") ? ns.getServerRequiredHackingLevel("w0r1d_d43m0n") : Infinity;
             const nfF = ns.getPlayer().factions.filter((f) => S.getAugmentationsFromFaction(f).includes(NEUROFLUX)).sort((a, b) => S.getFactionRep(b) - S.getFactionRep(a))[0];
-            const repOk = nfF && (S.getFactionRep(nfF) >= S.getAugmentationRepReq(NEUROFLUX) || (c.donate && S.getFactionFavor(nfF) >= donateAt(c)));
+            const repOk = nfF && (S.getFactionRep(nfF) >= S.getAugmentationRepReq(NEUROFLUX) || (c.donate && nfF !== gangF && S.getFactionFavor(nfF) >= donateAt(c)));
             const n = repOk ? nfgAffordable(S.getAugmentationPrice(NEUROFLUX), spendable(), c.nfgPriceGrowth) : 0;
             const nfQ = S.getOwnedAugmentations(true).filter((a) => a === NEUROFLUX).length - S.getOwnedAugmentations(false).filter((a) => a === NEUROFLUX).length;
             if (nfgHold(hack, wdReq, c.nfgHoldFrac)) {
