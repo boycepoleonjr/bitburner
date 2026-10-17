@@ -14,7 +14,7 @@ const tmp = path.join(dir, "daemon-lite.mjs");
 fs.copyFileSync(src, tmp);
 let mod;
 try { mod = await import(pathToFileURL(tmp).href); } finally { fs.rmSync(dir, { recursive: true, force: true }); }
-const { ladderStep, workerSpendOk, hostRamFor } = mod;
+const { ladderStep, workerSpendOk, hostRamFor, cloudModel, bestWorkerRam } = mod;
 
 let n = 0;
 const t = (name, fn) => { try { fn(); } catch (e) { e.message = `[${name}] ${e.message}`; throw e; } n++; };
@@ -76,5 +76,28 @@ t("hostRamFor: smallest power of two that fits, scales with the SF4 Singularity 
   assert.equal(hostRamFor([75, 12]), 128);       // SF4.2: 4x smaller host than before
   assert.equal(hostRamFor([64]), 64);            // exact power of two fits
   assert.equal(hostRamFor([NaN, 20]), 32);
+});
+// the game's price: ram * 55000 * CloudServerCost * softcap^(log2(ram) - 6) above 64GB (bitburner-src v3)
+const gamePrices = (mult = 1, softcap = 1, max = 1048576) => { const c = {}; for (let r = 8; r <= max; r *= 2) c[r] = r * 55000 * mult * (r > 64 ? softcap ** (Math.log2(r) - 6) : 1); return c; };
+t("cloudModel: without a quote, the base game's $55k/GB and 25 servers", () => {
+  const m = cloudModel(null);
+  assert.equal(m.limit, 25); assert.equal(m.costOf(64), 64 * 55000);
+  assert.equal(cloudModel({ ok: false }).limit, 25);
+});
+t("cloudModel: a quote sets this BitNode's limit and real prices (BN9: none, BN10: 15 at 5x)", () => {
+  const bn9 = cloudModel({ ok: true, limit: 0, costs: gamePrices() });
+  assert.equal(bn9.limit, 0);
+  const bn10 = cloudModel({ ok: true, limit: 15, costs: gamePrices(5) });
+  assert.equal(bn10.limit, 15); assert.equal(bn10.costOf(64), 5 * 64 * 55000);
+  assert.equal(bn10.costOf(3), 3 * 55000, "a size the quote lacks falls back to the flat price");
+});
+t("bestWorkerRam: biggest affordable size; softcapped prices buy smaller servers than the flat $/GB guessed", () => {
+  const flat = cloudModel(null).costOf, soft = cloudModel({ ok: true, limit: 25, costs: gamePrices(1, 1.7) }).costOf;
+  const budget = 1024 * 55000;
+  assert.equal(bestWorkerRam(flat, budget), 1024);
+  assert.ok(bestWorkerRam(soft, budget) < 1024, "the old flat estimate overshot under a softcap");
+  assert.ok(soft(bestWorkerRam(soft, budget)) <= budget);
+  assert.equal(bestWorkerRam(flat, 100), 0, "nothing affordable");
+  assert.equal(bestWorkerRam(flat, 1e30), 1048576, "capped at 1PB");
 });
 console.log(`DAEMON-LITE OK (${n})`);

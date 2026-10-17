@@ -50,6 +50,11 @@ export function nfgAffordable(price, budget, growth = 1.14 * 1.9, max = 100) {
 export function nfgTrigger(affordable, queued, trigger) {
   return affordable + queued >= trigger && affordable + queued > 0;
 }
+/** Favor needed before donating: the game's own threshold (BitNode-scaled: 75 in BN3, 0 in BN8, 150x1.02^level in
+ * BN12; a flat 150 made every BN12 donation fail) or augs.donateAtFavor if higher (owner rule: >= 150). Exported for tests. */
+export function donateFloor(gameMin, setting) {
+  return Math.max(Number.isFinite(gameMin) ? gameMin : 150, Number(setting) || 0);
+}
 /** NeuroFlux-only installs are held once hacking reaches `frac` of w0r1d_d43m0n's requirement: an install resets
  * hacking and would throw away the finish. Exported for tests. */
 export function nfgHold(hack, wdReq, frac = 0.9) {
@@ -150,6 +155,7 @@ export async function main(ns) {
   // Append-only decision log: every purchase/skip/trigger/flag change with inputs, so installs can be reconstructed.
   const audit = (kind, data) => ns.write(AUDIT, JSON.stringify({ t: Date.now(), iso: new Date().toISOString(), kind, ...data }) + "\n", "a");
   const c0 = () => cfg();
+  const donateAt = (c) => donateFloor(ns.getFavorToDonate(), c.donateFavor);
   let lastFlags = "";
   // Buy every rep-met aug, highest rep requirement first (respecting prereqs), then NeuroFlux until broke. Returns names bought.
   const buyBatch = (owned) => {
@@ -186,7 +192,7 @@ export async function main(ns) {
       // yielded (BitNode multipliers make the real rate lower; 2026-10-02 the formula under-donated every time).
       let rate = ns.getPlayer().mults.faction_rep / 1e6;
       for (let i = 0; i < 100 && money() >= S.getAugmentationPrice(name); i++) {
-        for (let k = 0; k < 6 && cb.donate && S.getFactionFavor(nf) >= cb.donateFavor; k++) {
+        for (let k = 0; k < 6 && cb.donate && S.getFactionFavor(nf) >= donateAt(cb); k++) {
           const gap = S.getAugmentationRepReq(name) - S.getFactionRep(nf);
           if (gap <= 0) break;
           const amt = Math.ceil((gap / rate) * 1.02);
@@ -337,7 +343,7 @@ export async function main(ns) {
         if (c.donate) {
           const w = S.getCurrentWork();
           const f = w && w.type === "FACTION" ? w.factionName : null;
-          if (f && S.getFactionFavor(f) >= c.donateFavor) {
+          if (f && S.getFactionFavor(f) >= donateAt(c)) {
             const need = Math.max(0, ...S.getAugmentationsFromFaction(f).filter((a) => !owned.has(a) && !a.startsWith("NeuroFlux")).map((a) => S.getAugmentationRepReq(a)));
             const gap = need - S.getFactionRep(f);
             if (gap > 0) {
@@ -353,7 +359,7 @@ export async function main(ns) {
           if (!repWorkLeft && augs.buyable === 0) {
             const wdReq = ns.serverExists("w0r1d_d43m0n") ? ns.getServerRequiredHackingLevel("w0r1d_d43m0n") : Infinity;
             const nfF = ns.getPlayer().factions.filter((f) => S.getAugmentationsFromFaction(f).includes(NEUROFLUX)).sort((a, b) => S.getFactionRep(b) - S.getFactionRep(a))[0];
-            const repOk = nfF && (S.getFactionRep(nfF) >= S.getAugmentationRepReq(NEUROFLUX) || (c.donate && S.getFactionFavor(nfF) >= c.donateFavor));
+            const repOk = nfF && (S.getFactionRep(nfF) >= S.getAugmentationRepReq(NEUROFLUX) || (c.donate && S.getFactionFavor(nfF) >= donateAt(c)));
             const n = repOk ? nfgAffordable(S.getAugmentationPrice(NEUROFLUX), spendable(), c.nfgPriceGrowth) : 0;
             const nfQ = S.getOwnedAugmentations(true).filter((a) => a === NEUROFLUX).length - S.getOwnedAugmentations(false).filter((a) => a === NEUROFLUX).length;
             if (nfgHold(hack, wdReq, c.nfgHoldFrac)) {

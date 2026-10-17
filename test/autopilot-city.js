@@ -13,7 +13,7 @@ const tmp = path.join(dir, "autopilot.mjs");
 fs.copyFileSync(src, tmp);
 let mod;
 try { mod = await import(pathToFileURL(tmp).href); } finally { fs.rmSync(dir, { recursive: true, force: true }); }
-const { cityInviteDecision, handleInvites, nfgAffordable, nfgHold, nfgTrigger, installFreeze, expRate } = mod;
+const { cityInviteDecision, handleInvites, nfgAffordable, nfgHold, nfgTrigger, installFreeze, expRate, donateFloor } = mod;
 
 const AUGS = {
   "Sector-12": ["CashRoot Starter Kit", "NeuroFlux Governor"],
@@ -133,5 +133,12 @@ t("expRate: exp/min over the window, null until it spans 5 min", () => {
   assert.equal(expRate([{ t: now - 10 * 60000, exp: 100 }, { t: now, exp: 1100 }], now), 100);
   assert.equal(expRate([{ t: now - 40 * 60000, exp: 0 }, { t: now - 10 * 60000, exp: 100 }, { t: now, exp: 1100 }], now), 100, "older than 30 min dropped");
   assert.equal(expRate([{ t: now - 10 * 60000, exp: 5 }, { t: now, exp: 5 }], now), null, "no gain = no rate");
+});
+t("donateFloor: the game's BitNode-scaled threshold, raised by the setting, never lowered by it", () => {
+  assert.equal(donateFloor(150, 150), 150);              // normal BitNodes: unchanged
+  assert.equal(donateFloor(150 * 1.02 ** 10, 150), 150 * 1.02 ** 10, "BN12.10: the flat 150 always failed");
+  assert.equal(donateFloor(75, 150), 150, "BN3: owner rule keeps 150");
+  assert.equal(donateFloor(0, 0), 0, "BN8 with augs.donateAtFavor=0: donate from the start");
+  assert.equal(donateFloor(NaN, 0), 150, "unknown game value: base 150");
 });
 console.log(`AUTOPILOT OK (${n})`);
