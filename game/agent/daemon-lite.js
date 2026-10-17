@@ -38,6 +38,22 @@ export function ladderStep(items, money) {
   }
   return { picks, goal, hold, saving };
 }
+/** Cloud-server prices and limit for this BitNode from a dl-buy.js quote ({limit, costs: {ram: price}}); without one,
+ * the base game's $55k/GB and 25 servers (the old hard-coded values). Exported for tests. */
+export function cloudModel(quote) {
+  const ok = quote && quote.ok && Number.isFinite(quote.limit) && quote.costs && typeof quote.costs === "object";
+  const costs = ok ? quote.costs : {};
+  return {
+    limit: ok ? quote.limit : 25,
+    costOf: (r) => (Number.isFinite(costs[r]) ? costs[r] : r * 55000),
+  };
+}
+/** Biggest power-of-two worker size (16GB..1PB) whose price fits `budget`, or 0. Exported for tests. */
+export function bestWorkerRam(costOf, budget) {
+  let best = 0;
+  for (let r = 16; r <= 1048576; r *= 2) { if (costOf(r) <= budget) best = r; else break; }
+  return best;
+}
 /** Spend leftover cash on worker servers only when nothing is being saved for, pserv-sing exists, and the workers are
  * busy (idle workers: more RAM wouldn't earn anything). Exported for tests. */
 export const workerSpendOk = ({ hold, singHost, money, util, buyUtil = BUY_UTIL }) => !hold && singHost && money > 1e6 && util >= buyUtil;
@@ -58,7 +74,9 @@ export async function main(ns) {
   if (ns.isRunning(DAEMON, "home") || ns.ps("home").some((p) => p.filename === me && p.pid !== ns.pid)) return;
   const log = (m) => ns.write(EV, `${new Date().toLocaleTimeString("en-US", { hour12: false })} [daemon-lite] ${m}\n`, "a");
   const rpt = Math.max(...Object.values(WK).map((f) => ns.getScriptRam(f, "home")));
-  const GB = 55000, LIMIT = 25; // purchased-server price per GB / count limit (dl-buy.js verifies by actually buying)
+  // cloud-server limit and prices for THIS BitNode (dl-buy.js quote, refreshed until one succeeds); dl-buy still
+  // verifies every purchase by actually buying
+  let srv = cloudModel(null), quoteT = 0;
   const fmt = (n) => (n >= 1e9 ? (n / 1e9).toFixed(1) + "b" : n >= 1e6 ? (n / 1e6).toFixed(1) + "m" : (n / 1e3).toFixed(0) + "k");
   const fail = {}; // op -> retry-after ms
   let dbg = {}, info = { ram: Infinity, cores: Infinity }, infoT = 0, workT = 0, work = "", bdPending = null, bdPid = 0, seq = 0, stage = "start", lastErr = "", target = "", apPid = 0;
@@ -81,6 +99,8 @@ export async function main(ns) {
   const homeReserve = () => {
     const mx = ns.getServerMaxRam("home");
     if (!ns.isRunning(AP, "home") && mx >= apRam() + 40) return apRam() + 8; // drain home so autopilot fits
+    // no cloud servers (BN9): the sl-* scripts run on home, so keep room for the biggest one
+    if (srv.limit === 0 && !ns.isRunning(AP, "home")) return Math.max(mx <= 64 ? 6 : Math.min(128, mx * 0.05), Math.max(...SL.map((f) => ns.getScriptRam(f, "home"))) + 2);
     return mx <= 64 ? 6 : Math.min(128, mx * 0.05);
   };
   const free = (h) => Math.max(0, ns.getServerMaxRam(h) - ns.getServerUsedRam(h) - (h === "home" ? homeReserve() : 0));
@@ -103,18 +123,22 @@ export async function main(ns) {
     }
     return r;
   };
+  // where the sl-* scripts run: pserv-sing, or home in a BitNode without cloud servers (BN9: limit 0)
+  const singHost = () => (ns.serverExists(SING) ? SING : srv.limit === 0 ? "home" : null);
   const singPrep = () => {
-    if (!ns.serverExists(SING)) return false;
+    const host = singHost();
+    if (host !== SING) return host;
     // pserv-sing is reserved: anything else on it (2026-10-03: telemetry, 29.6GB) blocks the 49.6GB home-RAM script for hours
     for (const p of ns.ps(SING)) if (!SL.includes(p.filename)) { ns.kill(p.pid); log(`killed ${p.filename} on ${SING} (reserved for Singularity)`); }
     ns.scp(SL, SING, "home");
-    return true;
+    return SING;
   };
   const sing = async (op, script, ...args) => {
-    if (!singPrep()) return null;
+    const host = singPrep();
+    if (!host) return null;
     drain(null);
-    const pid = ns.exec(script, SING, 1, ...args);
-    if (!pid) { lastErr = `exec ${script} on ${SING} failed (ram?)`; return null; }
+    const pid = ns.exec(script, host, 1, ...args);
+    if (!pid) { lastErr = `exec ${script} on ${host} failed (ram?)`; return null; }
     for (let i = 0; i < 60 && ns.isRunning(pid); i++) await ns.sleep(250);
     return drain(op);
   };
@@ -124,6 +148,13 @@ export async function main(ns) {
     try {
       ensureRpc({ running: () => ns.isRunning(RPC, "home"), hasConfig: () => ns.fileExists(RPC_CFG, "home"), run: () => ns.run(RPC), act: log, memo: rpcMemo });
       drain(null);
+      if (!srv.quoted && Date.now() - quoteT > 60000) {
+        quoteT = Date.now();
+        const pid = ns.run("agent/dl-buy.js", 1, "quote");
+        for (let i = 0; pid && i < 40 && ns.isRunning(pid); i++) await ns.sleep(250);
+        for (let s = ns.readPort(22); s !== "NULL PORT DATA"; s = ns.readPort(22)) { try { const q = JSON.parse(s); if (q.op === "quote" && q.ok) { srv = { ...cloudModel(q), quoted: true }; log(`cloud servers: limit ${q.limit}, 64GB $${fmt(srv.costOf(64))}`); } } catch { } }
+      }
+      const LIMIT = srv.limit;
       const money = ns.getServerMoneyAvailable("home"), hack = ns.getHackingLevel(), homeMax = ns.getServerMaxRam("home");
       const all = net();
       for (const h of all) if (h !== "home") root(h);
@@ -145,8 +176,8 @@ export async function main(ns) {
       let hold = false;
       if (!apRunning) {
         stage = "ladder";
-        const firstRam = hostRamFor(SL_FIRST.map((f) => ns.getScriptRam(f, "home"))), cFirst = firstRam * GB;
-        if (!ns.serverExists(SING)) {
+        const firstRam = hostRamFor(SL_FIRST.map((f) => ns.getScriptRam(f, "home"))), cFirst = srv.costOf(firstRam);
+        if (!ns.serverExists(SING) && LIMIT > 0) {
           stage = "need sing host";
           if (money >= cFirst * 1.05 && pserv.length < LIMIT) { if (await buy("buy", SING, firstRam)) { ns.scp(SL, SING, "home"); log(`bought ${SING} (${firstRam}GB) as Singularity host`); } }
           else hold = money * 6 >= cFirst; // saving for it
@@ -156,7 +187,7 @@ export async function main(ns) {
           const LADDER = [
             ["tor", 200e3, !ns.hasTorRouter(), ["agent/sl-tor.js"]],
             ...PROGS.slice(0, 2).map(([p, c]) => [p, c, !ns.fileExists(p, "home"), ["agent/sl-prog.js", p]]),
-            ["singRam", singRam * GB, ns.getServerMaxRam(SING) < singRam, null],
+            ["singRam", srv.costOf(singRam), ns.serverExists(SING) && ns.getServerMaxRam(SING) < singRam, null],
             ["homeRam", info.ram, Number.isFinite(info.ram), ["agent/sl-ram.js"]],
             ...PROGS.slice(2).map(([p, c]) => [p, c, !ns.fileExists(p, "home"), ["agent/sl-prog.js", p]]),
             ["homeCores", info.cores, Number.isFinite(info.cores), ["agent/sl-cores.js"]],
@@ -171,10 +202,10 @@ export async function main(ns) {
             fail[k] = Date.now() + 60000; lastErr = `${k} purchase failed`;
           }
           // faction work: autopilot normally does this; without it the player sat idle for the whole BN5 bootstrap
-          if (Date.now() - workT > 300000 && ns.getServerMaxRam(SING) >= ns.getScriptRam("agent/sl-work.js", "home")) {
+          if (Date.now() - workT > 300000 && singHost() && ns.getServerMaxRam(singHost()) >= ns.getScriptRam("agent/sl-work.js", "home")) {
             workT = Date.now();
             // backdoors (NiteSec/Black Hand/BitRunners invites need them): fire and forget, one copy at a time; drain() records it
-            if ((bdPending === null || bdPending.length) && !(bdPid && ns.isRunning(bdPid)) && singPrep()) bdPid = ns.exec("agent/sl-backdoor.js", SING, 1);
+            if ((bdPending === null || bdPending.length) && !(bdPid && ns.isRunning(bdPid)) && singPrep()) bdPid = ns.exec("agent/sl-backdoor.js", singHost(), 1);
             let c = {}; try { c = JSON.parse(ns.read("/data/autopilot-config.txt") || "{}"); } catch { }
             const r = await sing("work", "agent/sl-work.js", JSON.stringify({ prio: c.factionPriority || [], joinCity: c.joinCity || [], skipHacknet: !!c.skipHacknetAugs }));
             if (r && r.op === "work") { if (r.work !== work) log(`work: ${r.work}`); work = r.work; for (const f of r.joined || []) log(`joined ${f}`); }
@@ -238,8 +269,8 @@ export async function main(ns) {
       // ---- spend leftover on worker servers ------------------------------------------------------------------
       if (workerSpendOk({ hold, singHost: ns.serverExists(SING), money, util })) {
         const ws = pserv.filter((h) => h !== SING), lim = LIMIT - 1;
-        let r = 16; while (r < 1048576 && (r * 2) * GB <= money * 0.5) r *= 2;
-        if (r * GB <= money * 0.5) {
+        const r = bestWorkerRam(srv.costOf, money * 0.5);
+        if (r) {
           if (ws.length < lim) { let i = 0; while (ns.serverExists(`pserv-${i}`)) i++; if (await buy("buy", `pserv-${i}`, r)) { ensure(`pserv-${i}`); log(`bought pserv-${i} ${r}GB`); } }
           else { const s = ws.sort((a, b) => ns.getServerMaxRam(a) - ns.getServerMaxRam(b))[0]; if (s && ns.getServerMaxRam(s) * 2 <= r && await buy("up", s, r)) log(`upgraded ${s} -> ${r}GB`); }
         }
