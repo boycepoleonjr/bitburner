@@ -24,6 +24,12 @@ const MARK = /<!-- bb-monitor:([a-z0-9:-]+) -->/;
 export const attentionKey = (text) =>
   "att-" + createHash("sha256").update(String(text).toLowerCase().replace(/\d+(\.\d+)?/g, "#").replace(/\s+/g, " ").trim()).digest("hex").slice(0, 16);
 
+// The repo is public: the issue body gets the report with bearer tokens, URLs and secret-like values redacted.
+const sanitizeReport = (s) => String(s)
+  .replace(/Bearer\s+\S+/gi, "Bearer [redacted]")
+  .replace(/https?:\/\/\S+/gi, "[url]")
+  .replace(/(token|key|secret|password)=[^\s&]+/gi, "$1=[redacted]");
+
 const clip = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 
 // What should be open right now. report: the GET /api/report value ({latest, ageMin, stale}) or null if not fetched.
@@ -32,9 +38,11 @@ export function desiredProblems({ up, healthError, report }) {
   if (!up) {
     out.push({ key: "incident-unreachable", kind: "incident", title: "Incident: hosted game unreachable",
       detail: `/healthz failed: ${healthError || "unknown error"}. The container may be down or redeploying; check Railway.` });
-    return { problems: out, attentionKnown: false };
+    return { problems: out, attentionKnown: false, checked: ["incident-unreachable"] };
   }
-  if (!report) return { problems: out, attentionKnown: false };
+  // /healthz answered, so "unreachable" is evaluated (clear); without a report "stalled" is unknown.
+  if (!report) return { problems: out, attentionKnown: false, checked: ["incident-unreachable"] };
+  const checked = ["incident-unreachable", "incident-stale"];
   const l = report.latest;
   // A single failed check-in retries in 5 min and game/rpc outages are the container's own watchdog's job; flag only a
   // check-in loop that has stopped producing records.
@@ -42,21 +50,22 @@ export function desiredProblems({ up, healthError, report }) {
     out.push({ key: "incident-stale", kind: "incident", title: "Incident: check-ins stalled",
       detail: `Latest check-in: ${l?.t || "none"} (${report.ageMin ?? "?"} min old). The bb server answers but the ` +
         "scheduled check-in has not run; check BB_CHECKIN_AUTO and the container logs." });
-    return { problems: out, attentionKnown: false };
+    return { problems: out, attentionKnown: false, checked };
   }
-  if (report.stale || !l.ok) return { problems: out, attentionKnown: false };
+  if (report.stale || !l.ok) return { problems: out, attentionKnown: false, checked };
   for (const text of l.attention || []) {
     if (out.some((p) => p.key === attentionKey(text))) continue;
     const owner = OWNER_DECISION.some((re) => re.test(text));
     out.push({ key: attentionKey(text), kind: owner ? "owner-decision" : "attention", title: clip(`${owner ? "Owner decision" : "Attention"}: ${text}`, 120),
       detail: text, report: l.report, t: l.t });
   }
-  return { problems: out, attentionKnown: true };
+  return { problems: out, attentionKnown: true, checked };
 }
 
 // open: [{number, title, body}] issues labelled "monitor". Attention issues are only closed when the attention list
-// is known (a fresh report); incidents always reflect this run.
-export function planSync(open, { problems, attentionKnown }) {
+// is known (a fresh report); an incident is only closed when its own condition was evaluated this run (`checked`),
+// so a failed /api/report fetch or a /healthz outage never closes (and later reopens) "check-ins stalled".
+export function planSync(open, { problems, attentionKnown, checked = [] }) {
   const byKey = new Map();
   for (const i of open) { const m = MARK.exec(i.body || ""); if (m && !byKey.has(m[1])) byKey.set(m[1], i); }
   const want = new Map(problems.map((p) => [p.key, p]));
@@ -68,14 +77,14 @@ export function planSync(open, { problems, attentionKnown }) {
   }
   for (const [key, i] of byKey) {
     if (want.has(key)) continue;
-    if (key.startsWith("incident-") || attentionKnown) close.push({ number: i.number, key });
+    if (key.startsWith("incident-") ? checked.includes(key) : attentionKnown) close.push({ number: i.number, key });
   }
   return { create, retitle, close };
 }
 
 export function issueBody(p) {
   const lines = [`<!-- bb-monitor:${p.key} -->`, p.detail, ""];
-  if (p.report) lines.push(`Check-in at ${p.t}:`, "", "```", clip(p.report, 6000), "```", "");
+  if (p.report) lines.push(`Check-in at ${p.t}:`, "", "```", clip(sanitizeReport(p.report), 6000), "```", "");
   lines.push("_Opened by the monitor workflow; it closes this issue when the problem clears. See AGENTS.md for handling._");
   return lines.join("\n");
 }

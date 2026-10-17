@@ -17,7 +17,7 @@ assert.equal(d.attentionKnown, false);
 
 // Up without a token: nothing to report, nothing known.
 d = desiredProblems({ up: true, report: null });
-assert.deepEqual(d, { problems: [], attentionKnown: false });
+assert.deepEqual(d, { problems: [], attentionKnown: false, checked: ["incident-unreachable"] });
 
 // Fresh report: one issue per attention item; owner-decision items labelled as such.
 d = desiredProblems({ up: true, report: report(["telemetry down", "w0r1d_d43m0n READY — agent decides BitNode destruction"]) });
@@ -30,7 +30,7 @@ assert.equal(d.problems.length, 1);
 
 // One failed check-in (fresh but !ok) or a stale flag: no incident, attention unknown.
 d = desiredProblems({ up: true, report: { ageMin: 3, stale: true, latest: { ok: false, t: "t", error: "rpc down", attention: [] } } });
-assert.deepEqual(d, { problems: [], attentionKnown: false });
+assert.deepEqual(d, { problems: [], attentionKnown: false, checked: ["incident-unreachable", "incident-stale"] });
 
 // Check-in loop stopped: stalled incident.
 d = desiredProblems({ up: true, report: report([], { ageMin: STALE_MIN + 1, stale: true }) });
@@ -46,10 +46,21 @@ assert.deepEqual(plan.create, []);
 assert.deepEqual(plan.retitle, [{ number: 2, title: "Attention: 6 augs buyable" }]);
 assert.deepEqual(plan.close.map((c) => c.number).sort(), [3, 4]);
 
-// Attention unknown (down): attention issues stay, incidents follow this run.
+// Down: attention issues stay and so does "stalled" (not evaluated), so it doesn't flap.
 plan = planSync([issue(1, teleKey), issue(5, "incident-stale")], desiredProblems({ up: false, report: null }));
 assert.deepEqual(plan.create.map((p) => p.key), ["incident-unreachable"]);
+assert.deepEqual(plan.close, []);
+
+// Up but /api/report unavailable: "stalled" stays open; "unreachable" is evaluated and closes.
+plan = planSync([issue(5, "incident-stale"), issue(6, "incident-unreachable")], desiredProblems({ up: true, report: null }));
+assert.deepEqual(plan.close.map((c) => c.number), [6]);
+
+// Fresh report: "stalled" is evaluated and closes.
+plan = planSync([issue(5, "incident-stale")], desiredProblems({ up: true, report: report([]) }));
 assert.deepEqual(plan.close.map((c) => c.number), [5]);
+
+// Report text is redacted before it is posted to the public repo.
+assert.doesNotMatch(issueBody({ key: "att-x", detail: "d", t: "now", report: "see https://x.example/a Bearer abc123 token=zzz" }), /x\.example|abc123|zzz/);
 
 // Issues without the marker (opened by people) are never touched.
 plan = planSync([{ number: 9, title: "t", body: "manual" }], desiredProblems({ up: true, report: report([]) }));
