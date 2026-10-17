@@ -25,11 +25,22 @@ export async function pull(remote, { server = "home" } = {}) {
   return { ok: true, pulled: files.length, changed: wrote };
 }
 
+// Every file under a game/ folder (paths relative to it), live state included.
+function gameFiles(dir) {
+  const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]));
+  return walk(dir).map((p) => path.relative(dir, p).split(path.sep).join("/"));
+}
+
+/** The repo's in-game code files (paths relative to game/): what push sends, never data/ (live state) or AGENTS.txt
+ * (generated from AGENTS.md). Shared with the drift check (server/drift.js). */
+export function codeFiles(root = ROOT) {
+  return gameFiles(path.join(root, "game")).filter(pushable).sort();
+}
+
 // `dir` is a separate argument (tests only), never part of the request body that /api/push passes in as the options.
 export async function push(remote, { server = "home", only } = {}, dir = DIR) {
-  const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]));
-  const all = walk(dir).map((p) => path.relative(dir, p).split(path.sep).join("/"));
-  let files = all.filter(pushable);
+  const all = gameFiles(dir);
+  let files = all.filter(pushable).sort();
   if (only) {
     // All-or-nothing: an unmatched path fails the whole push before anything is sent, so `bb push x && bb note` can't log a no-op.
     const want = [...new Set([].concat(only).map(pushPath))];

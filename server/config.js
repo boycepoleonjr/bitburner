@@ -34,6 +34,8 @@ export const configErrors = [];
 
 export const STATE_DIR = (env.BB_STATE_DIR || path.join(ROOT, "state")).replace(/^~(?=$|\/)/, os.homedir());
 export const CHECKIN_AUTO = env.BB_CHECKIN_AUTO === "1";
+export const DRIFT_CHECK = env.BB_DRIFT_CHECK !== "0"; // check-ins flag game code that differs from the deployed repo
+export const GIT_SHA = (env.RAILWAY_GIT_COMMIT_SHA || "").trim(); // set by Railway on each deploy
 
 const okUrl = (u) => { try { const p = new URL(u).protocol; return p === "https:" || (TEST && p === "http:"); } catch { return false; } };
 export const DISCORD_WEBHOOK_URL = (env.DISCORD_WEBHOOK_URL || "").trim();
@@ -92,6 +94,7 @@ export function configSummary() {
     `state directory: ${STATE_DIR}`,
     `discord notifications: ${DISCORD_ON ? "enabled" : "disabled"}`,
     `claude escalation: ${escalationStatus}`,
+    `drift check: ${DRIFT_CHECK ? `enabled${GIT_SHA ? ` (deployed ${GIT_SHA.slice(0, 7)})` : ""}` : "disabled"}`,
     `READY escalation: ${READY_ESCALATE_MIN > 0 ? `after ${READY_ESCALATE_MIN} minutes` : "disabled"}`,
     `watchdog interval: ${WATCHDOG_MIN > 0 ? `${WATCHDOG_MIN} minutes` : "disabled"}`,
     ...configErrors.map((e) => `config error: ${e}`),
