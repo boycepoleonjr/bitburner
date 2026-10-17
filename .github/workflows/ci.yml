@@ -1,0 +1,31 @@
+# Tests and parse checks on every PR and every push to main. Railway's "Wait for CI" holds the hosted deploy of a
+# main commit until this passes, and the main ruleset requires the "test" check before merging.
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Parse-check in-game scripts
+        run: node .github/scripts/check-syntax.js
+      - run: npm test

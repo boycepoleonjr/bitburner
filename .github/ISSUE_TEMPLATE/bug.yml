@@ -1,0 +1,22 @@
+name: Automation bug
+description: The automation did the wrong thing or stopped making progress
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What the game or a script did, and what it should have done.
+    validations: { required: true }
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [autopilot / daemon-lite, bb server / hosted container, check-ins / predictor, backups, other]
+    validations: { required: true }
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Report table, /data/audit.txt or /data/events.txt lines, container logs. No tokens.
+      render: text

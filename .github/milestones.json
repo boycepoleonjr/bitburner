@@ -1,0 +1,6 @@
+[
+  { "title": "BN4.2 destroyed (SF4.2)", "description": "Current run (entered 2026-10-11). SF4.2 cuts Singularity RAM from 16x to 4x outside BN4. node.order=[4] repeats BN4 next." },
+  { "title": "BN4.3 destroyed (SF4.3)", "description": "Singularity RAM 1x: no more daemon-lite bootstrap wall. Then node.autoSelect picks the next BitNode (docs/specs/aug-planner.md order)." },
+  { "title": "Gang automation (before BN2)", "description": "BN2 is next in the recommended order but needs gang automation first; keep autoSelect away from BN2 until this ships." },
+  { "title": "Ops & reliability", "description": "Ongoing: predictions, backups, monitoring, check-in quality (AGENTS.md Goals: ALWAYS)." }
+]
