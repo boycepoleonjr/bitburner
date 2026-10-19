@@ -1,0 +1,74 @@
+# Synced from boycepoleonjr/conventions v1.3.0 (CI-4). Edit there. Repo-specific review focus goes in "claude_review.focus" in .conventions.json; opt out by adding "claude-review" to "skip".
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+# No default token scopes; the job declares what it needs.
+permissions: {}
+
+# A newer push cancels the older run. The newer run reviews the full diff, so nothing is skipped.
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  claude-review:
+    # Skip drafts, fork PRs (no secrets or OIDC) and bot authors as a skipped job, not a failure.
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      !contains(fromJSON('["dependabot[bot]", "github-actions[bot]", "renovate[bot]"]'), github.event.pull_request.user.login)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      id-token: write
+    steps:
+      # A missing secret must fail the check loudly, never skip the review silently.
+      - name: Require CLAUDE_CODE_OAUTH_TOKEN
+        env:
+          HAS_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+        run: |
+          if [ "$HAS_TOKEN" != "true" ]; then
+            echo "::error::CLAUDE_CODE_OAUTH_TOKEN is not set. Add it under Settings > Secrets and variables > Actions (run 'claude setup-token'), or add claude-review to skip in .conventions.json."
+            exit 1
+          fi
+
+      # Held at checkout v4.4.0 on purpose: v6+ persists the token through includeIf.gitdir, which
+      # claude-code-action does not clear, so the token would stay usable during the Claude run.
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude Code Review
+        uses: anthropics/claude-code-action@5eb090f3c3afd701a0672cd32981197ca27688f6 # v1.0.253
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # cursor[bot] is the org's own agent and may trigger reviews like a maintainer.
+          allowed_bots: "cursor"
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+            HEAD SHA: ${{ github.event.pull_request.head.sha }}
+
+            Review this pull request. This workflow runs on every push, so always review the FULL diff of the PR on every run, not only the latest commit. Always complete the review; do not skip it.
+
+            1. Read AGENTS.md (and CLAUDE.md if present) at the repo root, especially the "Review guidelines" section, and follow them.
+            2. Run `gh pr view ${{ github.event.pull_request.number }}` and `gh pr diff ${{ github.event.pull_request.number }}` and review the full diff of this PR.
+            3. Before posting anything, read what has already been posted: run `gh pr view ${{ github.event.pull_request.number }} --comments` and `gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments --paginate`. Use GET requests only; never modify anything with `gh api`. Do not repeat a finding that is already posted and still applies. Do post findings on new or changed lines, and anything earlier runs missed.
+            4. For each real new defect (correctness, security, regressions, missing tests for changed behavior), post an inline comment on the relevant line with the `mcp__github_inline_comment__create_inline_comment` tool. Skip style nitpicks and anything linters already catch.
+            5. Always finish by posting exactly one summary comment with `gh pr comment ${{ github.event.pull_request.number }} --body "..."`. Start it by saying whether this is the first review or a re-review (it is a re-review if an earlier Claude review summary exists on the PR) and name the head SHA reviewed. List the new findings. If there are none, the summary must say "No new issues found".
+
+            Repo-specific focus:
+            AGENTS.md "Owner's standing rules" are hard requirements. game/ mirrors the in-game home server (Netscript 2 JS run by the game), server/ is the Node bridge + hosted container, deploy/ + Dockerfile build the Railway image.
+            Correctness bugs that could stall the game loop, waste in-game money or RAM, or crash the server/watchdog.
+            Standing-rule violations: aug buy order, NeuroFlux last, never deleting saves, /data/state or backups, never changing game options.
+            Tokens/webhooks leaking into logs, Discord, commits or responses; auth bypass on /api/*.
+            Missing tests for server/ changes.
+          claude_args: |
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments:*),Read,Glob,Grep"
