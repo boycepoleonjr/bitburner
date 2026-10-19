@@ -3,7 +3,7 @@
 #   /api/*     -> bb server (Bearer BB_TOKEN)
 #   /healthz   -> bb server liveness (unauthenticated JSON, 200 while the server process is up)
 # Persistent state lives on the /data volume: Chromium profile (the game save) and save backups.
-FROM node:22-bookworm-slim
+FROM node:26-bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       chromium xvfb x11vnc novnc python3-websockify caddy fonts-dejavu-core ca-certificates procps \
