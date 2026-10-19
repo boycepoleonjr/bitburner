@@ -1,0 +1,22 @@
+{
+  "commands": {
+    "audit": "npm audit --audit-level=high",
+    "build": "",
+    "install": "npm ci",
+    "lint": "",
+    "test": "npm test",
+    "typecheck": ""
+  },
+  "profile": "generic",
+  "project": {
+    "name": "Bitburner agent",
+    "summary": "Autonomous Bitburner agent: in-game Netscript scripts (game/) play the game around the clock, a Node bridge/hosted server (server/, bb CLI) syncs files, takes save backups, runs check-ins and watchdogs, and an AI agent supervises through it. Serves the owner (Boyce), who only reads check-in reports."
+  },
+  "skip": [
+    "pr-template",
+    "dependabot"
+  ],
+  "claude_review": {
+    "focus": "AGENTS.md \"Owner's standing rules\" are hard requirements. game/ mirrors the in-game home server (Netscript 2 JS run by the game), server/ is the Node bridge + hosted container, deploy/ + Dockerfile build the Railway image.\nCorrectness bugs that could stall the game loop, waste in-game money or RAM, or crash the server/watchdog.\nStanding-rule violations: aug buy order, NeuroFlux last, never deleting saves, /data/state or backups, never changing game options.\nTokens/webhooks leaking into logs, Discord, commits or responses; auth bypass on /api/*.\nMissing tests for server/ changes."
+  }
+}
