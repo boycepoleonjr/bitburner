@@ -53,7 +53,22 @@ export function sources(snap) {
       if (!cur || (src.joined && !cur.joined) || (src.joined === cur.joined && src.rep > cur.rep)) out.set(a, src);
     }
   }
+  // The gang faction sells The Red Pill in BN2: prefer it over Daedalus (docs/specs/gang.md §4.5)
+  const gf = snap.gangFaction, gi = gf ? snap.factions?.[gf] : null;
+  if (gi?.joined && (gi.augs || []).includes(RED_PILL)) out.set(RED_PILL, { faction: gf, rep: fin(gi.rep), favor: fin(gi.favor), joined: true, repRate: fin(gi.repRate) });
   return out;
+}
+
+/** Can money buy rep with this source? Not for the gang faction: donateToFaction refuses ("managing a gang"). */
+export function canDonateTo(sr, snap, s) {
+  return !!sr && sr.joined && sr.faction !== snap.gangFaction && sr.favor >= donateThreshold(snap, s);
+}
+
+/** What the autopilot is (about to be) spending on: the price of the first step that is buyable or waiting for money. 0 = nothing.
+ * Free steps (The Red Pill costs $0) are skipped. The gang module keeps this out of its own shopping (its "reserve"). Held NeuroFlux steps are not counted. */
+export function nextPurchaseCost(steps) {
+  const st = (steps || []).find((x) => (x.status === "buyable" || x.status === "needMoney") && fin(x.price) > 0 && !/^held/.test(x.why || ""));
+  return st ? Math.round(fin(st.price)) : 0;
 }
 
 /** Owner purchase order: highest rep requirement first, each aug's unowned prerequisites immediately before it. */
@@ -127,7 +142,9 @@ export function plan(snap, s = {}) {
   } else {
     chosen = [];
     // 1. Daedalus aug count (queued augs count once installed)
-    const needCount = Math.max(0, req.augsReq - installedUnique - queuedCount);
+    // Skipped when The Red Pill comes from a non-Daedalus faction (the BN2 gang faction): no Daedalus invite is needed
+    const redFrom = src.get(RED_PILL);
+    const needCount = redFrom && redFrom.faction !== "Daedalus" ? 0 : Math.max(0, req.augsReq - installedUnique - queuedCount);
     const quick = obtainable.filter((a) => a !== RED_PILL)
       .map((a) => ({ a, cost: timeCost(a, augs, src, snap, s), hs: hackScore(augs[a]) }))
       .sort((x, y) => x.cost - y.cost || y.hs - x.hs || x.a.localeCompare(y.a));
@@ -157,7 +174,7 @@ export function plan(snap, s = {}) {
     const repReq = fin(info.repReq);
     const rep = sr ? sr.rep : 0;
     const repGap = Math.max(0, repReq - rep);
-    const canDonate = !!sr && sr.joined && sr.favor >= thr;
+    const canDonate = canDonateTo(sr, snap, s);
     const donateCost = canDonate && repGap > 0 ? repGap / rpd : 0;
     const prereqMissing = (info.prereqs || []).filter((p) => !simHave.has(p));
     let status, etaMin = null, w = why.get(a) || "";
@@ -183,14 +200,15 @@ export function plan(snap, s = {}) {
   // The Red Pill when Daedalus hasn't invited us yet: shown as blocked so the path is complete
   if (goal === "destroy" && !redOwned && !src.has(RED_PILL) && augs[RED_PILL]) {
     const info = augs[RED_PILL] || {};
-    steps.push({ order: steps.length + 1, aug: RED_PILL, faction: "Daedalus", repReq: fin(info.repReq, 2.5e6), price: 0, prereqs: [], status: "blocked", etaMin: null,
-      why: `needs the Daedalus invite: ${installedUnique}/${req.augsReq} installed augs, ${fmt(money)}/${fmt(req.moneyReq)}, hack ${hack}/${req.hackReq}` });
+    const gangSells = snap.gangFaction && (snap.factions?.[snap.gangFaction]?.augs || []).includes(RED_PILL);
+    steps.push({ order: steps.length + 1, aug: RED_PILL, faction: gangSells ? snap.gangFaction : "Daedalus", repReq: fin(info.repReq, 2.5e6), price: 0, prereqs: [], status: "blocked", etaMin: null,
+      why: gangSells ? `needs ${snap.gangFaction} (gang faction) to be joined again` : `needs the Daedalus invite: ${installedUnique}/${req.augsReq} installed augs, ${fmt(money)}/${fmt(req.moneyReq)}, hack ${hack}/${req.hackReq}` });
   }
   // NeuroFlux Governor: always the final step (owner rule). Listed as "held" when buying it would not help the goal.
   const nfSrc = src.get(NFG);
   const nfgHeld = goal === "destroy" && (wdReady || hack >= fin(s["augs.nfgHoldFrac"], 0.9) * req.wdReq);
   if (nfSrc && augs[NFG]) {
-    const info = augs[NFG], gap = Math.max(0, fin(info.repReq) - nfSrc.rep), canDonate = nfSrc.joined && nfSrc.favor >= thr;
+    const info = augs[NFG], gap = Math.max(0, fin(info.repReq) - nfSrc.rep), canDonate = canDonateTo(nfSrc, snap, s);
     const price = fin(info.price) * step ** bought, cost = price + (canDonate ? gap / rpd : 0);
     const ok = (gap === 0 || canDonate) && cash >= cost;
     steps.push({ order: steps.length + 1, aug: NFG, faction: nfSrc.faction, repReq: fin(info.repReq), price: Math.round(price), prereqs: [], status: ok ? "buyable" : gap > 0 && !canDonate ? "needRep" : "needMoney",
@@ -203,13 +221,14 @@ export function plan(snap, s = {}) {
     installAt: fin(s["augs.installAt"], 6), recoveryMin: fin(snap.recoveryMin, DEFAULT_RECOVERY_MIN), wdReady, redPillQueued: redOwned && !installed.has(RED_PILL),
     nfgHold: hack >= fin(s["augs.nfgHoldFrac"], 0.9) * req.wdReq });
 
-  const red = augs[RED_PILL], redSrc = snap.factions?.Daedalus;
+  const red = augs[RED_PILL], redSrc = src.get(RED_PILL) || snap.factions?.Daedalus;
   return {
     t, bn: fin(snap.bn), goal, phase, progress: round3(progress.progress),
     daedalus: { augsReq: req.augsReq, augsInstalled: installedUnique, moneyReq: req.moneyReq, hackReq: req.hackReq, met: progress.met },
     redPill: { owned: redOwned, repReq: fin(red?.repReq, 2.5e6), rep: fin(redSrc?.rep) },
     worldDaemon: { req: req.wdReq, hack, ready: wdReady },
     steps,
+    nextPurchaseCost: nextPurchaseCost(steps),
     install,
     node: snap.node || { ready: wdReady, autoSelect: !!s["node.autoSelect"], autoDestroy: !!s["node.autoDestroy"], recommended: recommendNextBn(snap, s), pending: { id: "", stage: "none", detail: "" } },
   };
@@ -220,7 +239,7 @@ function timeCost(a, augs, src, snap, s) {
   const sr = src.get(a), info = augs[a] || {};
   if (!sr) return Infinity;
   const gap = Math.max(0, fin(info.repReq) - sr.rep);
-  const canDonate = sr.joined && sr.favor >= donateThreshold(snap, s);
+  const canDonate = canDonateTo(sr, snap, s);
   const income = Math.max(1, fin(snap.income));
   const money = fin(info.price) + (canDonate ? gap / repPerDollar(snap) : 0);
   const repMin = gap === 0 || canDonate ? 0 : sr.repRate > 0 ? gap / sr.repRate / 60 : 1e9 + gap;

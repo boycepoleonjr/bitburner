@@ -13,7 +13,10 @@ import { fmtMoney, fmtNum, fmtPct, fmtDur, DASH } from "./ui/format.js";
 import { HOT_FILES } from "./data-sources.js";
 
 export const KPI_KEYS = Object.freeze(["destroy", "phase", "moneyPerSec", "repPerSec", "ramUtil", "targets", "nextInstall", "money", "hackLevel"]);
+/** Shown only while a gang exists (value != null): the overview and `bb dashboard` skip them otherwise. */
+export const GANG_KPI_KEYS = Object.freeze(["gangTerritory", "gangRespectPerSec", "gangMoneyPerSec"]);
 export const KPI_LABELS = Object.freeze({
+  gangTerritory: "Gang territory", gangRespectPerSec: "Gang respect / s", gangMoneyPerSec: "Gang money / s",
   destroy: "BitNode destroy", phase: "Phase / strategy", moneyPerSec: "Money / s", repPerSec: "Rep / s", ramUtil: "RAM utilization",
   targets: "Hack targets", nextInstall: "Next install", money: "Money", hackLevel: "Hacking level",
 });
@@ -39,7 +42,7 @@ export function slope(ring, f, windowMs, now) {
  * @param {{latest?:Object, ring?:Object[], ramStatus?:Object, augPlan?:Object, autopilot?:Object, pred2Tail?:Object[], settings?:Object, now?:number}} input
  */
 export function computeKpis(input = {}) {
-  const { latest = null, ring = [], ramStatus = null, augPlan = null, autopilot = null, pred2Tail = [], settings = {} } = input || {};
+  const { latest = null, ring = [], ramStatus = null, augPlan = null, autopilot = null, gang = null, pred2Tail = [], settings = {} } = input || {};
   const now = num(input && input.now) ?? Date.now();
   const F = HOT_FILES;
   const fresh = (o) => o && num(o.t) != null && now - o.t <= STALE_MS;
@@ -126,11 +129,20 @@ export function computeKpis(input = {}) {
   out.destroy = kpi(destroyVal, destroyDisp, destroyStatus,
     [src(F.augPlan, "worldDaemon", wd || undefined), src(F.augPlan, "node", ap?.node), src(F.autopilot, "flags", autopilot?.flags)], destroyFormula);
 
+  // ── gang (data/gang-status.txt, written by agent/gang.js every loop) ───────
+  const gs = gang && typeof gang === "object" && gang.inGang ? gang : null;
+  const gStale = gs ? !fresh(gs) : true;
+  const gSrc = (field) => [src(F.gang, field, gs ? gs[field] : undefined)];
+  out.gangTerritory = kpi(num(gs?.territory), gs ? `${fmtPct(num(gs.territory), 1)} · ${gs.phase}` : DASH, gStale ? "warn" : num(gs?.territory) >= 0.999 ? "good" : "warn", gSrc("territory"), "gang-status.territory (share of all territory, 0..1)");
+  out.gangRespectPerSec = kpi(num(gs?.respectRate), gs ? `${fmtNum(num(gs.respectRate))}/s` : DASH, gStale ? "warn" : "good", gSrc("respectRate"), "gang-status.respectRate (respect gain per game cycle x 5)");
+  out.gangMoneyPerSec = kpi(num(gs?.moneyRate), gs ? `${fmtMoney(num(gs.moneyRate))}/s` : DASH, gStale ? "warn" : "good", gSrc("moneyRate"), "gang-status.moneyRate (gang money per game cycle x 5)");
+
   // ── attention + freshness ──────────────────────────────────────────────────
   const attention = flags.map((f) => ({ level: READY_FLAG.test(String(f)) ? "warn" : "bad", text: String(f), view: READY_FLAG.test(String(f)) ? "node" : "logs" }));
   if (lat && latStale) attention.push({ level: "warn", text: `telemetry is stale (${fmtDur(now - lat.t)} old)`, view: "raw", file: F.latest });
   if (!lat) attention.push({ level: "warn", text: "no telemetry-latest.txt yet (restart agent/telemetry.js)", view: "raw", file: F.latest });
   if (rs && Array.isArray(rs.reasons)) for (const r of rs.reasons.slice(0, 3)) attention.push({ level: "info", text: `RAM: ${r}`, view: "ram" });
+  if (gs && Array.isArray(gs.errors)) for (const e of gs.errors.slice(0, 2)) attention.push({ level: "warn", text: `gang: ${e}`, view: "raw", file: F.gang });
 
   const files = {};
   for (const [k, f] of Object.entries({ latest: lat, ramStatus: rs, augPlan: ap, autopilot })) {

@@ -101,6 +101,12 @@ History: BN1 destroyed 2026-09-26 (SF1.1). BN4 destroyed 2026-10-03 01:39 UTC (S
 - agent/sl-plan.js — aug path planner (lib/augplan.js), started by the autopilot: /data/aug-plan.txt (GET /api/plan),
   /data/daedalus-req.txt. agent/sl-destroy.js is the ONLY script that destroys a BitNode; server/node-control.js does the
   save-backup handshake (/data/node-request.txt → backup → /data/node-ack.txt).
+- agent/gang.js — gang manager (docs/specs/gang.md; BN2, or SF2 + karma, or any BN once in a gang). Single instance on home,
+  read-only toward the game: it plans with lib/gangplan.js and applies through the one-shots agent/gang-act.js (create /
+  recruit / tasks / warfare), agent/gang-shop.js (ascend, equipment) and agent/gang-info.js (static cache). Status:
+  /data/gang-status.txt. Settings group `gang.*`; kill switch `bb settings set gang.enabled=false`; `gang.dryRun=true` makes no
+  mutating call. Autopilot/post-install/daemon-lite keep it running; work and donations skip the gang faction; combat-gang
+  bootstrap runs agent/sl-crime.js (gym, then Mug) while the status says so.
 - dashboard.js — in-game React dashboard (owner-facing; `run dashboard.js`). Reads only small files
   (data/telemetry-latest.txt, data/telemetry-ring.txt written by agent/telemetry.js, ram-status, aug-plan,
   autopilot-status, settings). Agents get the same KPIs from `bb dashboard` / GET /api/dashboard (game/lib/kpi.js).
@@ -129,6 +135,7 @@ Every owner/agent-tunable knob is a key in game/lib/settings-schema.js with a de
 - /data/agent-log.txt (agent notes: write with bb.note)
 - /data/settings-log.txt (every settings change, who made it)
 - /data/ram-status.txt (RAM manager, each daemon loop)
+- /data/gang-status.txt (gang manager; one JSON per loop), /data/gang-state.txt, /data/gang-act.txt, /data/gang-shop.txt
 - /data/aug-plan.txt, /data/node-request.txt, /data/node-ack.txt, state/node-control.json (planner + destroy handshake)
 - /data/telemetry-latest.txt, /data/telemetry-ring.txt (small telemetry views; telemetry.txt is ~20MB, don't poll it)
 

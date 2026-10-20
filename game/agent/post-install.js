@@ -1,5 +1,7 @@
 /** agent/post-install.js — run by autopilot via installAugmentations(cb). Brings the whole stack back up.
  * @param {NS} ns */
+import { readSettings } from "lib/settings.js";
+import { gangPossible } from "lib/gangplan.js";
 export async function main(ns) {
   const OVR = "/data/config-overrides.txt";
   try { const c = JSON.parse(ns.read(OVR) || "{}"); c.stocks = { ...(c.stocks || {}), liquidate: false }; ns.write(OVR, JSON.stringify(c), "w"); } catch { }
@@ -13,6 +15,10 @@ export async function main(ns) {
   if (small) start("agent/daemon-lite.js"); else start("agent/autopilot.js"); // first: faction work + programs
   start("agent/tele-launch.js");
   start("agent/rpc.js");            // headless bridge (idles until the bb server pushes agent/rpc-config.txt)
+  { // the gang survives installs and needs its manager back (docs/specs/gang.md): only when enabled and a gang is possible here
+    const ri = ns.getResetInfo();
+    if (readSettings(ns)["gang.enabled"] !== false && gangPossible({ bn: ri.currentNode, inGang: ns.gang.inGang(), ownedSF: ri.ownedSF })) start("agent/gang.js");
+  }
   await ns.sleep(1000);
   if (!small) start("daemon.js", "--reset");
   ns.write("/data/events.txt", `${new Date().toLocaleTimeString("en-US", { hour12: false })} [post-install] stack restarted\n`, "a");

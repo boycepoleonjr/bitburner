@@ -1,0 +1,11 @@
+{
+  "source": "bitburner-src dev src/Netscript/RamCostGenerator.ts (RamCostConstants: Base 1.6, Run 1, GangApiBase 4); GB per Netscript function name",
+  "base": 1.6,
+  "costs": {
+    "run": 1, "hack": 0.1, "getRunningScript": 0.3, "isRunning": 0.1, "getScriptRam": 0.1, "getResetInfo": 1, "getPlayer": 0.5, "ps": 0.2,
+    "createGang": 1, "inGang": 0, "getMemberNames": 1, "getGangInformation": 2, "getAllGangInformation": 2, "getMemberInformation": 2,
+    "recruitMember": 2, "getTaskNames": 0, "getTaskStats": 1, "setMemberTask": 2, "getEquipmentNames": 0, "getEquipmentCost": 2,
+    "getEquipmentType": 2, "getEquipmentStats": 2, "purchaseEquipment": 4, "ascendMember": 4, "getAscensionResult": 2,
+    "setTerritoryWarfare": 2, "nextUpdate": 0
+  }
+}

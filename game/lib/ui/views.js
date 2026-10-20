@@ -8,7 +8,7 @@ import { createKit } from "./kit.js";
 import { SPACE, COLOR, TYPE, LAYOUT, TRANSITION, RADIUS, FONT, px } from "./tokens.js";
 import { fmtMoney, fmtNum, fmtPct, fmtGb, fmtBytes, fmtDur, fmtAgo, fmtTime, fmtValue, DASH } from "./format.js";
 import { controlsFromSchema, groupControls } from "./settings-model.js";
-import { KPI_KEYS, KPI_LABELS } from "../kpi.js";
+import { KPI_KEYS, GANG_KPI_KEYS, KPI_LABELS } from "../kpi.js";
 import { RAW_FILES } from "../data-sources.js";
 
 export const SECTIONS = Object.freeze([
@@ -69,7 +69,8 @@ export function createViews(React, { schema = [], groups = [] } = {}) {
       h(K.DataTable, { columns: [{ key: "file", label: "File", mono: true }, { key: "field", label: "Field", mono: true }, { key: "value", label: "Raw value", render: (r) => r.missing ? "missing" : fmtValue(r.value), maxWidth: 200 }],
         rows: sel_k.sources, rowKey: (r, i) => `${r.file}:${r.field}:${i}`, onSelect: (id) => { const s = sel_k.sources.find((r, i) => `${r.file}:${r.field}:${i}` === id); if (s) actions.openRaw(s.file, s.field); } }),
       h(K.Label, null, "Select a source to open it in Raw data.")) : null;
-    const tiles = h(K.Grid, { min: 150 }, KPI_KEYS.map((key, i) => h(K.KpiTile, { key, label: KPI_LABELS[key], k: k[key], size: i === 0 ? "lg" : "md", selected: sel === key,
+    const tileKeys = [...KPI_KEYS, ...GANG_KPI_KEYS.filter((key) => k[key] && k[key].value != null)]; // gang tiles only while a gang exists
+    const tiles = h(K.Grid, { min: 150 }, tileKeys.map((key, i) => h(K.KpiTile, { key, label: KPI_LABELS[key], k: k[key], size: i === 0 ? "lg" : "md", selected: sel === key,
       onClick: () => actions.select("overview", sel === key ? null : key) })));
     return h("div", null,
       h(Header, { title: "Overview", meta: metaLine(store, data.bn ? `BN${data.bn}` : null), primary: { label: "Refresh now", onClick: actions.refresh } }),
