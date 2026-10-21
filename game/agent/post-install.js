@@ -17,7 +17,7 @@ export async function main(ns) {
   start("agent/rpc.js");            // headless bridge (idles until the bb server pushes agent/rpc-config.txt)
   { // the gang survives installs and needs its manager back (docs/specs/gang.md): only when enabled and a gang is possible here
     const ri = ns.getResetInfo();
-    if (readSettings(ns)["gang.enabled"] !== false && gangPossible({ bn: ri.currentNode, inGang: ns.gang.inGang(), ownedSF: ri.ownedSF })) start("agent/gang.js");
+    if (readSettings(ns)["gang.enabled"] !== false && gangPossible({ bn: ri.currentNode, inGang: ns.gang.inGang(), ownedSF: ri.ownedSF, karma: ns.heart.break() })) start("agent/gang.js");
   }
   await ns.sleep(1000);
   if (!small) start("daemon.js", "--reset");

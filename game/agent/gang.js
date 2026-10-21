@@ -9,12 +9,11 @@
 import { readSettings } from "lib/settings.js";
 import { weightFor } from "lib/progress.js";
 import { ascensionMult, ascensionPointsGain } from "lib/gangformulas.js";
-import { phaseOf, chooseFaction, recruitNames, planTasks, warfareDecision, shouldAscend, equipmentPurchases, buildStatus, SKILLS, TRAIN_LOOPS } from "lib/gangplan.js";
+import { phaseOf, chooseFaction, recruitNames, planTasks, warfareDecision, shouldAscend, equipmentPurchases, buildStatus, SKILLS, TRAIN_LOOPS, GANG_KARMA } from "lib/gangplan.js";
 
 export const STATUS = "data/gang-status.txt", STATE = "data/gang-state.txt", TASKS = "data/gang-tasks.txt", ACT = "data/gang-act.txt", SHOP = "data/gang-shop.txt";
 export const INFO_SCRIPT = "agent/gang-info.js", ACT_SCRIPT = "agent/gang-act.js", SHOP_SCRIPT = "agent/gang-shop.js";
 export const SHOP_EVERY = 15;          // loops between shop runs
-export const KARMA_ACCESS = -54000;    // gang access outside BN2 (with SF2)
 
 const json = (txt, d = null) => { try { return txt ? JSON.parse(txt) : d; } catch { return d; } };
 const ptime = (x) => (x && typeof x.t === "number" ? x.t : 0);
@@ -63,7 +62,7 @@ export async function step(ns, st, s) {
   const p = safe("getPlayer", () => ns.getPlayer(), {});
   const karma = safe("karma", () => ns.heart.break(), 0);
   const inGang = safe("inGang", () => G.inGang(), false);
-  const accessible = inGang || bn === 2 || !!(reset?.ownedSF?.has(2) && karma <= KARMA_ACCESS);
+  const accessible = inGang || bn === 2 || !!(reset?.ownedSF?.has(2) && karma <= GANG_KARMA);
   const sk = p.skills || {};
   const snap = {
     t, bn, karma, accessible, inGang, money: p.money ?? 0, joined: p.factions || [], combat: { str: sk.strength ?? 0, def: sk.defense ?? 0, dex: sk.dexterity ?? 0, agi: sk.agility ?? 0 },

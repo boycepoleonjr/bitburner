@@ -73,6 +73,9 @@ export function gangCrimeFromStatus(text, now) {
   if (!st || st.phase !== "bootstrap" || st.dryRun || !(now - (Number(st.t) || 0) < 120000)) return null;
   return st.bootstrapAction === "gym" || st.bootstrapAction === "crime" ? st.bootstrapAction : null;
 }
+/** Is a gang wanted here? Same rule as lib/gangplan.js gangPossible (daemon-lite has no imports): gang.enabled, and BN2, already in
+ * a gang, or SF2 with karma <= -54000. Exported for tests. */
+export const gangWantedHere = ({ on, bn, inGang, hasSF2, karma }) => !!on && (bn === 2 || !!inGang || (!!hasSF2 && karma <= -54000));
 export const RPC = "agent/rpc.js", RPC_CFG = "agent/rpc-config.txt";
 /** Keeps agent/rpc.js alive. Same copy as in agent/autopilot.js (see there); exported for tests. */
 export function ensureRpc({ running, hasConfig, run, act, memo }) {
@@ -169,7 +172,7 @@ export async function main(ns) {
       { // gang module: wanted where a gang is possible and gang.enabled; start it once it fits (RAM reserved in homeReserve above)
         let on = true; try { on = (JSON.parse(ns.read("data/settings.txt") || "{}").values || {})["gang.enabled"] !== false; } catch { }
         const ri = ns.getResetInfo();
-        gangWanted = on && (ri.currentNode === 2 || ns.gang.inGang() || (ri.ownedSF && ri.ownedSF.has(2)));
+        gangWanted = gangWantedHere({ on, bn: ri.currentNode, inGang: ns.gang.inGang(), hasSF2: !!(ri.ownedSF && ri.ownedSF.has(2)), karma: ns.heart.break() });
         try { const gs = JSON.parse(ns.read(GANG_STATUS) || "null"); gangFaction = gs && gs.inGang ? gs.faction : null; } catch { gangFaction = null; }
         if (gangWanted && !ns.isRunning(GANG, "home") && ns.getServerMaxRam("home") - ns.getServerUsedRam("home") >= ns.getScriptRam(GANG, "home")) {
           const pid = ns.run(GANG);
