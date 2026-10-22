@@ -43,10 +43,15 @@ const enabled = (s) => s?.["gang.enabled"] !== false;
 /** Gang state as the formulas expect it. */
 const gangG = (snap) => ({ respect: num(snap.info?.respect, 1), wanted: num(snap.info?.wantedLevel, 1), territory: num(snap.info?.territory, 0) });
 
-/** Is a gang worth running here? In BN2, once in a gang, or with SF2 (gang.js itself still checks karma outside BN2).
+/** Karma needed for gang access outside BN2 (together with SF2). */
+export const GANG_KARMA = -54000;
+
+/** Can a gang exist here? In BN2, once in a gang, or with SF2 AND karma <= GANG_KARMA (the game's canAccessGang). Anything else
+ * (e.g. BN5 with SF2 but no gang) has no gang API, so nothing should start or restart gang.js. Same rule as gang.js's `accessible`.
  * Shared by gang.js, autopilot, post-install and daemon-lite (they must not import agent/gang.js: imports add RAM). */
-export function gangPossible({ bn, inGang, ownedSF }) {
-  return !!inGang || bn === 2 || !!(ownedSF && (typeof ownedSF.has === "function" ? ownedSF.has(2) : ownedSF[2]));
+export function gangPossible({ bn, inGang, ownedSF, karma }) {
+  const sf2 = !!(ownedSF && (typeof ownedSF.has === "function" ? ownedSF.has(2) : ownedSF[2]));
+  return !!inGang || bn === 2 || (sf2 && num(karma, 0) <= GANG_KARMA);
 }
 
 /** The gang's faction from data/gang-status.txt text (null when there is no gang). Used to keep work and donations off it. */

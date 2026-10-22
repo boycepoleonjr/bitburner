@@ -95,7 +95,7 @@ test("augplan: nextPurchaseCost = price of the first buyable / needMoney step; 0
 
 // ── autopilot ─────────────────────────────────────────────────────────────
 /** One autopilot loop against a fake singularity. Returns the singularity calls that matter. */
-async function autopilotLoop({ gangStatus = null, work = null, cfg = {}, factions = ["Slum Snakes", "CyberSec"], settings = {}, running = true } = {}) {
+async function autopilotLoop({ gangStatus = null, work = null, cfg = {}, factions = ["Slum Snakes", "CyberSec"], settings = {}, running = true, bn = 2, ownedSF = new Map(), karma = 0 } = {}) {
   const files = { "data/autopilot-config.txt": JSON.stringify({ work: "auto-faction", factionPriority: ["Slum Snakes", "CyberSec"], programs: false, homeRam: false, homeCores: false, backdoors: false, autoInstall: false, ...cfg }) };
   if (gangStatus) files["data/gang-status.txt"] = JSON.stringify(gangStatus);
   if (Object.keys(settings).length) files["data/settings.txt"] = settingsFile(settings);
@@ -111,7 +111,7 @@ async function autopilotLoop({ gangStatus = null, work = null, cfg = {}, faction
   let loops = 0;
   const ns = {
     singularity: Sg, args: [], disableLog() {}, read: (f) => files[f.replace(/^\//, "")] ?? "", write: (f, d, m) => { const k = f.replace(/^\//, ""); files[k] = m === "w" ? d : (files[k] ?? "") + d; },
-    getHackingLevel: () => 100, getPlayer: () => ({ factions, mults: { faction_rep: 1 }, exp: { hacking: 1 } }), getResetInfo: () => ({ currentNode: 2, ownedSF: new Map(), lastAugReset: 0 }),
+    getHackingLevel: () => 100, getPlayer: () => ({ factions, mults: { faction_rep: 1 }, exp: { hacking: 1 } }), getResetInfo: () => ({ currentNode: bn, ownedSF, lastAugReset: 0 }), heart: { break: () => karma },
     gang: { inGang: () => !!gangStatus?.inGang }, isRunning: (s) => (s === "agent/gang.js" ? running : s === "agent/sl-crime.js" ? false : true),
     run: (s) => { runs.push(s); return 7; }, fileExists: () => true, getServerMoneyAvailable: () => 1e12, getFavorToDonate: () => 150, serverExists: () => false,
     getServerMaxRam: () => 1024, getServerUsedRam: () => 0, getScriptRam: () => 4, getMoneySources: () => ({ sinceInstall: {} }), format: { number: (x) => String(x) },
@@ -164,6 +164,40 @@ test("autopilot: restarts agent/gang.js when it is missing, only if enabled and 
   assert.equal(AP.ensureGang({ enabled: true, possible: false, running: () => false, run: () => 9, act() {}, memo }), 0, "not possible in this BitNode");
   assert.deepEqual(AP.workable(["a", "b", "c"], "b"), ["a", "c"]);
   assert.deepEqual(AP.workable(["a", "b"], null), ["a", "b"]);
+});
+
+test("regression: gang.js is not restarted where the gang API is unavailable (BN5 with SF2, no gang) and needs karma <= -54000 outside BN2", async () => {
+  const sf2 = new Map([[2, 1]]);
+  const restarts = async (o) => (await autopilotLoop({ running: false, ...o })).runs.filter((r) => r === "agent/gang.js").length;
+  assert.equal(await restarts({ bn: 5, ownedSF: sf2, karma: 0 }), 0, "BN5, SF2, karma 0: the case that restarted gang.js every 30 s");
+  assert.equal(await restarts({ bn: 5, ownedSF: sf2, karma: -53999.9 }), 0, "just short of the karma requirement");
+  assert.equal(await restarts({ bn: 5, ownedSF: new Map(), karma: -99999 }), 0, "karma without SF2");
+  assert.equal(await restarts({ bn: 5, ownedSF: sf2, karma: -54000 }), 1, "SF2 + karma at the boundary");
+  assert.equal(await restarts({ bn: 5, ownedSF: sf2, karma: -1e6 }), 1);
+  assert.equal(await restarts({ bn: 2, ownedSF: new Map(), karma: 0 }), 1, "BN2 needs no karma");
+  assert.equal(await restarts({ bn: 5, ownedSF: sf2, karma: 0, gangStatus: { inGang: true, faction: "Tetrads", t: Date.now(), phase: "grow" } }), 1, "an existing gang is managed in any BitNode");
+  assert.equal(await restarts({ bn: 2, settings: { "gang.enabled": false } }), 0, "gang.enabled=false still wins");
+});
+test("regression: gangPossible truth table (Map and object SF forms, missing karma)", () => {
+  const g = (o) => PLAN.gangPossible({ bn: 5, inGang: false, ownedSF: new Map(), karma: 0, ...o });
+  assert.equal(g({}), false);
+  assert.equal(g({ ownedSF: new Map([[2, 1]]) }), false);
+  assert.equal(g({ ownedSF: new Map([[2, 1]]), karma: undefined }), false, "missing karma counts as 0");
+  assert.equal(g({ ownedSF: new Map([[2, 1]]), karma: -54000 }), true);
+  assert.equal(g({ ownedSF: { 2: 1 }, karma: -54000 }), true);
+  assert.equal(g({ ownedSF: { 2: 1 }, karma: -53999 }), false);
+  assert.equal(g({ ownedSF: new Map([[1, 3]]), karma: -54000 }), false);
+  assert.equal(g({ ownedSF: undefined, karma: -54000 }), false);
+  assert.equal(g({ bn: 2 }), true);
+  assert.equal(g({ inGang: true }), true);
+  assert.equal(PLAN.GANG_KARMA, -54000);
+});
+test("regression: daemon-lite's inline gate matches lib/gangplan.js gangPossible", () => {
+  for (const bn of [1, 2, 5]) for (const inGang of [false, true]) for (const sf2 of [false, true]) for (const karma of [0, -53999, -54000, -1e6]) {
+    const want = PLAN.gangPossible({ bn, inGang, ownedSF: sf2 ? new Map([[2, 1]]) : new Map(), karma });
+    assert.equal(DL.gangWantedHere({ on: true, bn, inGang, hasSF2: sf2, karma }), want, JSON.stringify({ bn, inGang, sf2, karma }));
+    assert.equal(DL.gangWantedHere({ on: false, bn, inGang, hasSF2: sf2, karma }), false, "gang.enabled=false");
+  }
 });
 
 // ── sl-work / sl-crime ────────────────────────────────────────────────────
@@ -259,11 +293,11 @@ test("sl-plan: main snapshots the gang faction and the plan takes The Red Pill f
 
 // ── post-install ──────────────────────────────────────────────────────────
 test("post-install: starts gang.js only when gang.enabled and a gang is possible", async () => {
-  const run = async ({ settings = {}, bn = 2, inGang = false, ownedSF = new Map(), homeRam = 32 } = {}) => {
+  const run = async ({ settings = {}, bn = 2, inGang = false, ownedSF = new Map(), homeRam = 32, karma = 0 } = {}) => {
     const files = { "data/settings.txt": Object.keys(settings).length ? settingsFile(settings) : "" }, started = [];
     const ns = {
       read: (f) => files[f.replace(/^\//, "")] ?? "", write: () => {}, sleep: async () => {}, isRunning: () => false, run: (s) => { started.push(s); return 1; }, getServerMaxRam: () => homeRam,
-      getScriptRam: () => 8, getResetInfo: () => ({ currentNode: bn, ownedSF }), gang: { inGang: () => inGang },
+      getScriptRam: () => 8, getResetInfo: () => ({ currentNode: bn, ownedSF }), gang: { inGang: () => inGang }, heart: { break: () => karma },
     };
     await POST.main(ns);
     return started;
@@ -274,7 +308,9 @@ test("post-install: starts gang.js only when gang.enabled and a gang is possible
   assert.ok(!(await run({ settings: { "gang.enabled": false } })).includes("agent/gang.js"), "disabled");
   assert.ok(!(await run({ bn: 1 })).includes("agent/gang.js"), "BN1, no gang, no SF2");
   assert.ok((await run({ bn: 1, inGang: true })).includes("agent/gang.js"), "an existing gang is managed anywhere");
-  assert.ok((await run({ bn: 1, ownedSF: new Map([[2, 1]]) })).includes("agent/gang.js"), "SF2");
+  assert.ok(!(await run({ bn: 5, ownedSF: new Map([[2, 1]]) })).includes("agent/gang.js"), "BN5 with SF2 but no gang and karma 0: no gang API");
+  assert.ok((await run({ bn: 5, ownedSF: new Map([[2, 1]]), karma: -54000 })).includes("agent/gang.js"), "SF2 + karma <= -54000");
+  assert.ok(!(await run({ bn: 5, ownedSF: new Map([[2, 1]]), karma: -53999 })).includes("agent/gang.js"), "one karma short");
   assert.ok(on.includes("agent/daemon-lite.js") && on.includes("agent/rpc.js"), "the rest of the stack is unchanged");
 });
 

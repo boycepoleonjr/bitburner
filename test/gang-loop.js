@@ -51,7 +51,7 @@ test("bootstrap: no gang outside BN2 without SF2 + karma <= -54000", async () =>
   assert.equal(PLAN.gangPossible({ bn: 1, inGang: false, ownedSF: new Map() }), false);
   assert.equal(PLAN.gangPossible({ bn: 2, inGang: false, ownedSF: new Map() }), true);
   assert.equal(PLAN.gangPossible({ bn: 1, inGang: true, ownedSF: new Map() }), true);
-  assert.equal(PLAN.gangPossible({ bn: 1, inGang: false, ownedSF: new Map([[2, 1]]) }), true);
+  assert.equal(PLAN.gangPossible({ bn: 1, inGang: false, ownedSF: new Map([[2, 1]]) }), false, "SF2 alone is not access: karma is also needed");
 });
 test("fallback: creates a hacking gang on NiteSec after the timeout", async () => {
   const g = fakeGang({ bn: 2, joined: ["NiteSec"], scripts });

@@ -235,7 +235,7 @@ export async function main(ns) {
       ensureRpc({ running: () => ns.isRunning(RPC, "home"), hasConfig: () => ns.fileExists(RPC_CFG, "home"), run: () => ns.run(RPC), act, memo: rpcMemo });
       const gangSettings = readSettings(ns), gangF = gangFac();
       { const ri = ns.getResetInfo();
-        ensureGang({ enabled: gangSettings["gang.enabled"] !== false, possible: gangPossible({ bn: ri.currentNode, inGang: ns.gang.inGang(), ownedSF: ri.ownedSF }),
+        ensureGang({ enabled: gangSettings["gang.enabled"] !== false, possible: gangPossible({ bn: ri.currentNode, inGang: ns.gang.inGang(), ownedSF: ri.ownedSF, karma: ns.heart.break() }),
           running: () => ns.isRunning(GANG, "home"), run: () => ns.run(GANG), act, memo: gangMemo }); }
       // combat-gang bootstrap (Slum Snakes): while gang.js says gym/crime, that replaces faction work (docs/specs/gang.md §4.4)
       const crimeMode = !!gangCrimeAction(parseJson(ns.read(GANG_STATUS)), Date.now());
