@@ -8,7 +8,7 @@
  * `values` holds only explicit overrides; everything else falls back to the schema default, so changing a default
  * here reaches every run that never touched that key.
  *
- * Field types: bool | number | int | enum | string | intList
+ * Field types: bool | number | int | enum | string | intList | stringList (optional `forbid`: entries that are rejected)
  * ui hints:    toggle | slider | number | select | text | list
  */
 
@@ -96,7 +96,21 @@ export const SCHEMA = [
   { key: "augs.freezeAfterRedPill", group: "augs", type: "bool", default: true, ui: "toggle", owner: "autopilot",
     label: "Install freeze after Red Pill", help: "Once The Red Pill is installed, hold every install while reaching w0r1d_d43m0n's requirement without one is faster than resetting." },
   { key: "augs.neuroFluxLast", group: "augs", type: "bool", default: true, ui: "toggle", owner: "autopilot",
-    label: "NeuroFlux last", help: "Owner rule: buy NeuroFlux Governor only after every other purchasable aug." },
+    label: "NeuroFlux last", help: "Fixed by owner rule: NeuroFlux is always bought last (informational; not configurable)." },
+  { key: "augs.order.sort", group: "augs", type: "enum", default: "rep", options: ["rep", "price", "cheap", "name"], ui: "select", owner: "autopilot",
+    label: "Aug order: sort", help: "Order for augs not pinned or last. rep = highest rep requirement first (the default rule). price = most expensive first (minimises the total under the x1.9 price ramp). cheap = cheapest first. name = alphabetical. Prerequisites always come first." },
+  { key: "augs.order.pinned", group: "augs", type: "stringList", default: [], ui: "list", owner: "autopilot",
+    label: "Aug order: pinned", help: "Bought first, in this order, when present in the batch. Exclude beats pinned. NeuroFlux is not orderable." },
+  { key: "augs.order.last", group: "augs", type: "stringList", default: [], ui: "list", owner: "autopilot",
+    label: "Aug order: last", help: "Bought after every other aug (still before NeuroFlux). Pinned and exclude beat last." },
+  { key: "augs.order.exclude", group: "augs", type: "stringList", default: [], ui: "list", owner: "autopilot", forbid: ["The Red Pill"],
+    label: "Aug order: excluded", help: "Never bought, and not counted toward the install trigger. An aug whose unowned prerequisite is excluded is blocked. The Red Pill cannot be excluded." },
+  { key: "augs.order.strict", group: "augs", type: "bool", default: false, ui: "toggle", owner: "autopilot",
+    label: "Aug order: strict", help: "Hold the purchase batch and the install while the highest-ranked pinned aug is not rep-met (gang faction excluded), up to augs.order.strictMaxWaitMin per aug." },
+  { key: "augs.order.strictMaxWaitMin", group: "augs", type: "int", default: 120, min: 0, max: 1440, ui: "number", owner: "autopilot",
+    label: "Strict wait cap (min)", help: "How long strict mode waits for one pinned aug before falling back to the soft order." },
+  { key: "augs.order.drivesWork", group: "augs", type: "bool", default: false, ui: "toggle", owner: "autopilot",
+    label: "Aug order drives work", help: "With work=auto-faction, work for the faction of the highest-ranked pinned aug that is not rep-met (never the gang faction)." },
 
   // ── Gang (docs/specs/gang.md) ──────────────────────────────────────────────
   { key: "gang.enabled", group: "gang", type: "bool", default: true, ui: "toggle", owner: "gang",
@@ -185,10 +199,32 @@ export function coerce(key, raw) {
       if (new Set(v).size !== v.length) return bad("entries must be unique");
       return { ok: true, value: [...v] };
     }
+    case "stringList": {
+      if (typeof v === "string") {
+        const s = v.trim();
+        if (s.startsWith("[")) { v = safeJson(s); if (!Array.isArray(v)) return bad("expected a JSON list of strings"); }
+        else v = s.split(s.includes("|") ? "|" : ",").map((x) => x.trim()).filter(Boolean);
+      }
+      if (!Array.isArray(v)) return bad("expected a list of strings");
+      if (v.length > STRING_LIST_MAX) return bad(`at most ${STRING_LIST_MAX} entries`);
+      const out = [];
+      for (const x of v) {
+        if (typeof x !== "string") return bad("expected a list of strings");
+        const t = x.trim();
+        if (!t) return bad("entries must not be empty");
+        if (t.length > STRING_ENTRY_MAX) return bad(`entries must be <= ${STRING_ENTRY_MAX} chars`);
+        if (t.startsWith("NeuroFlux")) return bad("NeuroFlux is always last; not orderable");
+        if ((f.forbid || []).includes(t)) return bad(`${t} is not allowed here`);
+        out.push(t);
+      }
+      if (new Set(out).size !== out.length) return bad("entries must be unique");
+      return { ok: true, value: out };
+    }
     default:
       return bad(`unsupported type ${f.type}`);
   }
 }
+const STRING_LIST_MAX = 200, STRING_ENTRY_MAX = 80;
 
 function safeJson(s) { try { return JSON.parse(s); } catch { return null; } }
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);

@@ -171,7 +171,7 @@ export function createViews(React, { schema = [], groups = [] } = {}) {
       case "slider": ctl = h(K.Slider, { value: Number(c.shown), min: c.min, max: c.max, step: c.step, ends: c.ends, onDraft: draft, onCommit: commit }); break;
       case "number": ctl = h(K.NumberInput, { value: c.shown, invalid: !!c.error, onDraft: draft, onCommit: commit }); break;
       case "select": ctl = h(K.Select, { value: c.shown, options: c.options || [], onChange: commit }); break;
-      case "list": ctl = h(K.ListInput, { value: c.shown, invalid: !!c.error, onCommit: commit }); break;
+      case "list": ctl = h(K.ListInput, { value: c.shown, invalid: !!c.error, onCommit: commit, mode: c.type === "stringList" ? "json" : undefined }); break;
       default: ctl = h(K.TextField, { value: c.shown, invalid: !!c.error, onDraft: draft, onCommit: commit });
     }
     return h("div", { "data-setting": c.key, "data-control-type": c.control, style: { display: "flex", flexDirection: "column", gap: SPACE.xs } },

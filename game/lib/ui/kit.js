@@ -97,14 +97,17 @@ export function createKit(React) {
       "data-accent": focused ? "focus" : undefined, style: inputStyle(focused, false, { width: 140 }) },
       options.map((o) => h("option", { key: o, value: o }, o)));
   }
-  function ListInput({ value = [], onCommit, invalid }) {
+  /** mode "json": name lists. Commits JSON.stringify(list) and adds one entry per click (names may contain commas). */
+  function ListInput({ value = [], onCommit, invalid, mode }) {
     const [draft, setDraft] = React.useState("");
     const list = Array.isArray(value) ? value : [];
-    const add = () => { const t = draft.trim(); if (!t) return; onCommit([...list, ...t.split(",").map((x) => x.trim()).filter(Boolean)].join(",")); setDraft(""); };
+    const json = mode === "json";
+    const out = (l) => (json ? JSON.stringify(l) : l.join(","));
+    const add = () => { const t = draft.trim(); if (!t) return; onCommit(out([...list, ...(json ? [t] : t.split(",").map((x) => x.trim()).filter(Boolean))])); setDraft(""); };
     return h("div", { "data-control": "list", style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: SPACE.xs } },
       list.length ? list.map((v, i) => h("span", { key: `${v}-${i}`, style: { display: "inline-flex", alignItems: "center", gap: SPACE.xs, padding: px(0, SPACE.xs),
         border: `1px solid ${COLOR.border}`, borderRadius: RADIUS.sm, background: COLOR.surface2, ...TYPE.mono } },
-        String(v), h("button", { type: "button", "aria-label": `remove ${v}`, onClick: () => onCommit(list.filter((_, j) => j !== i).join(",")),
+        String(v), h("button", { type: "button", "aria-label": `remove ${v}`, onClick: () => onCommit(out(list.filter((_, j) => j !== i))),
           style: { ...CONTROL.base, ...CONTROL.ghost, height: 16, padding: px(0, SPACE.xs), cursor: "pointer" } }, "×")))
         : h(Label, null, "empty"),
       h("input", { value: draft, placeholder: "add…", onChange: (e) => setDraft(e.target.value), onKeyDown: (e) => { stop(e); if (e.key === "Enter") add(); },
