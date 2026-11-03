@@ -131,8 +131,8 @@ export function createKit(React) {
       h("div", { key: `v${i}`, style: { ...TYPE.body, fontFamily: FONT.mono, wordBreak: "break-word" } }, v == null ? DASH : typeof v === "object" && !v.$$typeof && !v.type ? fmtValue(v) : v),
     ]));
 
-  /** Selectable table. Renders at most LAYOUT.maxRows rows (newest last is the caller's choice). */
-  const DataTable = memo(function DataTable({ columns, rows, rowKey = (r, i) => i, selectedId, onSelect, empty = "No rows", maxRows = LAYOUT.maxRows }) {
+  /** Selectable table. Renders at most LAYOUT.maxRows rows (newest last is the caller's choice). onRowKey(e, id): keys on a focused row. */
+  const DataTable = memo(function DataTable({ columns, rows, rowKey = (r, i) => i, selectedId, onSelect, onRowKey, empty = "No rows", maxRows = LAYOUT.maxRows }) {
     const all = rows || [];
     if (!all.length) return h(EmptyState, { title: empty });
     const shown = all.length > maxRows ? all.slice(all.length - maxRows) : all;
@@ -143,6 +143,7 @@ export function createKit(React) {
         h("tbody", null, shown.map((r, i) => {
           const id = rowKey(r, i), sel = selectedId != null && id === selectedId;
           return h("tr", { key: id, "data-row": id, "data-accent": sel ? "selected" : undefined, onClick: onSelect ? () => onSelect(sel ? null : id) : undefined,
+            tabIndex: onRowKey ? 0 : undefined, onKeyDown: onRowKey ? (e) => onRowKey(e, id) : undefined,
             style: { cursor: onSelect ? "pointer" : "default", background: sel ? COLOR.accentDim : "transparent", borderBottom: `1px solid ${COLOR.surface2}`, transition: TRANSITION } },
             columns.map((c) => h("td", { key: c.key, style: cell(c, c.mono ? { fontFamily: FONT.mono } : null) }, c.render ? c.render(r) : fmtValue(r[c.key]))));
         }))),
