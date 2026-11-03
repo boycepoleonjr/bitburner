@@ -2,12 +2,14 @@
  * lib/augplan.js — augmentation path planner + install timing + next-BitNode recommendation. PURE (no ns, no imports
  * beyond other pure libs): fed a data snapshot by agent/sl-plan.js, unit-tested in Node (test/augplan.js).
  *
- * Owner rules (always): prerequisites first; highest rep requirement first within a purchase batch (every purchase
- * multiplies later prices by ~1.9); NeuroFlux Governor LAST; faction favor >= augs.donateAtFavor (BN-scaled) => donate.
+ * Owner rules (always): prerequisites first; NeuroFlux Governor LAST; faction favor >= augs.donateAtFavor (BN-scaled) => donate.
+ * Default purchase order: highest rep requirement first (every purchase multiplies later prices by ~1.9). The owner can
+ * override it with augs.order.* (lib/augorder.js, docs/specs/aug-order.md); with no overrides the result is unchanged.
  *
  * Output shape is the data/aug-plan.txt contract in docs/specs/aug-planner.md (the dashboard depends on it).
  */
 import { flightProgress, phaseOf } from "lib/progress.js";
+import { orderAugs, cfgFromSettings, isDefaultCfg, projectedCost, DEFAULT_ORDER_CFG } from "lib/augorder.js";
 
 export const NFG = "NeuroFlux Governor";
 export const RED_PILL = "The Red Pill";
@@ -71,17 +73,9 @@ export function nextPurchaseCost(steps) {
   return st ? Math.round(fin(st.price)) : 0;
 }
 
-/** Owner purchase order: highest rep requirement first, each aug's unowned prerequisites immediately before it. */
+/** Default owner purchase order: highest rep requirement first (ties by name), each aug's unowned prerequisites immediately before it. */
 export function ownerOrder(names, augs, have = new Set()) {
-  const set = new Set(names), order = [];
-  const sorted = [...set].sort((a, b) => fin(augs[b]?.repReq) - fin(augs[a]?.repReq) || a.localeCompare(b));
-  const place = (a, depth = 0) => {
-    if (depth > 10 || have.has(a) || order.includes(a)) return;
-    for (const p of augs[a]?.prereqs || []) if (!have.has(p) && set.has(p)) place(p, depth + 1);
-    order.push(a);
-  };
-  for (const a of sorted) place(a);
-  return order;
+  return orderAugs(names, DEFAULT_ORDER_CFG, augs, have, { tie: "name" }).order;
 }
 
 /** Adds every unowned prerequisite (transitively) of `names` that `src` can supply. Unobtainable prereqs are returned too. */
@@ -134,7 +128,11 @@ export function plan(snap, s = {}) {
   const wdReady = !!snap.worldDaemon?.exists && !!snap.worldDaemon?.root && hack >= req.wdReq && installed.has(RED_PILL);
 
   // ── candidate selection ───────────────────────────────────────────────
-  const obtainable = [...src.keys()].filter((a) => !owned.has(a) && a !== NFG && augs[a]);
+  // augs.order.*: excluded augs are never obtained (The Red Pill cannot be excluded). A no-op with the default config.
+  const cfg = cfgFromSettings(s);
+  cfg.exclude = cfg.exclude.filter((a) => a !== RED_PILL);
+  const exclSet = new Set(cfg.exclude);
+  const obtainable = [...src.keys()].filter((a) => !owned.has(a) && a !== NFG && augs[a] && !exclSet.has(a));
   let chosen, why = new Map();
   if (goal === "complete") {
     chosen = obtainable;
@@ -158,9 +156,10 @@ export function plan(snap, s = {}) {
       }
     }
   }
-  const wp = withPrereqs(chosen, augs, owned, src);
+  const wp = withPrereqs(chosen, augs, owned, { has: (p) => src.has(p) && !exclSet.has(p) });
   for (const p of wp.names) if (!why.has(p)) why.set(p, "prerequisite");
-  const order = ownerOrder(wp.names, augs, owned);
+  const ord = orderAugs(wp.names, cfg, augs, owned, { tie: "name" });
+  const order = ord.order;
 
   // ── status + eta (simulated purchase sequence: price grows x PRICE_STEP x BN mult per buy) ──
   const step = PRICE_STEP;
@@ -197,6 +196,12 @@ export function plan(snap, s = {}) {
     steps.push({ order: steps.length + 1, aug: a, faction: sr?.faction ?? "", repReq, price: Math.round(price), prereqs: [...(info.prereqs || [])], status,
       etaMin: status === "buyable" ? 0 : etaMin == null ? null : Math.max(0.1, round1(etaMin)), why: w.replace(/^; /, "") });
   }
+  // augs whose unowned prerequisite is excluded can never be bought: shown as blocked with the reason
+  for (const b of ord.blocked) {
+    const info = augs[b.aug] || {};
+    steps.push({ order: steps.length + 1, aug: b.aug, faction: src.get(b.aug)?.faction ?? "", repReq: fin(info.repReq), price: Math.round(fin(info.price)), prereqs: [...(info.prereqs || [])],
+      status: "blocked", etaMin: null, why: `${why.get(b.aug) || ""}; blocked: prerequisite ${b.by} excluded (augs.order.exclude)`.replace(/^; /, "") });
+  }
   // The Red Pill when Daedalus hasn't invited us yet: shown as blocked so the path is complete
   if (goal === "destroy" && !redOwned && !src.has(RED_PILL) && augs[RED_PILL]) {
     const info = augs[RED_PILL] || {};
@@ -221,6 +226,16 @@ export function plan(snap, s = {}) {
     installAt: fin(s["augs.installAt"], 6), recoveryMin: fin(snap.recoveryMin, DEFAULT_RECOVERY_MIN), wdReady, redPillQueued: redOwned && !installed.has(RED_PILL),
     nfgHold: hack >= fin(s["augs.nfgHoldFrac"], 0.9) * req.wdReq });
 
+  // order block: the effective config, warnings, and what the currently buyable set costs in this order vs the default order
+  const buyNow = steps.filter((x) => x.status === "buyable" && x.aug !== NFG).map((x) => x.aug);
+  const orderInfo = {
+    sort: cfg.sort, pinned: cfg.pinned, last: cfg.last, excluded: cfg.exclude, strict: cfg.strict, drivesWork: cfg.drivesWork,
+    warnings: ord.warnings, blocked: ord.blocked,
+    projectedCost: Math.round(projectedCost(orderAugs(buyNow, cfg, augs, owned, { tie: "name" }).order, augs, step)),
+    defaultProjectedCost: Math.round(projectedCost(orderAugs(buyNow, DEFAULT_ORDER_CFG, augs, owned, { tie: "name" }).order, augs, step)),
+    isDefault: isDefaultCfg(cfg),
+  };
+
   const red = augs[RED_PILL], redSrc = src.get(RED_PILL) || snap.factions?.Daedalus;
   return {
     t, bn: fin(snap.bn), goal, phase, progress: round3(progress.progress),
@@ -228,6 +243,7 @@ export function plan(snap, s = {}) {
     redPill: { owned: redOwned, repReq: fin(red?.repReq, 2.5e6), rep: fin(redSrc?.rep) },
     worldDaemon: { req: req.wdReq, hack, ready: wdReady },
     steps,
+    order: orderInfo,
     nextPurchaseCost: nextPurchaseCost(steps),
     install,
     node: snap.node || { ready: wdReady, autoSelect: !!s["node.autoSelect"], autoDestroy: !!s["node.autoDestroy"], recommended: recommendNextBn(snap, s), pending: { id: "", stage: "none", detail: "" } },
