@@ -20,6 +20,7 @@ export const SLOW_FILES = Object.freeze({
   audit: "data/audit.txt",
   install: "data/install-log.txt",
   settingsLog: "data/settings-log.txt",
+  augCatalog: "data/aug-catalog.txt", // read only while Augmentations -> Order is open
 });
 /** Files offered in the Raw view. data/telemetry.txt (~19 MB) is deliberately absent: the UI never reads it. */
 export const RAW_FILES = Object.freeze([

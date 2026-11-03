@@ -20,7 +20,7 @@ Tunables are spread across `lib/config.js` DEFAULTS + `data/config-overrides.txt
   - A corrupt file is never overwritten automatically (409, or `ok:false` in-game).
 
 ## Field metadata
-`key`, `group`, `type` (`bool|number|int|enum|string|intList`), `default`, `min`/`max`/`step`, `options`, `ends` (slider end labels), `label`, `help`, `ui` (`toggle|slider|number|select|text|list`), `owner` (the script that reads it). The dashboard renders its settings pane from this metadata alone.
+`key`, `group`, `type` (`bool|number|int|enum|string|intList|stringList`), `default`, `min`/`max`/`step`, `options`, `ends` (slider end labels), `label`, `help`, `ui` (`toggle|slider|number|select|text|list`), `owner` (the script that reads it). The dashboard renders its settings pane from this metadata alone.
 
 ## Initial keys (owner-mandated defaults in bold)
 | Group | Keys |
@@ -28,8 +28,17 @@ Tunables are spread across `lib/config.js` DEFAULTS + `data/config-overrides.txt
 | BitNode | **node.autoSelect=false**, **node.autoDestroy=false**, node.backupBeforeDestroy=true, node.order=[] |
 | Strategy (0 = money, 1 = faction rep) | **strategy.early=0** (o--), **strategy.mid=0.5** (-o-), **strategy.late=1** (--o), strategy.phase.midAt=0.34, strategy.phase.lateAt=0.9 (phase = fl1ght.exe progress) |
 | RAM | ram.manager.enabled, ram.homeReserveGb=128, ram.cloud.*, ram.share.enabled, ram.xp.mode=auto, ram.xp.target, ram.targets.max=0, ram.batches.max=0, ram.resizeThreshold=0.1 |
-| Augmentations | augs.autoInstall, augs.installPolicy=eta, augs.installAt=6, augs.planner.goal=destroy, augs.donateAtFavor=150, augs.neuroFluxLast=true |
+| Augmentations | augs.autoInstall, augs.installPolicy=eta, augs.installAt=6, augs.planner.goal=destroy, augs.donateAtFavor=150, augs.neuroFluxLast=true (informational), augs.order.* (sort=rep, pinned/last/exclude=[], strict=false, strictMaxWaitMin=120, drivesWork=false; docs/specs/aug-order.md) |
 | Dashboard | ui.refreshMs=1000, ui.historyMinutes=360 |
+
+### stringList (augs.order.pinned / last / exclude)
+Accepted input: an array; a string starting with `[` (JSON); otherwise a string split on `|` if it contains one, else on `,`. Entries are trimmed, at most 80 characters, unique, at most 200. Any entry starting with `NeuroFlux` is rejected, and `augs.order.exclude` also rejects `The Red Pill` (schema field `forbid`). Unknown aug names are accepted and shown as warnings in `data/aug-plan.txt` (`order.warnings`) and the dashboard.
+```
+bb settings set 'augs.order.pinned=["The Red Pill","BitRunners Neurolink"]'
+bb settings set augs.order.sort=price
+bb settings unset augs.order.sort augs.order.pinned augs.order.last augs.order.exclude augs.order.strict augs.order.strictMaxWaitMin augs.order.drivesWork
+```
+The last command restores the default order exactly (rollback).
 
 Adding a setting means adding one schema entry (the test suite checks its metadata and default) and reading it with `readSettings(ns)[key]` in the owning script.
 

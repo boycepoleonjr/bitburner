@@ -6,7 +6,7 @@
  * (which remounts React) loses nothing.
  */
 export const INITIAL_UI = Object.freeze({
-  view: "overview", sel: {}, drafts: {}, errors: {}, logTab: "agent", rawFile: "data/telemetry-latest.txt", confirmReset: false, expanded: {},
+  view: "overview", augsTab: "path", sel: {}, drafts: {}, errors: {}, logTab: "agent", rawFile: "data/telemetry-latest.txt", confirmReset: false, expanded: {},
 });
 
 const sameJson = (a, b) => { try { return JSON.stringify(a) === JSON.stringify(b); } catch { return false; } };

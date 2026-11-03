@@ -13,6 +13,7 @@
 import { readSettings } from "lib/settings.js";
 import { decideNode, parseJson, REQUEST_FILE, ACK_FILE, DESTROY_SCRIPT, NO_RAM } from "lib/nodectl.js";
 import { gangPossible, gangFactionFromStatus, gangCrimeAction } from "lib/gangplan.js";
+import { orderAugs, cfgFromSettings, isDefaultCfg, pinnedBlocker, strictDecision, parseStrictState } from "lib/augorder.js";
 import { xpStarveCheck } from "lib/ramwatch.js";
 const NEUROFLUX = "NeuroFlux Governor";
 export const PLAN_SCRIPT = "agent/sl-plan.js", PLAN_FILE = "/data/aug-plan.txt";
@@ -31,6 +32,22 @@ export function etaGate({ why, countWhy, buyable, policy, plan, now }) {
   if (why && why === countWhy && nx.etaMin !== 0) return { why: null, held: nx.reason || "eta: wait" };
   if (!why && nx.etaMin === 0 && buyable >= 1 && /^eta:/.test(nx.reason || "")) return { why: nx.reason, held: null };
   return { why, held: null };
+}
+/** The pre-augs.order purchase order: highest rep requirement first (ties in discovery order), each aug's unowned prereqs
+ * IMMEDIATELY before it (fix 2026-09-27: Gen II was skipped because Gen I was bought after it and the x1.9 price ramp made
+ * Gen II unaffordable), depth cap 5, only prereqs that are candidates themselves. Kept as the fallback when lib/augorder.js
+ * throws, and as the golden reference. `cands` = [{a, f, rr}] in discovery order. Exported for tests. */
+export function legacyOrder(cands, prereqOf, have) {
+  const uniq = [...new Map(cands.map((x) => [x.a, x])).values()].sort((x, y) => y.rr - x.rr);
+  const byName = new Map(uniq.map((x) => [x.a, x]));
+  const order = [];
+  const place = (x, depth = 0) => {
+    if (depth > 5 || have.has(x.a) || order.includes(x)) return;
+    for (const p of prereqOf(x.a)) if (!have.has(p) && byName.has(p)) place(byName.get(p), depth + 1);
+    order.push(x);
+  };
+  for (const x of uniq) place(x);
+  return order;
 }
 /** RAM-manager detector step (lib/ramwatch.js): pushes the "xp starved by share > 60 min" flag into `flags`; returns the new since-time. Exported for tests. */
 export function xpStarveStep(sinceMs, statusRaw, now, flags) {
@@ -179,25 +196,36 @@ export async function main(ns) {
   const c0 = () => cfg();
   const donateAt = (c) => donateFloor(ns.getFavorToDonate(), c.donateFavor);
   let lastFlags = "", xpStarveSince = 0;
-  // Buy every rep-met aug, highest rep requirement first (respecting prereqs), then NeuroFlux until broke. Returns names bought.
+  const ORDER_STATE = "/data/aug-order-state.txt";   // strict-mode state for this install cycle (lib/augorder.js parseStrictState)
+  const orderFlags = [];                               // flags raised inside buyBatch / the aug report; merged into the loop's flags
+  let strictSt = null, drivesLogged = "";
+  const strictState = () => { const reset = ns.getResetInfo().lastAugReset; if (!strictSt || strictSt.reset !== reset) strictSt = parseStrictState(ns.read(ORDER_STATE), reset); return strictSt; };
+  /** Joined factions that sell `a`, with their rep and the aug's rep requirement (for lib/augorder.js pinnedBlocker). */
+  const sellersOf = (a) => ns.getPlayer().factions.filter((f) => S.getAugmentationsFromFaction(f).includes(a)).map((f) => ({ faction: f, rep: S.getFactionRep(f), repReq: S.getAugmentationRepReq(a) }));
+  /** augs.order.* ordering of unique candidates [{a, ...}] (discovery order). Falls back to the legacy order if lib/augorder.js throws. */
+  const orderCands = (uniq, ocfg, have, cands) => {
+    try {
+      const info = {};
+      for (const x of uniq) info[x.a] = { repReq: x.rr, price: S.getAugmentationPrice(x.a), prereqs: S.getAugmentationPrereq(x.a) };
+      const by = new Map(uniq.map((x) => [x.a, x]));
+      return orderAugs(uniq.map((x) => x.a), ocfg, info, have, { tie: "input" }).order.map((a) => by.get(a));
+    } catch (e) {
+      audit("orderFallback", { err: String(e) }); orderFlags.push("aug order fallback: " + e);
+      return legacyOrder(cands, (a) => S.getAugmentationPrereq(a), have);
+    }
+  };
+  // Buy every rep-met aug in the augs.order.* order (default: highest rep requirement first, prereqs immediately before),
+  // then NeuroFlux until broke. Returns names bought. Settings are read once per batch.
   const buyBatch = (owned) => {
     const out = [], have = new Set(owned);
+    const sAll = readSettings(ns), cb = withSettings(cfgLegacy(), sAll), ocfg = cfgFromSettings(sAll), exclude = new Set(ocfg.exclude);
     const cands = [];
     for (const f of ns.getPlayer().factions) {
       const rep = S.getFactionRep(f);
-      for (const a of S.getAugmentationsFromFaction(f)) if (!have.has(a) && !a.startsWith("NeuroFlux") && !(c0().skipHacknetAugs && /hacknet/i.test(a)) && S.getAugmentationRepReq(a) <= rep) cands.push({ a, f, rr: S.getAugmentationRepReq(a) });
+      for (const a of S.getAugmentationsFromFaction(f)) if (!have.has(a) && !a.startsWith("NeuroFlux") && !(cb.skipHacknetAugs && /hacknet/i.test(a)) && !exclude.has(a) && S.getAugmentationRepReq(a) <= rep) cands.push({ a, f, rr: S.getAugmentationRepReq(a) });
     }
-    const uniq = [...new Map(cands.map((x) => [x.a, x])).values()].sort((x, y) => y.rr - x.rr);
-    const byName = new Map(uniq.map((x) => [x.a, x]));
-    // Order: highest rep req first, but each aug's unowned prereqs go IMMEDIATELY before it (fix 2026-09-27:
-    // Gen II was skipped because Gen I was bought after it and the x1.9 price ramp made Gen II unaffordable).
-    const order = [];
-    const place = (x, depth = 0) => {
-      if (depth > 5 || have.has(x.a) || order.includes(x)) return;
-      for (const p of S.getAugmentationPrereq(x.a)) if (!have.has(p) && byName.has(p)) place(byName.get(p), depth + 1);
-      order.push(x);
-    };
-    for (const x of uniq) place(x);
+    const uniq = [...new Map(cands.map((x) => [x.a, x])).values()]; // discovery order; the later faction wins for an aug sold twice (as before)
+    const order = orderCands(uniq, ocfg, have, cands);
     const plan = order.map((x) => ({ a: x.a, f: x.f, rr: x.rr, price: S.getAugmentationPrice(x.a) }));
     for (const x of order) {
       if (have.has(x.a) || S.getAugmentationPrereq(x.a).some((p) => !have.has(p))) { audit("skip", { a: x.a, why: "prereq missing" }); continue; }
@@ -205,11 +233,10 @@ export async function main(ns) {
       if (money() >= price && S.purchaseAugmentation(x.f, x.a)) { have.add(x.a); out.push(x.a); audit("buy", { a: x.a, f: x.f, rr: x.rr, price }); }
       else audit("skip", { a: x.a, why: "unaffordable", price, money: money() });
     }
-    audit("plan", { plan });
+    audit("plan", { plan, cfg: isDefaultCfg(ocfg) ? "default" : ocfg });
     // NeuroFlux last, from the faction with the most rep that sells it
     const nf = ns.getPlayer().factions.filter((f) => S.getAugmentationsFromFaction(f).some((a) => a.startsWith("NeuroFlux"))).sort((a, b) => S.getFactionRep(b) - S.getFactionRep(a))[0];
     if (nf) { const name = S.getAugmentationsFromFaction(nf).find((a) => a.startsWith("NeuroFlux"));
-      const cb = c0();
       // rep per $ donated: starts at the documented 1e-6 x faction_rep, then uses what each donation actually
       // yielded (BitNode multipliers make the real rate lower; 2026-10-02 the formula under-donated every time).
       let rate = ns.getPlayer().mults.faction_rep / 1e6;
@@ -240,7 +267,7 @@ export async function main(ns) {
     let augs = { buyable: 0, top: [], redPill: false };
     try {
       ensureRpc({ running: () => ns.isRunning(RPC, "home"), hasConfig: () => ns.fileExists(RPC_CFG, "home"), run: () => ns.run(RPC), act, memo: rpcMemo });
-      const gangSettings = readSettings(ns), gangF = gangFac();
+      const gangSettings = readSettings(ns), gangF = gangFac(), ocfg = cfgFromSettings(gangSettings);
       { const ri = ns.getResetInfo();
         ensureGang({ enabled: gangSettings["gang.enabled"] !== false, possible: gangPossible({ bn: ri.currentNode, inGang: ns.gang.inGang(), ownedSF: ri.ownedSF, karma: ns.heart.break() }),
           running: () => ns.isRunning(GANG, "home"), run: () => ns.run(GANG), act, memo: gangMemo }); }
@@ -331,6 +358,13 @@ export async function main(ns) {
             // work for the first faction in factionPriority whose aug list isn't rep-complete (tie: smallest gap)
             const owned0 = new Set(S.getOwnedAugmentations(true));
             let best = null;
+            if (ocfg.drivesWork) { // augs.order.drivesWork: the highest-ranked pinned aug that is not rep-met decides (never the gang faction)
+              const t = pinnedBlocker({ pinned: ocfg.pinned, exclude: ocfg.exclude, owned: owned0, gangFaction: gangF, sellers: sellersOf });
+              if (t) {
+                best = { f: t.faction, gap: t.gap, rank: -1 };
+                if (drivesLogged !== `${t.faction}|${t.aug}`) { drivesLogged = `${t.faction}|${t.aug}`; act(`working for ${t.faction} (pinned aug ${t.aug})`); }
+              } else drivesLogged = "";
+            }
             for (const f of workable(ns.getPlayer().factions, gangF)) {
               const rep = S.getFactionRep(f);
               const need = Math.max(0, ...S.getAugmentationsFromFaction(f).filter((a) => !owned0.has(a) && !a.startsWith("NeuroFlux")).map((a) => S.getAugmentationRepReq(a)));
@@ -360,7 +394,7 @@ export async function main(ns) {
           const rep = S.getFactionRep(f);
           let nextRep = Infinity;
           for (const a of S.getAugmentationsFromFaction(f)) {
-            if (owned.has(a) || a.startsWith("NeuroFlux") || (c.skipHacknetAugs && /hacknet/i.test(a))) continue;
+            if (owned.has(a) || a.startsWith("NeuroFlux") || (c.skipHacknetAugs && /hacknet/i.test(a)) || ocfg.exclude.includes(a)) continue; // excluded augs never count toward the install trigger
             const rr = S.getAugmentationRepReq(a), price = S.getAugmentationPrice(a);
             if (rep >= rr && m >= price) buyable.push({ a, f, rr, price });
             else if (rr > rep) nextRep = Math.min(nextRep, rr);
@@ -368,7 +402,8 @@ export async function main(ns) {
           if (isFinite(nextRep)) next.push({ kind: "rep", faction: f, target: nextRep, label: `next aug rep @ ${f}` });
         }
         if (buyable.length) {
-          const uniq = [...new Map(buyable.map((b) => [b.a, b])).values()].sort((x, y) => y.rr - x.rr);
+          const uniq0 = [...new Map(buyable.map((b) => [b.a, b])).values()];
+          const uniq = orderCands(uniq0, ocfg, owned, uniq0);                         // augs.top follows the buy order (fallback: legacy)
           augs = { buyable: uniq.length, top: uniq.slice(0, 5).map((b) => `${b.a}@${b.f}`), redPill: uniq.some((b) => b.a === "The Red Pill") };
         }
         // 7. Donations: at favor >= donateFavor, buy rep for the current work faction's remaining aug gap
@@ -423,6 +458,20 @@ export async function main(ns) {
             } else if (freezeLogged) { freezeLogged = null; audit("installFreeze", { why, hack, wdReq, levels, ...fz, freeze: false }); }
           }
           if (gate.held && gate.held !== etaHeldLogged) { etaHeldLogged = gate.held; audit("etaHold", { countWhy, reason: gate.held }); }
+          // augs.order.strict: hold the whole batch and the install while the highest-ranked pinned aug is not rep-met (cap per aug).
+          // Checked before the liquidation branch so stocks are not liquidated just to be re-enabled next loop.
+          if (why && ocfg.strict) {
+            try {
+              const sd = strictDecision(strictState(), { pinned: ocfg.pinned, exclude: ocfg.exclude, owned, gangFaction: gangF, sellers: sellersOf }, Date.now(), ocfg.strictMaxWaitMin);
+              if (JSON.stringify(sd.state) !== JSON.stringify(strictSt)) { strictSt = sd.state; ns.write(ORDER_STATE, JSON.stringify(sd.state), "w"); }
+              for (const ev of sd.events) { audit(ev.kind, ev.data); if (ev.kind === "strictHold") act(`install held (${why}): strict order waits for pinned aug ${ev.data.blocker} (rep gap ${ev.data.gap} at ${ev.data.faction}, cap ${ev.data.capMin}m)`); }
+              if (sd.hold) {
+                why = null;
+                const cfgS = (() => { try { return JSON.parse(ns.read(OVR) || "{}"); } catch { return {}; } })();
+                if (cfgS.stocks && cfgS.stocks.liquidate) { cfgS.stocks = { ...cfgS.stocks, liquidate: false }; ns.write(OVR, JSON.stringify(cfgS), "w"); liquidatedByMe = false; act("strict order hold: stock trading re-enabled"); }
+              }
+            } catch (e) { flags.push("strict order check failed (buying continues): " + e); }
+          }
           if (why) {
             const cfgO = (() => { try { return JSON.parse(ns.read(OVR) || "{}"); } catch { return {}; } })();
             if (!(cfgO.stocks && cfgO.stocks.liquidate)) {
@@ -456,6 +505,7 @@ export async function main(ns) {
         }
       }
     } catch (e) { flags.push("autopilot error: " + e); }
+    flags.push(...orderFlags.splice(0));
     // RAM manager detector: hack level is the bottleneck but xp is starved by share for > 60 min (lib/ramwatch.js; no new ns calls)
     try { xpStarveSince = xpStarveStep(xpStarveSince, ns.read("/data/ram-status.txt"), Date.now(), flags); } catch { }
     // Aug planner snapshot (16x Singularity calls live in agent/sl-plan.js, not here): every 4th loop, if home has room.

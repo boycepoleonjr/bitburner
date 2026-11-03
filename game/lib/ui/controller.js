@@ -3,13 +3,14 @@
  *
  * Read budget per tick (hot path): telemetry-latest, telemetry-ring, ram-status, aug-plan, autopilot-status, settings.
  * Slow path (every ui.slowRefreshMs, or on "Refresh now"): pred2 tail always (destroy ETA); log tails only while Logs is
- * open; settings-log only while Settings/Node is open; the Raw file only while Raw is open. data/telemetry.txt: never.
+ * open; settings-log only while Settings/Node is open; aug-catalog only while Augmentations -> Order is open; the Raw file only while Raw is open. data/telemetry.txt: never.
  * Every parse is memoized by file content, so unchanged files produce the same objects and the store notifies nobody.
  * Only sync ns calls (read/write via lib/settings.js) are made from UI event handlers, and only while `alive`.
  */
 import { HOT_FILES, SLOW_FILES, BIG_FILE_BYTES, clampMs, tailLines, parseJson, parseJsonl, parseLogLine, createMemo } from "../data-sources.js";
 import { computeKpis } from "../kpi.js";
 import { readSettings, writeSettings } from "lib/settings.js";
+import { toPatch, ORDER_KEYS } from "./augorder-model.js";
 
 export const TAIL_LINES_DEFAULT = 200;
 
@@ -65,6 +66,7 @@ export function createController(ns, store, { now = () => Date.now(), clock = ()
         for (const k of ["agent", "events", "audit", "install"]) logs[k] = memo(`log:${k}`, rd(SLOW_FILES[k]), (x) => tailLines(x, nLines).map(parseLogLine));
         patch.logs = logs;
       }
+      if (view === "augs" && ui().augsTab === "order") patch.augCatalog = memo("augCatalog", rd(SLOW_FILES.augCatalog), parseJson);
       if (view === "settings" || view === "node") patch.settingsLog = memo("settingsLog", rd(SLOW_FILES.settingsLog), (x) => parseJsonl(tailLines(x, nLines)).rows);
     }
     const rawFile = ui().rawFile;
@@ -83,7 +85,7 @@ export function createController(ns, store, { now = () => Date.now(), clock = ()
   const afterWrite = () => store.set({ settings: settingsSlice() });
 
   const actions = {
-    go: (view) => { store.ui({ view, confirmReset: false }); st.wake = true; },
+    go: (view) => { store.ui({ view, confirmReset: false }); if (view === "augs" && ui().augsTab === "order") st.forceSlow = true; st.wake = true; },
     select: sel,
     clearSelection: () => sel(ui().view, null),
     setUi: (p) => store.ui(p),
@@ -111,6 +113,24 @@ export function createController(ns, store, { now = () => Date.now(), clock = ()
       const r = keys.length ? writeSettings(ns, { unset: keys }, "ui") : { ok: true, changed: [] };
       store.ui({ confirmReset: false, drafts: {}, errors: {} });
       afterWrite();
+      return r;
+    },
+    /** Augmentations tabs: opening Order loads the catalog at once (it is otherwise only read in the slow path). */
+    setAugsTab: (tab) => { store.ui({ augsTab: tab === "order" ? "order" : "path" }); if (tab === "order") { st.forceSlow = true; } st.wake = true; },
+    /** Apply the Order tab's draft: ONE writeSettings call (actor "ui"); defaults go to `unset`. Errors stay on the draft. */
+    applyAugOrder(draft) {
+      if (!st.alive) return { ok: false, errors: ["dashboard stopped"] };
+      let r;
+      try { r = writeSettings(ns, toPatch(draft), "ui"); } catch (e) { r = { ok: false, errors: [String(e && e.message || e)] }; }
+      if (r.ok) { setErr("augs.order", null); afterWrite(); } else setErr("augs.order", (r.errors || ["invalid"]).join("; "));
+      return r;
+    },
+    /** Reset to default: unset exactly ORDER_KEYS in one call. */
+    resetAugOrder() {
+      if (!st.alive) return { ok: false, errors: ["dashboard stopped"] };
+      let r;
+      try { r = writeSettings(ns, { unset: [...ORDER_KEYS] }, "ui"); } catch (e) { r = { ok: false, errors: [String(e && e.message || e)] }; }
+      if (r.ok) { setErr("augs.order", null); afterWrite(); } else setErr("augs.order", (r.errors || ["invalid"]).join("; "));
       return r;
     },
     refresh: () => { st.forceSlow = true; st.rawKey = null; st.wake = true; },

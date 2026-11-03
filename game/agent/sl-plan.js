@@ -5,6 +5,7 @@
  * @param {NS} ns */
 import { readSettings } from "lib/settings.js";
 import { plan, RED_PILL } from "lib/augplan.js";
+import { buildCatalog, sameCatalog } from "lib/augorder.js";
 import { decideNode, parseJson, REQUEST_FILE, ACK_FILE } from "lib/nodectl.js";
 
 export const FACTIONS = ["CyberSec", "Tian Di Hui", "Netburners", "Sector-12", "Chongqing", "New Tokyo", "Ishima", "Aevum", "Volhaven",
@@ -13,6 +14,7 @@ export const FACTIONS = ["CyberSec", "Tian Di Hui", "Netburners", "Sector-12", "
   "Silhouette", "Speakers for the Dead", "The Dark Army", "The Syndicate", "The Covenant", "Daedalus", "Illuminati"];
 /** FACTIONS plus the factions the player has joined, de-duplicated (a gang faction not in the list is still planned). Exported for tests. */
 export const factionUnion = (listed, joined) => [...new Set([...listed, ...(joined || [])])];
+const CATALOG = "/data/aug-catalog.txt"; // every aug of every known faction, for the dashboard's Order tab (no extra game calls)
 const PLAN = "/data/aug-plan.txt", STATE = "/data/aug-plan-state.txt", INSTALLS = "/data/install-log.txt";
 
 /** Recovery heuristic: 25% of the median install cycle (last 5 installs), clamped 15..240 min; 60 with < 2 installs. */
@@ -55,6 +57,7 @@ export async function main(ns) {
   snap.node = decideNode({ ready, bn: snap.bn, sourceFiles, now, request: parseJson(ns.read(REQUEST_FILE)), ack: parseJson(ns.read(ACK_FILE)) }, s).node;
   const out = plan(snap, s);
   ns.write(PLAN, JSON.stringify(out), "w");
+  { const augCat = buildCatalog(snap); if (!sameCatalog(ns.read(CATALOG), augCat)) ns.write(CATALOG, JSON.stringify({ t: now, ...augCat }), "w"); } // only when it changed
   // Per-BitNode Daedalus requirements for the daemon's RAM manager (lib/ramplan.js daedalusReqs), which can't afford
   // getBitNodeMultipliers itself.
   if (out.daedalus) ns.write("/data/daedalus-req.txt", JSON.stringify({ t: out.t, augs: out.daedalus.augsReq, money: out.daedalus.moneyReq, hack: out.daedalus.hackReq }), "w");

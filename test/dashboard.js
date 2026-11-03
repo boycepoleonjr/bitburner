@@ -9,6 +9,9 @@ import { SPACE_SCALE, RADIUS, TYPE_SIZES, ACCENT_VALUES } from "../game/lib/ui/t
 import { CONTROL_FOR_UI } from "../game/lib/ui/settings-model.js";
 import { createStore } from "../game/lib/ui/store.js";
 import { NOW, latest, ring, autopilot, ramStatus, augPlan, pred2Tail } from "./fixtures/dashboard-data.js";
+import { fresh } from "./helpers/aug-cases.js";
+import * as MODEL from "../game/lib/ui/augorder-model.js";
+import { buildCatalog, ORDER_KEYS } from "../game/lib/augorder.js";
 
 const { createViews, SECTIONS } = await importGame("lib/ui/views.js");
 const { createController } = await importGame("lib/ui/controller.js");
@@ -307,6 +310,216 @@ test("static: every sleep in the dashboard loop is >= 250 ms (literal or clampMs
       assert.ok(/^clampMs\(/.test(arg) || Number(arg) >= 250, `${f}: sleep(${arg})`);
     }
   }
+});
+
+// ---------------- Augmentations → Order (docs/specs/aug-order.md) ----------------
+const CATALOG = () => ({ t: NOW, ...buildCatalog(fresh()) });
+const catFiles = (extra = {}) => files({ "data/aug-catalog.txt": JSON.stringify(CATALOG()), ...extra });
+const logLines = (H) => (H.ns.files[SETTINGS_LOG] || "").split("\n").filter(Boolean);
+const emptyDraft = () => MODEL.draftFromSettings({});
+const orderView = (H) => { H.store.ui({ augsTab: "order" }); return H.view("augs", { augsTab: "order" }); };
+test("augs: Path is the default tab; the tab switch is a store action and Order is a second tab", () => {
+  const H = harness({ fileSet: catFiles() });
+  const t = H.view("augs");
+  assert.equal(H.store.get("ui").augsTab, "path");
+  const tabs = all(t, (n) => n.props.role === "tab");
+  assert.deepEqual(tabs.map((n) => text(n)), ["Path", "Order"]);
+  assert.equal(tabs.filter((n) => n.props["aria-selected"]).map((n) => text(n)).join(), "Path");
+  assert.match(text(t), /ordered purchase \/ install plan/);
+  H.ctl.actions.setAugsTab("order");
+  assert.equal(H.store.get("ui").augsTab, "order");
+  H.ctl.actions.setAugsTab("bogus");
+  assert.equal(H.store.get("ui").augsTab, "path");
+});
+test("augs Order tab: renders with no catalog (empty state, controls still there) and with a full catalog", () => {
+  const none = harness();
+  let t = orderView(none);
+  assert.equal(all(t, (n) => n.type === "h1").length, 1);
+  assert.match(text(t), /data\/aug-catalog\.txt not found/);
+  assert.equal(all(t, (n) => n.props["data-kind"] === "primary").length, 1, "Apply order is the single primary, in the header");
+  const full = harness({ fileSet: catFiles() });
+  t = orderView(full);
+  const rows = all(t, (n) => n.type === "tr" && n.props["data-row"]);
+  assert.equal(rows.length, Object.keys(fresh().augs).filter((a) => !a.startsWith("NeuroFlux")).length);
+  assert.match(text(t), /Apply order/); assert.match(text(t), /Discard/); assert.match(text(t), /Reset to default/); assert.match(text(t), /no changes/);
+  assert.match(text(t), /NeuroFlux Governor is always bought last/);
+  const header = all(t, (n) => n.type === "header")[0];
+  assert.ok([...walk(header)].some((n) => n.props["data-kind"] === "primary"), "primary lives in the header");
+  assert.ok(!rows.some((r) => r.props["data-row"].startsWith("NeuroFlux")), "NeuroFlux is not orderable, so not listed");
+  for (const r of rows) assert.equal(r.props.tabIndex, 0, "rows are focusable for k/j/p/x");
+});
+test("augs Order tab: design rules hold (spacing scale, radii, type sizes, accent only on primary/selected/focus)", () => {
+  const H = harness({ fileSet: catFiles() });
+  for (const t of [orderView(H), orderView(harness())]) for (const n of walk(t)) for (const [k, v] of Object.entries(n.props.style || {})) {
+    if (SPACING.test(k)) for (const x of nums(v)) assert.ok(SPACE_SCALE.includes(x), `${k}=${v} not on the spacing scale`);
+    if (k === "borderRadius") assert.ok(Object.values(RADIUS).includes(v), `radius ${v}`);
+    if (k === "fontSize") assert.ok(TYPE_SIZES.includes(v), `fontSize ${v}`);
+    assert.ok(!/shadow|^animation/i.test(k), k);
+    if (typeof v === "string" && ACCENT_VALUES.some((c) => v.includes(c))) assert.ok(["primary", "selected", "focus"].includes(n.props["data-accent"]), `accent on <${n.type}> ${k}`);
+  }
+});
+test("augs Order tab: The Red Pill's Exclude button is disabled with a tooltip; others are enabled", () => {
+  const H = harness({ fileSet: catFiles() });
+  const t = orderView(H);
+  const ex = all(t, (n) => n.type === "button" && text(n) === "Exclude");
+  assert.ok(ex.length > 5);
+  const dis = ex.filter((n) => n.props.disabled);
+  assert.equal(dis.length, 1);
+  assert.equal(dis[0].props.title, "The Red Pill cannot be excluded");
+  const row = all(t, (n) => n.type === "tr" && n.props["data-row"] === "The Red Pill")[0];
+  assert.ok([...walk(row)].includes(dis[0]), "it sits in The Red Pill's row");
+});
+test("augs Order tab: row keys call stopPropagation (game hotkeys stay out) but let Escape through", () => {
+  const H = harness({ fileSet: catFiles() });
+  const row = all(orderView(H), (n) => n.type === "tr" && n.props["data-row"] === "BitWire")[0];
+  let stopped = 0;
+  for (const key of ["j", "k", "p", "x", "q"]) row.props.onKeyDown({ key, stopPropagation: () => stopped++ });
+  assert.equal(stopped, 5);
+  row.props.onKeyDown({ key: "Escape", stopPropagation: () => stopped++ });
+  assert.equal(stopped, 5);
+});
+test("augs Order tab: the catalog is read only while the Order tab is open (plus once on opening it)", () => {
+  const H = harness({ fileSet: catFiles() });
+  const n = () => H.reads["data/aug-catalog.txt"] || 0;
+  H.view("overview"); H.view("augs"); H.view("settings"); H.view("raw");
+  assert.equal(n(), 0, "not read while another view/tab is open");
+  H.store.ui({ view: "augs" });
+  H.ctl.actions.setAugsTab("order"); H.ctl.tick();
+  assert.equal(n(), 1, "read immediately on opening the tab");
+  assert.equal(H.store.get("augCatalog").augs.length, CATALOG().augs.length);
+  H.ctl.tick(); H.ctl.tick();
+  assert.equal(n(), 1, "ticks inside the slow interval do not re-read");
+  H.ctl.actions.refresh(); H.ctl.tick();
+  assert.equal(n(), 2, "slow path re-reads while the tab is open");
+  H.store.ui({ augsTab: "path" }); H.ctl.actions.refresh(); H.ctl.tick();
+  H.view("overview"); H.ctl.actions.refresh(); H.ctl.tick();
+  assert.equal(n(), 2, "not read after leaving the tab or the view");
+  H.ctl.actions.go("augs"); // augsTab was reset above, so still path
+  H.store.ui({ augsTab: "order" }); H.ctl.actions.go("augs"); H.ctl.tick();
+  assert.equal(n(), 3, "re-opening the view on the Order tab loads it at once");
+  const same = H.store.get("augCatalog"); H.ctl.actions.refresh(); H.ctl.tick();
+  assert.equal(H.store.get("augCatalog"), same, "memoized by content: same object when the file is unchanged");
+});
+test("augs Order tab: Apply makes ONE writeSettings call (one log line, actor ui); values equal to the default are unset", () => {
+  const H = harness({ fileSet: catFiles() });
+  const a = H.ctl.actions;
+  assert.equal(a.saveSetting("augs.order.sort", "price").ok, true);
+  assert.equal(logLines(H).length, 1);
+  const draft = { ...emptyDraft(), sort: "rep", pinned: ["BitWire", "DataJack"], exclude: ["Neuralstimulator"], strict: true, strictMaxWaitMin: 120 };
+  const r = a.applyAugOrder(draft);
+  assert.equal(r.ok, true);
+  assert.equal(logLines(H).length, 2, "exactly one new settings-log line");
+  const j = JSON.parse(logLines(H)[1]); assert.equal(j.by, "ui");
+  assert.deepEqual(j.changed.map((c) => c.key).sort(), ["augs.order.exclude", "augs.order.pinned", "augs.order.sort", "augs.order.strict"]);
+  const values = JSON.parse(H.ns.files[SETTINGS_FILE]).values;
+  assert.deepEqual(values, { "augs.order.pinned": ["BitWire", "DataJack"], "augs.order.exclude": ["Neuralstimulator"], "augs.order.strict": true }, "sort back to the default and the default wait cap are unset, not stored");
+  assert.deepEqual(H.store.get("settings").values["augs.order.pinned"], ["BitWire", "DataJack"], "settings slice refreshed");
+  // applying a draft equal to the current settings changes nothing
+  const before = H.ns.files[SETTINGS_FILE];
+  assert.equal(a.applyAugOrder(draft).ok, true);
+  assert.equal(H.ns.files[SETTINGS_FILE], before); assert.equal(logLines(H).length, 2);
+  // a default draft on a fresh file leaves "no overrides" literally empty
+  const H2 = harness({ fileSet: catFiles() });
+  assert.equal(H2.ctl.actions.applyAugOrder(emptyDraft()).ok, true);
+  assert.equal(H2.ns.files[SETTINGS_FILE], undefined, "nothing written");
+  assert.equal(logLines(H2).length, 0);
+});
+test("augs Order tab: a rejected draft (The Red Pill excluded) writes nothing and the error is shown inline", () => {
+  const H = harness({ fileSet: catFiles() });
+  const r = H.ctl.actions.applyAugOrder({ ...emptyDraft(), pinned: ["BitWire"], exclude: ["The Red Pill"] });
+  assert.equal(r.ok, false);
+  assert.match(r.errors.join(), /The Red Pill is not allowed/);
+  assert.equal(H.ns.files[SETTINGS_FILE], undefined); assert.equal(logLines(H).length, 0, "atomic: the valid pinned part was not written either");
+  const t = orderView(H);
+  const err = all(t, (n) => n.props["data-error"] === "augs.order");
+  assert.equal(err.length, 1); assert.match(text(err[0]), /The Red Pill/);
+  assert.equal(H.ctl.actions.applyAugOrder({ ...emptyDraft(), pinned: ["BitWire"] }).ok, true);
+  assert.equal(all(orderView(H), (n) => n.props["data-error"] === "augs.order").length, 0, "error cleared by a good apply");
+  H.ctl.stop();
+  assert.equal(H.ctl.actions.applyAugOrder(emptyDraft()).ok, false, "no ns calls after the script stops");
+});
+test("augs Order tab: Reset to default unsets exactly ORDER_KEYS in one call and leaves other settings alone", () => {
+  const H = harness({ fileSet: catFiles() });
+  const a = H.ctl.actions;
+  a.saveSetting("strategy.mid", 0.3);
+  assert.equal(a.applyAugOrder({ sort: "price", pinned: ["A"], last: ["B"], exclude: ["C"], strict: true, strictMaxWaitMin: 30, drivesWork: true }).ok, true);
+  assert.deepEqual(Object.keys(JSON.parse(H.ns.files[SETTINGS_FILE]).values).sort(), [...ORDER_KEYS, "strategy.mid"].sort());
+  const n = logLines(H).length;
+  assert.equal(a.resetAugOrder().ok, true);
+  assert.deepEqual(JSON.parse(H.ns.files[SETTINGS_FILE]).values, { "strategy.mid": 0.3 });
+  assert.equal(logLines(H).length, n + 1);
+  assert.deepEqual(JSON.parse(logLines(H).at(-1)).changed.map((c) => c.key).sort(), [...ORDER_KEYS].sort());
+  assert.equal(ORDER_KEYS.length, 7);
+});
+test("settings view: augs.order.* stringList keys render as list controls (JSON mode), the others as toggle/select/number", () => {
+  const H = harness();
+  const t = H.view("settings");
+  for (const k of ["augs.order.pinned", "augs.order.last", "augs.order.exclude"]) assert.equal(all(t, (n) => n.props["data-setting"] === k)[0].props["data-control-type"], "list", k);
+  assert.equal(all(t, (n) => n.props["data-setting"] === "augs.order.sort")[0].props["data-control-type"], "select");
+  assert.equal(all(t, (n) => n.props["data-setting"] === "augs.order.strict")[0].props["data-control-type"], "toggle");
+  assert.equal(all(t, (n) => n.props["data-setting"] === "augs.order.strictMaxWaitMin")[0].props["data-control-type"], "number");
+});
+test("ListInput: json mode commits JSON (names with commas survive); default mode still commits a comma-joined string", () => {
+  const H = harness();
+  const K = H.V.kit, calls = [];
+  const clickRemove = (props, label) => { const tree = render(K.h(K.ListInput, props)); all(tree, (n) => n.props["aria-label"] === label)[0].props.onClick(); };
+  clickRemove({ value: ["A, one", "B"], mode: "json", onCommit: (v) => calls.push(v) }, "remove A, one");
+  assert.deepEqual(calls, ['["B"]']);
+  clickRemove({ value: ["A", "B", "C"], onCommit: (v) => calls.push(v) }, "remove B");
+  assert.deepEqual(calls.at(-1), "A,C");
+  assert.deepEqual(JSON.parse(calls[0]), ["B"]);
+});
+test("order model: transitions (pin, top, move, last, exclude precedence, Red Pill/NeuroFlux guards), changedKeys, toPatch", () => {
+  const d0 = emptyDraft();
+  let r = MODEL.pin(d0, "A"); r = MODEL.pin(r.draft, "B"); r = MODEL.toTop(r.draft, "C");
+  assert.deepEqual(r.draft.pinned, ["C", "A", "B"]);
+  r = MODEL.move(r.draft, "B", -1); assert.deepEqual(r.draft.pinned, ["C", "B", "A"]);
+  assert.deepEqual(MODEL.move(r.draft, "C", -1).draft.pinned, ["C", "B", "A"], "no-op at the top");
+  assert.deepEqual(MODEL.move(r.draft, "A", 1).draft.pinned, ["C", "B", "A"], "no-op at the bottom");
+  assert.deepEqual(MODEL.move(r.draft, "Z", 1).draft, r.draft, "not in a list");
+  r = MODEL.sendLast(r.draft, "B"); assert.deepEqual([r.draft.pinned, r.draft.last], [["C", "A"], ["B"]]);
+  r = MODEL.exclude(r.draft, "C"); assert.deepEqual([r.draft.pinned, r.draft.exclude], [["A"], ["C"]], "exclude removes it from pinned/last (exclude > pinned)");
+  r = MODEL.pin(r.draft, "C"); assert.deepEqual([r.draft.pinned, r.draft.exclude], [["A", "C"], []], "pinning an excluded aug includes it again");
+  assert.match(MODEL.exclude(d0, "The Red Pill").error, /cannot be excluded/); assert.deepEqual(MODEL.exclude(d0, "The Red Pill").draft, d0);
+  assert.match(MODEL.pin(d0, "NeuroFlux Governor").error, /always last/); assert.match(MODEL.sendLast(d0, "NeuroFlux Governor").error, /always last/); assert.match(MODEL.exclude(d0, "NeuroFlux Governor").error, /always last/);
+  assert.equal(MODEL.canExclude("The Red Pill"), false); assert.equal(MODEL.canExclude("BitWire"), true);
+  assert.deepEqual(MODEL.drop({ ...d0, pinned: ["A"], last: ["A"], exclude: ["A"] }, "A").draft, d0);
+  assert.deepEqual(MODEL.changedKeys(d0, {}), []);
+  assert.deepEqual(MODEL.changedKeys({ ...d0, pinned: ["A"], sort: "name" }, {}).sort(), ["augs.order.pinned", "augs.order.sort"]);
+  assert.deepEqual(MODEL.changedKeys({ ...d0, pinned: ["A"] }, { "augs.order.pinned": ["A"] }), []);
+  assert.deepEqual(MODEL.toPatch(d0).set, {}); assert.deepEqual(MODEL.toPatch(d0).unset.sort(), [...ORDER_KEYS].sort());
+  assert.deepEqual(MODEL.toPatch({ ...d0, strictMaxWaitMin: 30 }).set, { "augs.order.strictMaxWaitMin": 30 });
+});
+test("order model: rows show rank/tag per aug; excluded, blocked, unknown and owned rows; warnings; costs; Daedalus warning", () => {
+  const cat = CATALOG(), d0 = emptyDraft();
+  const base = MODEL.orderRows(cat, d0);
+  assert.equal(base.rows.length, base.order.length); assert.deepEqual(base.rows.map((x) => x.rank), base.order.map((_, i) => i + 1));
+  assert.ok(base.rows.every((x) => ["auto", "prereq"].includes(x.tag)));
+  const gen = "Cranial Signal Processors - Gen II", gen1 = "Cranial Signal Processors - Gen I";
+  const d = { ...d0, pinned: ["BitWire", "Nope Aug"], last: ["DataJack"], exclude: [gen1] };
+  const v = MODEL.orderRows(cat, d);
+  const tag = (n) => v.rows.find((x) => x.name === n)?.tag;
+  assert.equal(tag("BitWire"), "pinned"); assert.equal(v.rows[0].name, "BitWire"); assert.equal(tag("DataJack"), "last"); assert.equal(v.rows.filter((x) => x.rank).at(-1).name, "DataJack");
+  assert.equal(tag(gen1), "excluded"); assert.equal(tag(gen), "blocked"); assert.equal(tag("Nope Aug"), "unknown");
+  assert.match(v.rows.find((x) => x.name === gen).note, /Gen I excluded/);
+  assert.ok(v.warnings.includes("unknown aug in pinned: Nope Aug"));
+  assert.ok(!MODEL.orderRows(cat, d0, { showOwned: false }).rows.some((x) => x.tag === "owned"));
+  const owned = { t: 1, augs: cat.augs.map((a, i) => (i < 3 ? { ...a, owned: true, installed: i === 0 } : a)) };
+  assert.equal(MODEL.orderRows(owned, d0, { showOwned: true }).rows.filter((x) => x.tag === "owned").length, 3);
+  assert.equal(MODEL.orderRows(owned, d0).rows.filter((x) => x.tag === "owned").length, 0);
+  assert.equal(MODEL.orderRows(null, d0).rows.length, 0, "no catalog: no rows, no throw");
+  const names = ["BitWire", "DataJack", "Neuralstimulator"];
+  const c = MODEL.batchCosts(cat, names, { ...d0, sort: "price" }, d0);
+  assert.ok(c.draft > 0 && c.draft <= c.current && c.current === c.default);
+  const plan = { daedalus: { augsReq: 1000, augsInstalled: 0 }, steps: [{ aug: "The Red Pill", faction: "Daedalus" }], install: { queued: 0 } };
+  assert.match(MODEL.daedalusWarning(cat, { ...d0, exclude: ["BitWire"] }, plan), /fewer obtainable augs .* than Daedalus requires/);
+  assert.equal(MODEL.daedalusWarning(cat, { ...d0, exclude: ["BitWire"] }, { ...plan, steps: [{ aug: "The Red Pill", faction: "Slum Snakes" }] }), null, "gang-sourced Red Pill: no Daedalus count");
+  assert.equal(MODEL.daedalusWarning(cat, d0, plan), null, "nothing excluded: no warning");
+  assert.equal(MODEL.daedalusWarning(cat, { ...d0, exclude: ["BitWire"] }, { ...plan, daedalus: { augsReq: 3, augsInstalled: 0 } }), null, "enough left");
+});
+test("static: the Order tab's modules are inside the dashboard import graph and the RAM scan above covers them", () => {
+  const rels = [...importGraph("dashboard.js").keys()].map((f) => path.relative(GAME, f));
+  for (const f of ["lib/augorder.js", "lib/ui/augorder-model.js", "lib/ui/views.js", "lib/ui/controller.js"]) assert.ok(rels.includes(f), `${f} in the walked set`);
 });
 
 let failed = 0;

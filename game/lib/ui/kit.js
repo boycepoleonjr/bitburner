@@ -97,14 +97,17 @@ export function createKit(React) {
       "data-accent": focused ? "focus" : undefined, style: inputStyle(focused, false, { width: 140 }) },
       options.map((o) => h("option", { key: o, value: o }, o)));
   }
-  function ListInput({ value = [], onCommit, invalid }) {
+  /** mode "json": name lists. Commits JSON.stringify(list) and adds one entry per click (names may contain commas). */
+  function ListInput({ value = [], onCommit, invalid, mode }) {
     const [draft, setDraft] = React.useState("");
     const list = Array.isArray(value) ? value : [];
-    const add = () => { const t = draft.trim(); if (!t) return; onCommit([...list, ...t.split(",").map((x) => x.trim()).filter(Boolean)].join(",")); setDraft(""); };
+    const json = mode === "json";
+    const out = (l) => (json ? JSON.stringify(l) : l.join(","));
+    const add = () => { const t = draft.trim(); if (!t) return; onCommit(out([...list, ...(json ? [t] : t.split(",").map((x) => x.trim()).filter(Boolean))])); setDraft(""); };
     return h("div", { "data-control": "list", style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: SPACE.xs } },
       list.length ? list.map((v, i) => h("span", { key: `${v}-${i}`, style: { display: "inline-flex", alignItems: "center", gap: SPACE.xs, padding: px(0, SPACE.xs),
         border: `1px solid ${COLOR.border}`, borderRadius: RADIUS.sm, background: COLOR.surface2, ...TYPE.mono } },
-        String(v), h("button", { type: "button", "aria-label": `remove ${v}`, onClick: () => onCommit(list.filter((_, j) => j !== i).join(",")),
+        String(v), h("button", { type: "button", "aria-label": `remove ${v}`, onClick: () => onCommit(out(list.filter((_, j) => j !== i))),
           style: { ...CONTROL.base, ...CONTROL.ghost, height: 16, padding: px(0, SPACE.xs), cursor: "pointer" } }, "×")))
         : h(Label, null, "empty"),
       h("input", { value: draft, placeholder: "add…", onChange: (e) => setDraft(e.target.value), onKeyDown: (e) => { stop(e); if (e.key === "Enter") add(); },
@@ -128,8 +131,8 @@ export function createKit(React) {
       h("div", { key: `v${i}`, style: { ...TYPE.body, fontFamily: FONT.mono, wordBreak: "break-word" } }, v == null ? DASH : typeof v === "object" && !v.$$typeof && !v.type ? fmtValue(v) : v),
     ]));
 
-  /** Selectable table. Renders at most LAYOUT.maxRows rows (newest last is the caller's choice). */
-  const DataTable = memo(function DataTable({ columns, rows, rowKey = (r, i) => i, selectedId, onSelect, empty = "No rows", maxRows = LAYOUT.maxRows }) {
+  /** Selectable table. Renders at most LAYOUT.maxRows rows (newest last is the caller's choice). onRowKey(e, id): keys on a focused row. */
+  const DataTable = memo(function DataTable({ columns, rows, rowKey = (r, i) => i, selectedId, onSelect, onRowKey, empty = "No rows", maxRows = LAYOUT.maxRows }) {
     const all = rows || [];
     if (!all.length) return h(EmptyState, { title: empty });
     const shown = all.length > maxRows ? all.slice(all.length - maxRows) : all;
@@ -140,6 +143,7 @@ export function createKit(React) {
         h("tbody", null, shown.map((r, i) => {
           const id = rowKey(r, i), sel = selectedId != null && id === selectedId;
           return h("tr", { key: id, "data-row": id, "data-accent": sel ? "selected" : undefined, onClick: onSelect ? () => onSelect(sel ? null : id) : undefined,
+            tabIndex: onRowKey ? 0 : undefined, onKeyDown: onRowKey ? (e) => onRowKey(e, id) : undefined,
             style: { cursor: onSelect ? "pointer" : "default", background: sel ? COLOR.accentDim : "transparent", borderBottom: `1px solid ${COLOR.surface2}`, transition: TRANSITION } },
             columns.map((c) => h("td", { key: c.key, style: cell(c, c.mono ? { fontFamily: FONT.mono } : null) }, c.render ? c.render(r) : fmtValue(r[c.key]))));
         }))),

@@ -10,6 +10,8 @@ import { fmtMoney, fmtNum, fmtPct, fmtGb, fmtBytes, fmtDur, fmtAgo, fmtTime, fmt
 import { controlsFromSchema, groupControls } from "./settings-model.js";
 import { KPI_KEYS, GANG_KPI_KEYS, KPI_LABELS } from "../kpi.js";
 import { RAW_FILES } from "../data-sources.js";
+import { SORTS } from "../augorder.js";
+import { draftFromSettings, changedKeys, orderRows, batchCosts, daedalusWarning, pin, unpin, toTop, sendLast, unlast, exclude as excludeAug, include, drop, move, setField, canExclude, RED_PILL, NFG } from "./augorder-model.js";
 
 export const SECTIONS = Object.freeze([
   { id: "overview", label: "Overview" }, { id: "ram", label: "RAM" }, { id: "augs", label: "Augmentations" }, { id: "node", label: "Node" },
@@ -132,21 +134,25 @@ export function createViews(React, { schema = [], groups = [] } = {}) {
   });
 
   // ── Augmentations ────────────────────────────────────────────────────────
-  const Augs = memo(function Augs({ store, actions, ui }) {
+  const augsTabs = (ui, actions) => h("div", { style: { marginBottom: SPACE.lg } },
+    h(K.Tabs, { tabs: [{ id: "path", label: "Path" }, { id: "order", label: "Order" }], value: ui.augsTab === "order" ? "order" : "path", onChange: actions.setAugsTab }));
+
+  const AugsPath = memo(function AugsPath({ store, actions, ui }) {
     const ap = useSlice(store, "augPlan");
     const pilot = useSlice(store, "autopilot");
     const sel = ui.sel.augs ?? null;
     const header = h(Header, { title: "Augmentations", meta: metaLine(store, ap ? `goal ${ap.goal ?? DASH} · ${ap.steps?.length ?? 0} steps` : "no aug plan"),
       primary: { label: "Augmentation settings", onClick: () => actions.openSetting("augs.autoInstall") } });
-    if (!ap) return h("div", null, header, h(K.Section, { title: "Plan" },
+    if (!ap) return h("div", null, header, augsTabs(ui, actions), h(K.Section, { title: "Plan" },
       h(K.EmptyState, { title: "data/aug-plan.txt not found", detail: "It is written by the aug planner (autopilot.js, aug planner PR). Autopilot summary shown below." }),
       pilot?.augs ? h(K.KeyValue, { rows: [["buyable", pilot.augs.buyable], ["Red Pill", fmtValue(pilot.augs.redPill)], ["top", fmtValue(pilot.augs.top)]] }) : null));
     const steps = Array.isArray(ap.steps) ? ap.steps : [];
     const s = sel != null ? steps.find((x) => x.order === sel) : null;
-    return h("div", null, header, h(K.Split, { list: h("div", null,
+    return h("div", null, header, augsTabs(ui, actions), h(K.Split, { list: h("div", null,
       h(K.Section, { title: "Progress" }, h(K.KeyValue, { rows: [
         ["phase", `${ap.phase ?? DASH} (${fmtPct(ap.progress, 0)})`],
         ["Daedalus", ap.daedalus ? `${ap.daedalus.augsInstalled ?? DASH}/${ap.daedalus.augsReq ?? DASH} augs · ${fmtMoney(ap.daedalus.moneyReq)} · hack ${ap.daedalus.hackReq ?? DASH}${ap.daedalus.met ? " · met" : ""}` : DASH],
+        ["buy order", ap.order ? (ap.order.isDefault ? "default" : `${ap.order.sort} · ${(ap.order.pinned || []).length} pinned · ${(ap.order.last || []).length} last · ${(ap.order.excluded || []).length} excluded${ap.order.strict ? " · strict" : ""}`) : DASH],
         ["The Red Pill", ap.redPill ? (ap.redPill.owned ? "owned" : `${fmtNum(ap.redPill.rep)} / ${fmtNum(ap.redPill.repReq)} rep`) : DASH],
         ["w0r1d_d43m0n", ap.worldDaemon ? `${ap.worldDaemon["hack"] ?? DASH} / ${ap.worldDaemon.req ?? DASH} hack${ap.worldDaemon.ready ? " · READY" : ""}` : DASH],
         ["install", ap.install ? `${ap.install.policy ?? DASH} · ${ap.install.queued ?? 0} queued · next ${ap.install.next ? `${fmtDur((ap.install.next.etaMin ?? NaN) * 60000)} ${ap.install.next.reason ?? ""}` : DASH}` : DASH],
@@ -161,6 +167,84 @@ export function createViews(React, { schema = [], groups = [] } = {}) {
       h(K.Heading, { level: 3 }, "Why"), h(K.Body, null, s.why || DASH)) : null }));
   });
 
+  const SORT_LABEL = { rep: "highest rep first", price: "most expensive first", cheap: "cheapest first", name: "alphabetical" };
+  const TAG_COLOR = { pinned: COLOR.text, last: COLOR.text, excluded: COLOR.bad, blocked: COLOR.bad, unknown: COLOR.warn, owned: COLOR.muted };
+  const AugsOrder = memo(function AugsOrder({ store, actions, ui }) {
+    const augCat = useSlice(store, "augCatalog");
+    const st = useSlice(store, "settings") || { values: {}, overrides: {} };
+    const ap = useSlice(store, "augPlan");
+    const cur = draftFromSettings(st.values);
+    const [draft, setDraft] = React.useState(() => cur);
+    const [showOwned, setShowOwned] = React.useState(false);
+    const [note, setNote] = React.useState(null);
+    const [capText, setCapText] = React.useState(null);
+    const nChanges = changedKeys(draft, st.values).length;
+    const view = orderRows(augCat, draft, { showOwned });
+    const err = ui.errors["augs.order"];
+    const go = (r) => { setNote(r.error || null); if (!r.error) setDraft(r.draft); };
+    const apply = () => { if (!nChanges) return; const r = actions.applyAugOrder(draft); if (r.ok) setNote(null); };
+    const discard = () => { setDraft(cur); setNote(null); setCapText(null); };
+    const reset = () => { const r = actions.resetAugOrder(); if (r.ok) { setDraft(draftFromSettings({})); setNote(null); setCapText(null); } };
+    const commitCap = (v) => { const n = Number(v); setCapText(null); if (Number.isInteger(n) && n >= 0 && n <= 1440) go({ draft: setField(draft, "strictMaxWaitMin", n) }); else setNote("strict wait cap must be an integer 0..1440"); };
+    const listOf = (name) => (draft.pinned.includes(name) ? "pinned" : draft.last.includes(name) ? "last" : null);
+    const buyNow = (Array.isArray(ap?.steps) ? ap.steps : []).filter((x) => x.status === "buyable" && x.aug !== NFG).map((x) => x.aug);
+    const costs = augCat && buyNow.length ? batchCosts(augCat, buyNow, draft, cur) : null;
+    const dw = daedalusWarning(augCat, draft, ap);
+    const warnings = [...view.warnings, ...(dw ? [dw] : []), ...(note ? [note] : [])];
+    const btn = (label, onClick, o = {}) => h(K.Button, { kind: "ghost", onClick: (e) => { if (e && e.stopPropagation) e.stopPropagation(); onClick(); }, title: o.title, disabled: o.disabled }, label);
+    const actionsCell = (r) => {
+      const n = r.name, lst = listOf(n);
+      if (r.tag === "owned") return h(K.Label, null, r.note || "owned");
+      if (r.tag === "unknown") return btn("Drop", () => go(drop(draft, n)), { title: "remove from the lists" });
+      if (r.tag === "excluded") return btn("Include", () => go(include(draft, n)));
+      const canEx = canExclude(n);
+      return h(K.Row, { gap: SPACE.xs }, 
+        btn("↑", () => go(move(draft, n, -1)), { disabled: !lst, title: lst ? "move up" : "pin or send to last first" }),
+        btn("↓", () => go(move(draft, n, 1)), { disabled: !lst, title: lst ? "move down" : "pin or send to last first" }),
+        btn("Top", () => go(toTop(draft, n)), { title: "pin first" }),
+        lst === "pinned" ? btn("Unpin", () => go(unpin(draft, n))) : btn("Pin", () => go(pin(draft, n)), { title: "pin at the end of the pinned list" }),
+        lst === "last" ? btn("Unlast", () => go(unlast(draft, n))) : btn("Last", () => go(sendLast(draft, n)), { title: "buy after everything else (before NeuroFlux)" }),
+        btn("Exclude", () => go(excludeAug(draft, n)), { disabled: !canEx, title: canEx ? "never buy" : n === RED_PILL ? "The Red Pill cannot be excluded" : "NeuroFlux is not orderable" }));
+    };
+    const onRowKey = (e, id) => {
+      const k = e && e.key;
+      if (e && e.stopPropagation && k !== "Escape") e.stopPropagation(); // keep game hotkeys out, like ListInput
+      if (k === "k") go(move(draft, id, -1)); else if (k === "j") go(move(draft, id, 1));
+      else if (k === "p") go(listOf(id) === "pinned" ? unpin(draft, id) : pin(draft, id));
+      else if (k === "x") go(draft.exclude.includes(id) ? include(draft, id) : excludeAug(draft, id));
+    };
+    const header = h(Header, { title: "Augmentations", meta: metaLine(store, augCat ? `${augCat.augs?.length ?? 0} augs in the catalog` : "no aug catalog"),
+      primary: { label: nChanges ? `Apply order (${nChanges})` : "Apply order", onClick: apply, title: nChanges ? "write the draft to settings (one change)" : "no changes to apply" } });
+    const columns = [
+      { key: "rank", label: "#", align: "right", render: (r) => (r.rank == null ? DASH : r.rank) },
+      { key: "name", label: "Augmentation", maxWidth: 260 }, { key: "factions", label: "Factions", maxWidth: 200 },
+      { key: "repReq", label: "Rep", align: "right", render: (r) => fmtNum(r.repReq) }, { key: "price", label: "Price", align: "right", render: (r) => fmtMoney(r.price) },
+      { key: "prereqs", label: "Prerequisites", maxWidth: 200, render: (r) => (r.prereqs || []).join(", ") || DASH },
+      { key: "tag", label: "Status", render: (r) => h("span", { style: { color: TAG_COLOR[r.tag] || COLOR.muted } }, r.note ? `${r.tag} · ${r.note}` : r.tag) },
+      { key: "act", label: "", maxWidth: 520, render: actionsCell },
+    ];
+    return h("div", null, header, augsTabs(ui, actions),
+      h(K.Section, { title: "Order", meta: `draft${nChanges ? ` · ${nChanges} change${nChanges === 1 ? "" : "s"}` : " · no changes"}` },
+        h(K.Panel, null, h("div", { style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: SPACE.lg } },
+          h(K.Row, null, h(K.Label, null, "Sort"), h(K.Select, { value: draft.sort, options: SORTS, onChange: (v) => go({ draft: setField(draft, "sort", v) }) }), h(K.Label, null, SORT_LABEL[draft.sort])),
+          h(K.Row, null, h(K.Label, null, "Strict"), h(K.Toggle, { value: draft.strict, label: "Strict order", onChange: (v) => go({ draft: setField(draft, "strict", v) }) }),
+            h(K.Label, null, "wait cap (min)"), h(K.NumberInput, { value: capText ?? draft.strictMaxWaitMin, onDraft: setCapText, onCommit: commitCap })),
+          h(K.Row, null, h(K.Label, null, "Order drives work"), h(K.Toggle, { value: draft.drivesWork, label: "Order drives faction work", onChange: (v) => go({ draft: setField(draft, "drivesWork", v) }) })),
+          h(K.Row, null, h(K.Label, null, "Show owned"), h(K.Toggle, { value: showOwned, label: "Show owned augs", onChange: setShowOwned })))),
+        h(K.Row, null, h(K.Button, { onClick: discard, title: "drop the draft" }, "Discard"), h(K.Button, { onClick: reset, title: "unset all augs.order.* settings" }, "Reset to default"),
+          h(K.Label, null, "NeuroFlux Governor is always bought last; prerequisites always come first.")),
+        err ? h("span", { role: "alert", "data-error": "augs.order", style: { ...TYPE.meta, color: COLOR.bad } }, err) : null,
+        costs ? h(K.KeyValue, { rows: [["batch cost · draft", fmtMoney(costs.draft)], ["batch cost · current", fmtMoney(costs.current)], ["batch cost · default order", fmtMoney(costs.default)], ["buyable now", buyNow.length]] }) : null,
+        warnings.length ? h("div", { "data-role": "order-warnings" }, warnings.map((w, i) => h("div", { key: i, style: { ...TYPE.meta, color: COLOR.warn } }, w))) : null),
+      augCat ? h(K.Section, { title: "Buying order", meta: `${view.order.length} augs · k/j move, p pin, x exclude on a focused row` },
+        h(K.DataTable, { columns, rows: view.rows, rowKey: (r) => r.name, selectedId: ui.sel.augsOrder ?? null, onSelect: (id) => actions.select("augsOrder", id), onRowKey, maxRows: 500, empty: "No unowned augmentations" }))
+        : h(K.Section, { title: "Buying order" }, h(K.EmptyState, { title: "data/aug-catalog.txt not found", detail: "It is written by agent/sl-plan.js each planner cycle (after the aug-order build is pushed and the autopilot restarted)." })));
+  });
+
+  const Augs = memo(function Augs({ store, actions, ui }) {
+    return ui.augsTab === "order" ? h(AugsOrder, { store, actions, ui }) : h(AugsPath, { store, actions, ui });
+  });
+
   // ── settings controls (shared by Settings and Node) ───────────────────────
   const SettingControl = memo(function SettingControl({ c, actions }) {
     const draft = (v) => actions.draft(c.key, v);
@@ -171,7 +255,7 @@ export function createViews(React, { schema = [], groups = [] } = {}) {
       case "slider": ctl = h(K.Slider, { value: Number(c.shown), min: c.min, max: c.max, step: c.step, ends: c.ends, onDraft: draft, onCommit: commit }); break;
       case "number": ctl = h(K.NumberInput, { value: c.shown, invalid: !!c.error, onDraft: draft, onCommit: commit }); break;
       case "select": ctl = h(K.Select, { value: c.shown, options: c.options || [], onChange: commit }); break;
-      case "list": ctl = h(K.ListInput, { value: c.shown, invalid: !!c.error, onCommit: commit }); break;
+      case "list": ctl = h(K.ListInput, { value: c.shown, invalid: !!c.error, onCommit: commit, mode: c.type === "stringList" ? "json" : undefined }); break;
       default: ctl = h(K.TextField, { value: c.shown, invalid: !!c.error, onDraft: draft, onCommit: commit });
     }
     return h("div", { "data-setting": c.key, "data-control-type": c.control, style: { display: "flex", flexDirection: "column", gap: SPACE.xs } },
