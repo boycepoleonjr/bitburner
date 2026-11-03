@@ -1,0 +1,2497 @@
+{
+ "bn5-real": {
+  "steps": [
+   {
+    "order": 1,
+    "aug": "NeuroFlux Governor",
+    "faction": "The Black Hand",
+    "repReq": 797257842.4798217,
+    "price": 2391773527439,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "held: w0r1d_d43m0n is ready (destroy instead; an install resets hacking)"
+   }
+  ],
+  "nextPurchaseCost": 0,
+  "install": {
+   "policy": "eta",
+   "queued": 0,
+   "next": {
+    "etaMin": null,
+    "reason": "hold: w0r1d_d43m0n is ready; destroy the BitNode instead of installing (installs reset hacking)"
+   }
+  },
+  "phase": "late",
+  "progress": 1
+ },
+ "fresh-default": {
+  "steps": [
+   {
+    "order": 1,
+    "aug": "Embedded Netburner Module",
+    "faction": "NiteSec",
+    "repReq": 15000,
+    "price": 500000000,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 2,
+    "aug": "Embedded Netburner Module Core Implant",
+    "faction": "The Black Hand",
+    "repReq": 175000,
+    "price": 9500000000,
+    "prereqs": [
+     "Embedded Netburner Module"
+    ],
+    "status": "needRep",
+    "etaMin": 41.7,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 3,
+    "aug": "Embedded Netburner Module Core V2 Upgrade",
+    "faction": "BitRunners",
+    "repReq": 1000000,
+    "price": 17100000000,
+    "prereqs": [
+     "Embedded Netburner Module Core Implant",
+     "Embedded Netburner Module"
+    ],
+    "status": "needRep",
+    "etaMin": 316.7,
+    "why": "hacking x1.252 toward w0r1d_d43m0n (900/4500)"
+   },
+   {
+    "order": 4,
+    "aug": "BitRunners Neurolink",
+    "faction": "BitRunners",
+    "repReq": 875000,
+    "price": 16625000000,
+    "prereqs": [],
+    "status": "needRep",
+    "etaMin": 275,
+    "why": "hacking x1.275 toward w0r1d_d43m0n (900/4500)"
+   },
+   {
+    "order": 5,
+    "aug": "Artificial Bio-neural Network Implant",
+    "faction": "BitRunners",
+    "repReq": 275000,
+    "price": 11400000000,
+    "prereqs": [],
+    "status": "needRep",
+    "etaMin": 75,
+    "why": "hacking x1.168 toward w0r1d_d43m0n (900/4500)"
+   },
+   {
+    "order": 6,
+    "aug": "Cranial Signal Processors - Gen I",
+    "faction": "CyberSec",
+    "repReq": 10000,
+    "price": 266000000,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 7,
+    "aug": "Cranial Signal Processors - Gen II",
+    "faction": "CyberSec",
+    "repReq": 18750,
+    "price": 902500000,
+    "prereqs": [
+     "Cranial Signal Processors - Gen I"
+    ],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 8,
+    "aug": "Cranial Signal Processors - Gen III",
+    "faction": "NiteSec",
+    "repReq": 50000,
+    "price": 7544900000,
+    "prereqs": [
+     "Cranial Signal Processors - Gen II",
+     "Cranial Signal Processors - Gen I"
+    ],
+    "status": "needMoney",
+    "etaMin": 3.5,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 9,
+    "aug": "Cranial Signal Processors - Gen IV",
+    "faction": "The Black Hand",
+    "repReq": 125000,
+    "price": 15089800000,
+    "prereqs": [
+     "Cranial Signal Processors - Gen III",
+     "Cranial Signal Processors - Gen II",
+     "Cranial Signal Processors - Gen I"
+    ],
+    "status": "needRep",
+    "etaMin": 25,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 10,
+    "aug": "Cranial Signal Processors - Gen V",
+    "faction": "BitRunners",
+    "repReq": 250000,
+    "price": 30865500000,
+    "prereqs": [
+     "Cranial Signal Processors - Gen IV",
+     "Cranial Signal Processors - Gen III",
+     "Cranial Signal Processors - Gen II",
+     "Cranial Signal Processors - Gen I"
+    ],
+    "status": "needRep",
+    "etaMin": 66.7,
+    "why": "hacking x1.375 toward w0r1d_d43m0n (900/4500)"
+   },
+   {
+    "order": 11,
+    "aug": "Neural Accelerator",
+    "faction": "BitRunners",
+    "repReq": 200000,
+    "price": 24006500000,
+    "prereqs": [],
+    "status": "needRep",
+    "etaMin": 50,
+    "why": "hacking x1.235 toward w0r1d_d43m0n (900/4500)"
+   },
+   {
+    "order": 12,
+    "aug": "DataJack",
+    "faction": "NiteSec",
+    "repReq": 112500,
+    "price": 6173100000,
+    "prereqs": [],
+    "status": "needRep",
+    "etaMin": 20.8,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 13,
+    "aug": "Enhanced Myelin Sheathing",
+    "faction": "The Black Hand",
+    "repReq": 100000,
+    "price": 18862250000,
+    "prereqs": [],
+    "status": "needRep",
+    "etaMin": 16.7,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 14,
+    "aug": "The Black Hand",
+    "faction": "The Black Hand",
+    "repReq": 100000,
+    "price": 7544900000,
+    "prereqs": [],
+    "status": "needRep",
+    "etaMin": 16.7,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 15,
+    "aug": "Neuralstimulator",
+    "faction": "The Black Hand",
+    "repReq": 50000,
+    "price": 41154000000,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 31.5,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 16,
+    "aug": "CRTX42-AA Gene Modification",
+    "faction": "NiteSec",
+    "repReq": 45000,
+    "price": 3086550000,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 17,
+    "aug": "SmartSonar Implant",
+    "faction": "Slum Snakes",
+    "repReq": 22500,
+    "price": 1954815000,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 1.4,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 18,
+    "aug": "Neural-Retention Enhancement",
+    "faction": "NiteSec",
+    "repReq": 20000,
+    "price": 6516050000,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 5.2,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 19,
+    "aug": "Magnetism Amplifier",
+    "faction": "The Black Hand",
+    "repReq": 15000,
+    "price": 6516050000,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 5.2,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 20,
+    "aug": "Hacknet Node Core Direct-Neural Interface",
+    "faction": "Netburners",
+    "repReq": 12500,
+    "price": 1563852000,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 1.1,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 21,
+    "aug": "Neurotrainer II",
+    "faction": "NiteSec",
+    "repReq": 10000,
+    "price": 1172889000,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.8,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 22,
+    "aug": "Combat Rib I",
+    "faction": "Slum Snakes",
+    "repReq": 7500,
+    "price": 619024750,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.3,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 23,
+    "aug": "Hacknet Node Kernel Direct-Neural Interface",
+    "faction": "Netburners",
+    "repReq": 7500,
+    "price": 1042568000,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.7,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 24,
+    "aug": "Artificial Synaptic Potentiation",
+    "faction": "NiteSec",
+    "repReq": 6250,
+    "price": 2085136000,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 1.5,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 25,
+    "aug": "Augmented Targeting I",
+    "faction": "Slum Snakes",
+    "repReq": 5000,
+    "price": 390963000,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.1,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 26,
+    "aug": "LuminCloaking-V1 Skin Implant",
+    "faction": "Slum Snakes",
+    "repReq": 1500,
+    "price": 130321000,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 27,
+    "aug": "LuminCloaking-V2 Skin Implant",
+    "faction": "Slum Snakes",
+    "repReq": 5000,
+    "price": 1485659400,
+    "prereqs": [
+     "LuminCloaking-V1 Skin Implant"
+    ],
+    "status": "needMoney",
+    "etaMin": 1.1,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 28,
+    "aug": "Neural Wit Amplifier",
+    "faction": "BitRunners",
+    "repReq": 5000,
+    "price": 495219800,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.3,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 29,
+    "aug": "BitWire",
+    "faction": "CyberSec",
+    "repReq": 3750,
+    "price": 495219800,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.3,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 30,
+    "aug": "Hacknet Node CPU Architecture Neural-Upload",
+    "faction": "Netburners",
+    "repReq": 3750,
+    "price": 544741780,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.4,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 31,
+    "aug": "Hacknet Node Cache Architecture Neural-Upload",
+    "faction": "Netburners",
+    "repReq": 2500,
+    "price": 272370890,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.1,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 32,
+    "aug": "Synaptic Enhancement Implant",
+    "faction": "CyberSec",
+    "repReq": 2000,
+    "price": 371414850,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.2,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 33,
+    "aug": "Hacknet Node NIC Architecture Neural-Upload",
+    "faction": "Netburners",
+    "repReq": 1875,
+    "price": 222848910,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.1,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 34,
+    "aug": "Wired Reflexes",
+    "faction": "Slum Snakes",
+    "repReq": 1250,
+    "price": 123804950,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.1,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 35,
+    "aug": "Neurotrainer I",
+    "faction": "CyberSec",
+    "repReq": 1000,
+    "price": 198087920,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.1,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 36,
+    "aug": "The Red Pill",
+    "faction": "Daedalus",
+    "repReq": 2500000,
+    "price": 0,
+    "prereqs": [],
+    "status": "blocked",
+    "etaMin": null,
+    "why": "needs the Daedalus invite: 0/30 installed augs, 5.00b/100.00b, hack 900/2500"
+   },
+   {
+    "order": 37,
+    "aug": "NeuroFlux Governor",
+    "faction": "CyberSec",
+    "repReq": 797257842.4798217,
+    "price": 59222680395193,
+    "prereqs": [],
+    "status": "needRep",
+    "etaMin": 265735.9,
+    "why": "NeuroFlux last (owner rule)"
+   }
+  ],
+  "nextPurchaseCost": 500000000,
+  "install": {
+   "policy": "eta",
+   "queued": 0,
+   "next": {
+    "etaMin": 0.1,
+    "reason": "eta: 5/6 minimum batch"
+   }
+  },
+  "phase": "early",
+  "progress": 0.137
+ },
+ "fresh-rich": {
+  "steps": [
+   {
+    "order": 1,
+    "aug": "Embedded Netburner Module",
+    "faction": "NiteSec",
+    "repReq": 15000,
+    "price": 500000000,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 2,
+    "aug": "Embedded Netburner Module Core Implant",
+    "faction": "The Black Hand",
+    "repReq": 175000,
+    "price": 9500000000,
+    "prereqs": [
+     "Embedded Netburner Module"
+    ],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 3,
+    "aug": "Embedded Netburner Module Core V2 Upgrade",
+    "faction": "BitRunners",
+    "repReq": 1000000,
+    "price": 32490000000,
+    "prereqs": [
+     "Embedded Netburner Module Core Implant",
+     "Embedded Netburner Module"
+    ],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 4,
+    "aug": "BitRunners Neurolink",
+    "faction": "BitRunners",
+    "repReq": 875000,
+    "price": 60016250000,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 5,
+    "aug": "Artificial Bio-neural Network Implant",
+    "faction": "BitRunners",
+    "repReq": 275000,
+    "price": 78192600000,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 6,
+    "aug": "Cranial Signal Processors - Gen I",
+    "faction": "CyberSec",
+    "repReq": 10000,
+    "price": 3466538600,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 7,
+    "aug": "Cranial Signal Processors - Gen II",
+    "faction": "CyberSec",
+    "repReq": 18750,
+    "price": 11761470250,
+    "prereqs": [
+     "Cranial Signal Processors - Gen I"
+    ],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 8,
+    "aug": "Cranial Signal Processors - Gen III",
+    "faction": "NiteSec",
+    "repReq": 50000,
+    "price": 98325891290,
+    "prereqs": [
+     "Cranial Signal Processors - Gen II",
+     "Cranial Signal Processors - Gen I"
+    ],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 9,
+    "aug": "Cranial Signal Processors - Gen IV",
+    "faction": "The Black Hand",
+    "repReq": 125000,
+    "price": 373638386902,
+    "prereqs": [
+     "Cranial Signal Processors - Gen III",
+     "Cranial Signal Processors - Gen II",
+     "Cranial Signal Processors - Gen I"
+    ],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 10,
+    "aug": "Cranial Signal Processors - Gen V",
+    "faction": "BitRunners",
+    "repReq": 250000,
+    "price": 1452094640005,
+    "prereqs": [
+     "Cranial Signal Processors - Gen IV",
+     "Cranial Signal Processors - Gen III",
+     "Cranial Signal Processors - Gen II",
+     "Cranial Signal Processors - Gen I"
+    ],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 11,
+    "aug": "Neural Accelerator",
+    "faction": "BitRunners",
+    "repReq": 200000,
+    "price": 2145873190230,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 12,
+    "aug": "DataJack",
+    "faction": "NiteSec",
+    "repReq": 112500,
+    "price": 1048412330084,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 13,
+    "aug": "Enhanced Myelin Sheathing",
+    "faction": "The Black Hand",
+    "repReq": 100000,
+    "price": 6086616027432,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 23.3,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 14,
+    "aug": "The Black Hand",
+    "faction": "The Black Hand",
+    "repReq": 100000,
+    "price": 2434646410973,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 15,
+    "aug": "Neuralstimulator",
+    "faction": "The Black Hand",
+    "repReq": 50000,
+    "price": 25231790077354,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 383,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 16,
+    "aug": "CRTX42-AA Gene Modification",
+    "faction": "NiteSec",
+    "repReq": 45000,
+    "price": 1892384255802,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 17,
+    "aug": "Neural-Retention Enhancement",
+    "faction": "NiteSec",
+    "repReq": 20000,
+    "price": 3995033428914,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 60.6,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 18,
+    "aug": "Hacknet Node Core Direct-Neural Interface",
+    "faction": "Netburners",
+    "repReq": 12500,
+    "price": 958808022939,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 10,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 19,
+    "aug": "Neurotrainer II",
+    "faction": "NiteSec",
+    "repReq": 10000,
+    "price": 719106017205,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 6,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 20,
+    "aug": "Combat Rib I",
+    "faction": "Slum Snakes",
+    "repReq": 7500,
+    "price": 379528175747,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.3,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 21,
+    "aug": "Hacknet Node Kernel Direct-Neural Interface",
+    "faction": "Netburners",
+    "repReq": 7500,
+    "price": 639205348626,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 4.7,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 22,
+    "aug": "Artificial Synaptic Potentiation",
+    "faction": "NiteSec",
+    "repReq": 6250,
+    "price": 1278410697253,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 15.3,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 23,
+    "aug": "Augmented Targeting I",
+    "faction": "Slum Snakes",
+    "repReq": 5000,
+    "price": 239702005735,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 24,
+    "aug": "BitWire",
+    "faction": "CyberSec",
+    "repReq": 3750,
+    "price": 303622540597,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 3.1,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 25,
+    "aug": "Hacknet Node CPU Architecture Neural-Upload",
+    "faction": "Netburners",
+    "repReq": 3750,
+    "price": 333984794657,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 3.6,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 26,
+    "aug": "Hacknet Node Cache Architecture Neural-Upload",
+    "faction": "Netburners",
+    "repReq": 2500,
+    "price": 166992397329,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.8,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 27,
+    "aug": "Synaptic Enhancement Implant",
+    "faction": "CyberSec",
+    "repReq": 2000,
+    "price": 227716905448,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 1.8,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 28,
+    "aug": "Hacknet Node NIC Architecture Neural-Upload",
+    "faction": "Netburners",
+    "repReq": 1875,
+    "price": 136630143269,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.3,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 29,
+    "aug": "LuminCloaking-V1 Skin Implant",
+    "faction": "Slum Snakes",
+    "repReq": 1500,
+    "price": 151811270299,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.5,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 30,
+    "aug": "Neurotrainer I",
+    "faction": "CyberSec",
+    "repReq": 1000,
+    "price": 121449016239,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.1,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 31,
+    "aug": "The Red Pill",
+    "faction": "Daedalus",
+    "repReq": 2500000,
+    "price": 0,
+    "prereqs": [],
+    "status": "blocked",
+    "etaMin": null,
+    "why": "needs the Daedalus invite: 0/30 installed augs, 10.00t/100.00b, hack 900/2500"
+   },
+   {
+    "order": 32,
+    "aug": "NeuroFlux Governor",
+    "faction": "CyberSec",
+    "repReq": 797257842.4798217,
+    "price": 36309817746750220,
+    "prereqs": [],
+    "status": "needRep",
+    "etaMin": 264085.9,
+    "why": "NeuroFlux last (owner rule)"
+   }
+  ],
+  "nextPurchaseCost": 500000000,
+  "install": {
+   "policy": "eta",
+   "queued": 0,
+   "next": {
+    "etaMin": 0.1,
+    "reason": "eta: next aug in 0m <= recovery 60m; wait and add it"
+   }
+  },
+  "phase": "mid",
+  "progress": 0.453
+ },
+ "fresh-donate": {
+  "steps": [
+   {
+    "order": 1,
+    "aug": "Embedded Netburner Module",
+    "faction": "NiteSec",
+    "repReq": 15000,
+    "price": 500000000,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 2,
+    "aug": "Embedded Netburner Module Core Implant",
+    "faction": "The Black Hand",
+    "repReq": 175000,
+    "price": 9500000000,
+    "prereqs": [
+     "Embedded Netburner Module"
+    ],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get); donate $13.87b to The Black Hand"
+   },
+   {
+    "order": 3,
+    "aug": "Embedded Netburner Module Core V2 Upgrade",
+    "faction": "BitRunners",
+    "repReq": 1000000,
+    "price": 32490000000,
+    "prereqs": [
+     "Embedded Netburner Module Core Implant",
+     "Embedded Netburner Module"
+    ],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get); donate $166.41b to BitRunners"
+   },
+   {
+    "order": 4,
+    "aug": "BitRunners Neurolink",
+    "faction": "BitRunners",
+    "repReq": 875000,
+    "price": 60016250000,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get); donate $143.30b to BitRunners"
+   },
+   {
+    "order": 5,
+    "aug": "Artificial Bio-neural Network Implant",
+    "faction": "BitRunners",
+    "repReq": 275000,
+    "price": 78192600000,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get); donate $32.36b to BitRunners"
+   },
+   {
+    "order": 6,
+    "aug": "Cranial Signal Processors - Gen I",
+    "faction": "CyberSec",
+    "repReq": 10000,
+    "price": 3466538600,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 7,
+    "aug": "Cranial Signal Processors - Gen II",
+    "faction": "CyberSec",
+    "repReq": 18750,
+    "price": 11761470250,
+    "prereqs": [
+     "Cranial Signal Processors - Gen I"
+    ],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 8,
+    "aug": "Cranial Signal Processors - Gen III",
+    "faction": "NiteSec",
+    "repReq": 50000,
+    "price": 98325891290,
+    "prereqs": [
+     "Cranial Signal Processors - Gen II",
+     "Cranial Signal Processors - Gen I"
+    ],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 9,
+    "aug": "Cranial Signal Processors - Gen IV",
+    "faction": "The Black Hand",
+    "repReq": 125000,
+    "price": 373638386902,
+    "prereqs": [
+     "Cranial Signal Processors - Gen III",
+     "Cranial Signal Processors - Gen II",
+     "Cranial Signal Processors - Gen I"
+    ],
+    "status": "needRep",
+    "etaMin": 4.7,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 10,
+    "aug": "Cranial Signal Processors - Gen V",
+    "faction": "BitRunners",
+    "repReq": 250000,
+    "price": 764260336845,
+    "prereqs": [
+     "Cranial Signal Processors - Gen IV",
+     "Cranial Signal Processors - Gen III",
+     "Cranial Signal Processors - Gen II",
+     "Cranial Signal Processors - Gen I"
+    ],
+    "status": "needRep",
+    "etaMin": 73.7,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 11,
+    "aug": "Neural Accelerator",
+    "faction": "BitRunners",
+    "repReq": 200000,
+    "price": 594424706435,
+    "prereqs": [],
+    "status": "needRep",
+    "etaMin": 43.8,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 12,
+    "aug": "DataJack",
+    "faction": "NiteSec",
+    "repReq": 112500,
+    "price": 152852067369,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get); donate $2.31b to NiteSec"
+   },
+   {
+    "order": 13,
+    "aug": "Enhanced Myelin Sheathing",
+    "faction": "The Black Hand",
+    "repReq": 100000,
+    "price": 887391168892,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 115.5,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 14,
+    "aug": "The Black Hand",
+    "faction": "The Black Hand",
+    "repReq": 100000,
+    "price": 354956467557,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 26.7,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 15,
+    "aug": "Neuralstimulator",
+    "faction": "The Black Hand",
+    "repReq": 50000,
+    "price": 1936126186674,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 290.2,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 16,
+    "aug": "CRTX42-AA Gene Modification",
+    "faction": "NiteSec",
+    "repReq": 45000,
+    "price": 145209464001,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 17,
+    "aug": "Neural-Retention Enhancement",
+    "faction": "NiteSec",
+    "repReq": 20000,
+    "price": 306553312890,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 42.9,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 18,
+    "aug": "Hacknet Node Core Direct-Neural Interface",
+    "faction": "Netburners",
+    "repReq": 12500,
+    "price": 73572795094,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 4,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 19,
+    "aug": "Neurotrainer II",
+    "faction": "NiteSec",
+    "repReq": 10000,
+    "price": 55179596320,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 1,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 20,
+    "aug": "Combat Rib I",
+    "faction": "Slum Snakes",
+    "repReq": 7500,
+    "price": 29122564725,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 21,
+    "aug": "Hacknet Node Kernel Direct-Neural Interface",
+    "faction": "Netburners",
+    "repReq": 7500,
+    "price": 93192207119,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 12.1,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 22,
+    "aug": "Artificial Synaptic Potentiation",
+    "faction": "NiteSec",
+    "repReq": 6250,
+    "price": 186384414237,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 27.7,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 23,
+    "aug": "Augmented Targeting I",
+    "faction": "Slum Snakes",
+    "repReq": 5000,
+    "price": 34947077669,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 2.4,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 24,
+    "aug": "BitWire",
+    "faction": "CyberSec",
+    "repReq": 3750,
+    "price": 23298051780,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.5,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 25,
+    "aug": "Hacknet Node CPU Architecture Neural-Upload",
+    "faction": "Netburners",
+    "repReq": 3750,
+    "price": 25627856958,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.9,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 26,
+    "aug": "Hacknet Node Cache Architecture Neural-Upload",
+    "faction": "Netburners",
+    "repReq": 2500,
+    "price": 12813928479,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 27,
+    "aug": "Synaptic Enhancement Implant",
+    "faction": "CyberSec",
+    "repReq": 2000,
+    "price": 33199723786,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 4.3,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 28,
+    "aug": "Hacknet Node NIC Architecture Neural-Upload",
+    "faction": "Netburners",
+    "repReq": 1875,
+    "price": 19919834272,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 2.1,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 29,
+    "aug": "LuminCloaking-V1 Skin Implant",
+    "faction": "Slum Snakes",
+    "repReq": 1500,
+    "price": 22133149191,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 2.4,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 30,
+    "aug": "Neurotrainer I",
+    "faction": "CyberSec",
+    "repReq": 1000,
+    "price": 17706519353,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 1.7,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 31,
+    "aug": "The Red Pill",
+    "faction": "Daedalus",
+    "repReq": 2500000,
+    "price": 0,
+    "prereqs": [],
+    "status": "blocked",
+    "etaMin": null,
+    "why": "needs the Daedalus invite: 0/30 installed augs, 1.00t/100.00b, hack 900/2500"
+   },
+   {
+    "order": 32,
+    "aug": "NeuroFlux Governor",
+    "faction": "CyberSec",
+    "repReq": 797257842.4798217,
+    "price": 5293748031309263,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 906855.6,
+    "why": "NeuroFlux last (owner rule); donate for 797.2m rep"
+   }
+  ],
+  "nextPurchaseCost": 500000000,
+  "install": {
+   "policy": "eta",
+   "queued": 0,
+   "next": {
+    "etaMin": 0.5,
+    "reason": "eta: next aug in 1m <= recovery 60m; wait and add it"
+   }
+  },
+  "phase": "mid",
+  "progress": 0.453
+ },
+ "fresh-complete-poor": {
+  "steps": [
+   {
+    "order": 1,
+    "aug": "Embedded Netburner Module",
+    "faction": "NiteSec",
+    "repReq": 15000,
+    "price": 500000000,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 2,
+    "aug": "Embedded Netburner Module Core Implant",
+    "faction": "The Black Hand",
+    "repReq": 175000,
+    "price": 9500000000,
+    "prereqs": [
+     "Embedded Netburner Module"
+    ],
+    "status": "needRep",
+    "etaMin": 41.7,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 3,
+    "aug": "Embedded Netburner Module Core V2 Upgrade",
+    "faction": "BitRunners",
+    "repReq": 1000000,
+    "price": 17100000000,
+    "prereqs": [
+     "Embedded Netburner Module Core Implant",
+     "Embedded Netburner Module"
+    ],
+    "status": "needRep",
+    "etaMin": 316.7,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 4,
+    "aug": "BitRunners Neurolink",
+    "faction": "BitRunners",
+    "repReq": 875000,
+    "price": 16625000000,
+    "prereqs": [],
+    "status": "needRep",
+    "etaMin": 275,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 5,
+    "aug": "Artificial Bio-neural Network Implant",
+    "faction": "BitRunners",
+    "repReq": 275000,
+    "price": 11400000000,
+    "prereqs": [],
+    "status": "needRep",
+    "etaMin": 75,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 6,
+    "aug": "Cranial Signal Processors - Gen I",
+    "faction": "CyberSec",
+    "repReq": 10000,
+    "price": 266000000,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 7,
+    "aug": "Cranial Signal Processors - Gen II",
+    "faction": "CyberSec",
+    "repReq": 18750,
+    "price": 902500000,
+    "prereqs": [
+     "Cranial Signal Processors - Gen I"
+    ],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 8,
+    "aug": "Cranial Signal Processors - Gen III",
+    "faction": "NiteSec",
+    "repReq": 50000,
+    "price": 7544900000,
+    "prereqs": [
+     "Cranial Signal Processors - Gen II",
+     "Cranial Signal Processors - Gen I"
+    ],
+    "status": "needMoney",
+    "etaMin": 3.5,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 9,
+    "aug": "Cranial Signal Processors - Gen IV",
+    "faction": "The Black Hand",
+    "repReq": 125000,
+    "price": 15089800000,
+    "prereqs": [
+     "Cranial Signal Processors - Gen III",
+     "Cranial Signal Processors - Gen II",
+     "Cranial Signal Processors - Gen I"
+    ],
+    "status": "needRep",
+    "etaMin": 25,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 10,
+    "aug": "Cranial Signal Processors - Gen V",
+    "faction": "BitRunners",
+    "repReq": 250000,
+    "price": 30865500000,
+    "prereqs": [
+     "Cranial Signal Processors - Gen IV",
+     "Cranial Signal Processors - Gen III",
+     "Cranial Signal Processors - Gen II",
+     "Cranial Signal Processors - Gen I"
+    ],
+    "status": "needRep",
+    "etaMin": 66.7,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 11,
+    "aug": "Neural Accelerator",
+    "faction": "BitRunners",
+    "repReq": 200000,
+    "price": 24006500000,
+    "prereqs": [],
+    "status": "needRep",
+    "etaMin": 50,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 12,
+    "aug": "DataJack",
+    "faction": "NiteSec",
+    "repReq": 112500,
+    "price": 6173100000,
+    "prereqs": [],
+    "status": "needRep",
+    "etaMin": 20.8,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 13,
+    "aug": "Enhanced Myelin Sheathing",
+    "faction": "The Black Hand",
+    "repReq": 100000,
+    "price": 18862250000,
+    "prereqs": [],
+    "status": "needRep",
+    "etaMin": 16.7,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 14,
+    "aug": "The Black Hand",
+    "faction": "The Black Hand",
+    "repReq": 100000,
+    "price": 7544900000,
+    "prereqs": [],
+    "status": "needRep",
+    "etaMin": 16.7,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 15,
+    "aug": "Neuralstimulator",
+    "faction": "The Black Hand",
+    "repReq": 50000,
+    "price": 41154000000,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 31.5,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 16,
+    "aug": "CRTX42-AA Gene Modification",
+    "faction": "NiteSec",
+    "repReq": 45000,
+    "price": 3086550000,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 17,
+    "aug": "SmartSonar Implant",
+    "faction": "Slum Snakes",
+    "repReq": 22500,
+    "price": 1954815000,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 1.4,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 18,
+    "aug": "Neural-Retention Enhancement",
+    "faction": "NiteSec",
+    "repReq": 20000,
+    "price": 6516050000,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 5.2,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 19,
+    "aug": "Magnetism Amplifier",
+    "faction": "The Black Hand",
+    "repReq": 15000,
+    "price": 6516050000,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 5.2,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 20,
+    "aug": "Hacknet Node Core Direct-Neural Interface",
+    "faction": "Netburners",
+    "repReq": 12500,
+    "price": 1563852000,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 1.1,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 21,
+    "aug": "Neurotrainer II",
+    "faction": "NiteSec",
+    "repReq": 10000,
+    "price": 1172889000,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.8,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 22,
+    "aug": "Combat Rib I",
+    "faction": "Slum Snakes",
+    "repReq": 7500,
+    "price": 619024750,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.3,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 23,
+    "aug": "Hacknet Node Kernel Direct-Neural Interface",
+    "faction": "Netburners",
+    "repReq": 7500,
+    "price": 1042568000,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.7,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 24,
+    "aug": "Artificial Synaptic Potentiation",
+    "faction": "NiteSec",
+    "repReq": 6250,
+    "price": 2085136000,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 1.5,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 25,
+    "aug": "Augmented Targeting I",
+    "faction": "Slum Snakes",
+    "repReq": 5000,
+    "price": 390963000,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.1,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 26,
+    "aug": "LuminCloaking-V1 Skin Implant",
+    "faction": "Slum Snakes",
+    "repReq": 1500,
+    "price": 130321000,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 27,
+    "aug": "LuminCloaking-V2 Skin Implant",
+    "faction": "Slum Snakes",
+    "repReq": 5000,
+    "price": 1485659400,
+    "prereqs": [
+     "LuminCloaking-V1 Skin Implant"
+    ],
+    "status": "needMoney",
+    "etaMin": 1.1,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 28,
+    "aug": "Neural Wit Amplifier",
+    "faction": "BitRunners",
+    "repReq": 5000,
+    "price": 495219800,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.3,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 29,
+    "aug": "BitWire",
+    "faction": "CyberSec",
+    "repReq": 3750,
+    "price": 495219800,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.3,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 30,
+    "aug": "Hacknet Node CPU Architecture Neural-Upload",
+    "faction": "Netburners",
+    "repReq": 3750,
+    "price": 544741780,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.4,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 31,
+    "aug": "Hacknet Node Cache Architecture Neural-Upload",
+    "faction": "Netburners",
+    "repReq": 2500,
+    "price": 272370890,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.1,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 32,
+    "aug": "Synaptic Enhancement Implant",
+    "faction": "CyberSec",
+    "repReq": 2000,
+    "price": 371414850,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.2,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 33,
+    "aug": "Hacknet Node NIC Architecture Neural-Upload",
+    "faction": "Netburners",
+    "repReq": 1875,
+    "price": 222848910,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.1,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 34,
+    "aug": "Wired Reflexes",
+    "faction": "Slum Snakes",
+    "repReq": 1250,
+    "price": 123804950,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.1,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 35,
+    "aug": "Neurotrainer I",
+    "faction": "CyberSec",
+    "repReq": 1000,
+    "price": 198087920,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.1,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 36,
+    "aug": "NeuroFlux Governor",
+    "faction": "CyberSec",
+    "repReq": 797257842.4798217,
+    "price": 59222680395193,
+    "prereqs": [],
+    "status": "needRep",
+    "etaMin": 265735.9,
+    "why": "NeuroFlux last (owner rule)"
+   }
+  ],
+  "nextPurchaseCost": 500000000,
+  "install": {
+   "policy": "eta",
+   "queued": 0,
+   "next": {
+    "etaMin": 0.1,
+    "reason": "eta: 5/6 minimum batch"
+   }
+  },
+  "phase": "early",
+  "progress": 0.137
+ },
+ "fresh-complete-rich": {
+  "steps": [
+   {
+    "order": 1,
+    "aug": "Embedded Netburner Module",
+    "faction": "NiteSec",
+    "repReq": 15000,
+    "price": 500000000,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 2,
+    "aug": "Embedded Netburner Module Core Implant",
+    "faction": "The Black Hand",
+    "repReq": 175000,
+    "price": 9500000000,
+    "prereqs": [
+     "Embedded Netburner Module"
+    ],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 3,
+    "aug": "Embedded Netburner Module Core V2 Upgrade",
+    "faction": "BitRunners",
+    "repReq": 1000000,
+    "price": 32490000000,
+    "prereqs": [
+     "Embedded Netburner Module Core Implant",
+     "Embedded Netburner Module"
+    ],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 4,
+    "aug": "BitRunners Neurolink",
+    "faction": "BitRunners",
+    "repReq": 875000,
+    "price": 60016250000,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 5,
+    "aug": "Artificial Bio-neural Network Implant",
+    "faction": "BitRunners",
+    "repReq": 275000,
+    "price": 78192600000,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 6,
+    "aug": "Cranial Signal Processors - Gen I",
+    "faction": "CyberSec",
+    "repReq": 10000,
+    "price": 3466538600,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 7,
+    "aug": "Cranial Signal Processors - Gen II",
+    "faction": "CyberSec",
+    "repReq": 18750,
+    "price": 11761470250,
+    "prereqs": [
+     "Cranial Signal Processors - Gen I"
+    ],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 8,
+    "aug": "Cranial Signal Processors - Gen III",
+    "faction": "NiteSec",
+    "repReq": 50000,
+    "price": 98325891290,
+    "prereqs": [
+     "Cranial Signal Processors - Gen II",
+     "Cranial Signal Processors - Gen I"
+    ],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 9,
+    "aug": "Cranial Signal Processors - Gen IV",
+    "faction": "The Black Hand",
+    "repReq": 125000,
+    "price": 373638386902,
+    "prereqs": [
+     "Cranial Signal Processors - Gen III",
+     "Cranial Signal Processors - Gen II",
+     "Cranial Signal Processors - Gen I"
+    ],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 10,
+    "aug": "Cranial Signal Processors - Gen V",
+    "faction": "BitRunners",
+    "repReq": 250000,
+    "price": 1452094640005,
+    "prereqs": [
+     "Cranial Signal Processors - Gen IV",
+     "Cranial Signal Processors - Gen III",
+     "Cranial Signal Processors - Gen II",
+     "Cranial Signal Processors - Gen I"
+    ],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 11,
+    "aug": "Neural Accelerator",
+    "faction": "BitRunners",
+    "repReq": 200000,
+    "price": 2145873190230,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 12,
+    "aug": "DataJack",
+    "faction": "NiteSec",
+    "repReq": 112500,
+    "price": 1048412330084,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 13,
+    "aug": "Enhanced Myelin Sheathing",
+    "faction": "The Black Hand",
+    "repReq": 100000,
+    "price": 6086616027432,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 23.3,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 14,
+    "aug": "The Black Hand",
+    "faction": "The Black Hand",
+    "repReq": 100000,
+    "price": 2434646410973,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 15,
+    "aug": "Neuralstimulator",
+    "faction": "The Black Hand",
+    "repReq": 50000,
+    "price": 25231790077354,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 383,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 16,
+    "aug": "CRTX42-AA Gene Modification",
+    "faction": "NiteSec",
+    "repReq": 45000,
+    "price": 1892384255802,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 17,
+    "aug": "SmartSonar Implant",
+    "faction": "Slum Snakes",
+    "repReq": 22500,
+    "price": 1198510028674,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 14,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 18,
+    "aug": "Neural-Retention Enhancement",
+    "faction": "NiteSec",
+    "repReq": 20000,
+    "price": 3995033428914,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 60.6,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 19,
+    "aug": "Magnetism Amplifier",
+    "faction": "The Black Hand",
+    "repReq": 15000,
+    "price": 3995033428914,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 60.6,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 20,
+    "aug": "Hacknet Node Core Direct-Neural Interface",
+    "faction": "Netburners",
+    "repReq": 12500,
+    "price": 958808022939,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 10,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 21,
+    "aug": "Neurotrainer II",
+    "faction": "NiteSec",
+    "repReq": 10000,
+    "price": 719106017205,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 6,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 22,
+    "aug": "Combat Rib I",
+    "faction": "Slum Snakes",
+    "repReq": 7500,
+    "price": 379528175747,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.3,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 23,
+    "aug": "Hacknet Node Kernel Direct-Neural Interface",
+    "faction": "Netburners",
+    "repReq": 7500,
+    "price": 639205348626,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 4.7,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 24,
+    "aug": "Artificial Synaptic Potentiation",
+    "faction": "NiteSec",
+    "repReq": 6250,
+    "price": 1278410697253,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 15.3,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 25,
+    "aug": "Augmented Targeting I",
+    "faction": "Slum Snakes",
+    "repReq": 5000,
+    "price": 239702005735,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 26,
+    "aug": "LuminCloaking-V1 Skin Implant",
+    "faction": "Slum Snakes",
+    "repReq": 1500,
+    "price": 151811270299,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.5,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 27,
+    "aug": "LuminCloaking-V2 Skin Implant",
+    "faction": "Slum Snakes",
+    "repReq": 5000,
+    "price": 910867621792,
+    "prereqs": [
+     "LuminCloaking-V1 Skin Implant"
+    ],
+    "status": "needMoney",
+    "etaMin": 13.2,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 28,
+    "aug": "Neural Wit Amplifier",
+    "faction": "BitRunners",
+    "repReq": 5000,
+    "price": 303622540597,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 3.1,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 29,
+    "aug": "BitWire",
+    "faction": "CyberSec",
+    "repReq": 3750,
+    "price": 303622540597,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 3.1,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 30,
+    "aug": "Hacknet Node CPU Architecture Neural-Upload",
+    "faction": "Netburners",
+    "repReq": 3750,
+    "price": 333984794657,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 3.6,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 31,
+    "aug": "Hacknet Node Cache Architecture Neural-Upload",
+    "faction": "Netburners",
+    "repReq": 2500,
+    "price": 166992397329,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.8,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 32,
+    "aug": "Synaptic Enhancement Implant",
+    "faction": "CyberSec",
+    "repReq": 2000,
+    "price": 227716905448,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 1.8,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 33,
+    "aug": "Hacknet Node NIC Architecture Neural-Upload",
+    "faction": "Netburners",
+    "repReq": 1875,
+    "price": 136630143269,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.3,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 34,
+    "aug": "Wired Reflexes",
+    "faction": "Slum Snakes",
+    "repReq": 1250,
+    "price": 75905635149,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 35,
+    "aug": "Neurotrainer I",
+    "faction": "CyberSec",
+    "repReq": 1000,
+    "price": 230753130854,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 3.1,
+    "why": "goal complete: every purchasable aug"
+   },
+   {
+    "order": 36,
+    "aug": "NeuroFlux Governor",
+    "faction": "CyberSec",
+    "repReq": 797257842.4798217,
+    "price": 68988653718825420,
+    "prereqs": [],
+    "status": "needRep",
+    "etaMin": 264085.9,
+    "why": "NeuroFlux last (owner rule)"
+   }
+  ],
+  "nextPurchaseCost": 500000000,
+  "install": {
+   "policy": "eta",
+   "queued": 0,
+   "next": {
+    "etaMin": 0.3,
+    "reason": "eta: next aug in 0m <= recovery 60m; wait and add it"
+   }
+  },
+  "phase": "mid",
+  "progress": 0.453
+ },
+ "fresh-partly-owned": {
+  "steps": [
+   {
+    "order": 1,
+    "aug": "Embedded Netburner Module",
+    "faction": "NiteSec",
+    "repReq": 15000,
+    "price": 500000000,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 2,
+    "aug": "Embedded Netburner Module Core Implant",
+    "faction": "The Black Hand",
+    "repReq": 175000,
+    "price": 9500000000,
+    "prereqs": [
+     "Embedded Netburner Module"
+    ],
+    "status": "needRep",
+    "etaMin": 41.7,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 3,
+    "aug": "Embedded Netburner Module Core V2 Upgrade",
+    "faction": "BitRunners",
+    "repReq": 1000000,
+    "price": 17100000000,
+    "prereqs": [
+     "Embedded Netburner Module Core Implant",
+     "Embedded Netburner Module"
+    ],
+    "status": "needRep",
+    "etaMin": 316.7,
+    "why": "hacking x1.252 toward w0r1d_d43m0n (900/4500)"
+   },
+   {
+    "order": 4,
+    "aug": "BitRunners Neurolink",
+    "faction": "BitRunners",
+    "repReq": 875000,
+    "price": 16625000000,
+    "prereqs": [],
+    "status": "needRep",
+    "etaMin": 275,
+    "why": "hacking x1.275 toward w0r1d_d43m0n (900/4500)"
+   },
+   {
+    "order": 5,
+    "aug": "Artificial Bio-neural Network Implant",
+    "faction": "BitRunners",
+    "repReq": 275000,
+    "price": 11400000000,
+    "prereqs": [],
+    "status": "needRep",
+    "etaMin": 75,
+    "why": "hacking x1.168 toward w0r1d_d43m0n (900/4500)"
+   },
+   {
+    "order": 6,
+    "aug": "Cranial Signal Processors - Gen III",
+    "faction": "NiteSec",
+    "repReq": 50000,
+    "price": 2090000000,
+    "prereqs": [
+     "Cranial Signal Processors - Gen II",
+     "Cranial Signal Processors - Gen I"
+    ],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 7,
+    "aug": "Cranial Signal Processors - Gen IV",
+    "faction": "The Black Hand",
+    "repReq": 125000,
+    "price": 7942000000,
+    "prereqs": [
+     "Cranial Signal Processors - Gen III",
+     "Cranial Signal Processors - Gen II",
+     "Cranial Signal Processors - Gen I"
+    ],
+    "status": "needRep",
+    "etaMin": 25,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 8,
+    "aug": "Cranial Signal Processors - Gen V",
+    "faction": "BitRunners",
+    "repReq": 250000,
+    "price": 16245000000,
+    "prereqs": [
+     "Cranial Signal Processors - Gen IV",
+     "Cranial Signal Processors - Gen III",
+     "Cranial Signal Processors - Gen II",
+     "Cranial Signal Processors - Gen I"
+    ],
+    "status": "needRep",
+    "etaMin": 66.7,
+    "why": "hacking x1.375 toward w0r1d_d43m0n (900/4500)"
+   },
+   {
+    "order": 9,
+    "aug": "Neural Accelerator",
+    "faction": "BitRunners",
+    "repReq": 200000,
+    "price": 12635000000,
+    "prereqs": [],
+    "status": "needRep",
+    "etaMin": 50,
+    "why": "hacking x1.235 toward w0r1d_d43m0n (900/4500)"
+   },
+   {
+    "order": 10,
+    "aug": "DataJack",
+    "faction": "NiteSec",
+    "repReq": 112500,
+    "price": 3249000000,
+    "prereqs": [],
+    "status": "needRep",
+    "etaMin": 20.8,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 11,
+    "aug": "Enhanced Myelin Sheathing",
+    "faction": "The Black Hand",
+    "repReq": 100000,
+    "price": 9927500000,
+    "prereqs": [],
+    "status": "needRep",
+    "etaMin": 16.7,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 12,
+    "aug": "The Black Hand",
+    "faction": "The Black Hand",
+    "repReq": 100000,
+    "price": 3971000000,
+    "prereqs": [],
+    "status": "needRep",
+    "etaMin": 16.7,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 13,
+    "aug": "Neuralstimulator",
+    "faction": "The Black Hand",
+    "repReq": 50000,
+    "price": 21660000000,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 16,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 14,
+    "aug": "CRTX42-AA Gene Modification",
+    "faction": "NiteSec",
+    "repReq": 45000,
+    "price": 1624500000,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 15,
+    "aug": "SmartSonar Implant",
+    "faction": "Slum Snakes",
+    "repReq": 22500,
+    "price": 1028850000,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.2,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 16,
+    "aug": "Neural-Retention Enhancement",
+    "faction": "NiteSec",
+    "repReq": 20000,
+    "price": 3429500000,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 2.2,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 17,
+    "aug": "Magnetism Amplifier",
+    "faction": "The Black Hand",
+    "repReq": 15000,
+    "price": 3429500000,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 2.2,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 18,
+    "aug": "Hacknet Node Core Direct-Neural Interface",
+    "faction": "Netburners",
+    "repReq": 12500,
+    "price": 823080000,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.1,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 19,
+    "aug": "Neurotrainer II",
+    "faction": "NiteSec",
+    "repReq": 10000,
+    "price": 617310000,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 20,
+    "aug": "Combat Rib I",
+    "faction": "Slum Snakes",
+    "repReq": 7500,
+    "price": 619024750,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.4,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 21,
+    "aug": "Hacknet Node Kernel Direct-Neural Interface",
+    "faction": "Netburners",
+    "repReq": 7500,
+    "price": 1042568000,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.7,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 22,
+    "aug": "Artificial Synaptic Potentiation",
+    "faction": "NiteSec",
+    "repReq": 6250,
+    "price": 2085136000,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 1.6,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 23,
+    "aug": "Augmented Targeting I",
+    "faction": "Slum Snakes",
+    "repReq": 5000,
+    "price": 390963000,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.2,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 24,
+    "aug": "LuminCloaking-V1 Skin Implant",
+    "faction": "Slum Snakes",
+    "repReq": 1500,
+    "price": 130321000,
+    "prereqs": [],
+    "status": "buyable",
+    "etaMin": 0,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 25,
+    "aug": "LuminCloaking-V2 Skin Implant",
+    "faction": "Slum Snakes",
+    "repReq": 5000,
+    "price": 1485659400,
+    "prereqs": [
+     "LuminCloaking-V1 Skin Implant"
+    ],
+    "status": "needMoney",
+    "etaMin": 1.2,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 26,
+    "aug": "Neural Wit Amplifier",
+    "faction": "BitRunners",
+    "repReq": 5000,
+    "price": 495219800,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.4,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 27,
+    "aug": "Wired Reflexes",
+    "faction": "Slum Snakes",
+    "repReq": 1250,
+    "price": 123804950,
+    "prereqs": [],
+    "status": "needMoney",
+    "etaMin": 0.1,
+    "why": "Daedalus needs 30 installed augs (fastest to get)"
+   },
+   {
+    "order": 28,
+    "aug": "The Red Pill",
+    "faction": "Daedalus",
+    "repReq": 2500000,
+    "price": 0,
+    "prereqs": [],
+    "status": "blocked",
+    "etaMin": null,
+    "why": "needs the Daedalus invite: 5/30 installed augs, 5.00b/100.00b, hack 900/2500"
+   },
+   {
+    "order": 29,
+    "aug": "NeuroFlux Governor",
+    "faction": "CyberSec",
+    "repReq": 797257842.4798217,
+    "price": 59222680395193,
+    "prereqs": [],
+    "status": "needRep",
+    "etaMin": 265735.9,
+    "why": "NeuroFlux last (owner rule)"
+   }
+  ],
+  "nextPurchaseCost": 500000000,
+  "install": {
+   "policy": "count",
+   "queued": 3,
+   "next": {
+    "etaMin": 0,
+    "reason": "count: 8 >= 6"
+   }
+  },
+  "phase": "early",
+  "progress": 0.192
+ },
+ "gang-bn2": {
+  "steps": [
+   {
+    "order": 1,
+    "aug": "The Red Pill",
+    "faction": "Slum Snakes",
+    "repReq": 2500000,
+    "price": 0,
+    "prereqs": [],
+    "status": "needRep",
+    "etaMin": 333.3,
+    "why": "The Red Pill unlocks w0r1d_d43m0n"
+   },
+   {
+    "order": 2,
+    "aug": "NeuroFlux Governor",
+    "faction": "Slum Snakes",
+    "repReq": 797257842.4798217,
+    "price": 2391773527439,
+    "prereqs": [],
+    "status": "needRep",
+    "etaMin": 132793,
+    "why": "NeuroFlux last (owner rule)"
+   }
+  ],
+  "nextPurchaseCost": 0,
+  "install": {
+   "policy": "eta",
+   "queued": 0,
+   "next": {
+    "etaMin": 333.3,
+    "reason": "waiting for the first buyable aug"
+   }
+  },
+  "phase": "early",
+  "progress": 0.043
+ }
+}

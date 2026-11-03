@@ -60,7 +60,7 @@ cfg  = { sort, pinned, last, exclude }     // missing fields = defaults
 info = { [name]: { repReq, price, prereqs } }
 tie  = "name" (planner) | "input" (autopilot: keep the order of `names`)
 ```
-Also `DEFAULT_ORDER_CFG`, `ORDER_KEYS` (the six settings keys, as written by the dashboard), `cfgFromSettings(s)`,
+Also `DEFAULT_ORDER_CFG`, `ORDER_KEYS` (all seven settings keys, as written by the dashboard), `cfgFromSettings(s)`,
 `isDefaultCfg(cfg)`, `projectedCost(order, info, step)`, `buildCatalog(snap)`, `sameCatalog(text, cat)`, and the strict /
 drivesWork helpers `pinnedBlocker` and `strictStep`.
 
