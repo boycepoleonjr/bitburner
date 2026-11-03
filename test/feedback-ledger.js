@@ -61,9 +61,14 @@ test("docs/feedback/ledger.md is valid", () => {
   const errs = validateLedger(fs.readFileSync(path.join(root, "docs/feedback/ledger.md"), "utf8"));
   assert.deepEqual(errs, []);
 });
-test("the ledger is seeded with F-001..F-009", () => {
+test("the ledger keeps the seeded F-001..F-009 as its first entries (later findings may be appended)", () => {
   const { entries } = parseLedger(fs.readFileSync(path.join(root, "docs/feedback/ledger.md"), "utf8"));
-  assert.deepEqual(entries.map((e) => e.id), Array.from({ length: 9 }, (_, i) => `F-00${i + 1}`));
+  assert.deepEqual(entries.slice(0, 9).map((e) => e.id), Array.from({ length: 9 }, (_, i) => `F-00${i + 1}`));
+});
+test("appending a new finding (F-010) to the real ledger keeps it valid", () => {
+  const md = fs.readFileSync(path.join(root, "docs/feedback/ledger.md"), "utf8");
+  assert.deepEqual(validateLedger(md + "\n" + entry({ id: "F-010" })), []);
+  assert.deepEqual(parseLedger(md + "\n" + entry({ id: "F-010" })).entries.length, parseLedger(md).entries.length + 1);
 });
 
 console.log(`\n${passed} feedback-ledger checks passed${process.exitCode ? " (with failures)" : ""}`);
