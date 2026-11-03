@@ -31,6 +31,22 @@ export function etaGate({ why, countWhy, buyable, policy, plan, now }) {
   if (!why && nx.etaMin === 0 && buyable >= 1 && /^eta:/.test(nx.reason || "")) return { why: nx.reason, held: null };
   return { why, held: null };
 }
+/** The pre-augs.order purchase order: highest rep requirement first (ties in discovery order), each aug's unowned prereqs
+ * IMMEDIATELY before it (fix 2026-09-27: Gen II was skipped because Gen I was bought after it and the x1.9 price ramp made
+ * Gen II unaffordable), depth cap 5, only prereqs that are candidates themselves. Kept as the fallback when lib/augorder.js
+ * throws, and as the golden reference. `cands` = [{a, f, rr}] in discovery order. Exported for tests. */
+export function legacyOrder(cands, prereqOf, have) {
+  const uniq = [...new Map(cands.map((x) => [x.a, x])).values()].sort((x, y) => y.rr - x.rr);
+  const byName = new Map(uniq.map((x) => [x.a, x]));
+  const order = [];
+  const place = (x, depth = 0) => {
+    if (depth > 5 || have.has(x.a) || order.includes(x)) return;
+    for (const p of prereqOf(x.a)) if (!have.has(p) && byName.has(p)) place(byName.get(p), depth + 1);
+    order.push(x);
+  };
+  for (const x of uniq) place(x);
+  return order;
+}
 export const CITY_FACTIONS = new Set(["Sector-12", "Aevum", "Volhaven", "Chongqing", "New Tokyo", "Ishima"]);
 export const cityDone = (augsOf, owned, f) => augsOf(f).filter((a) => a !== NEUROFLUX).every((a) => owned.has(a));
 /** @returns {"join"|"flag"|"block"} */
@@ -180,17 +196,7 @@ export async function main(ns) {
       const rep = S.getFactionRep(f);
       for (const a of S.getAugmentationsFromFaction(f)) if (!have.has(a) && !a.startsWith("NeuroFlux") && !(c0().skipHacknetAugs && /hacknet/i.test(a)) && S.getAugmentationRepReq(a) <= rep) cands.push({ a, f, rr: S.getAugmentationRepReq(a) });
     }
-    const uniq = [...new Map(cands.map((x) => [x.a, x])).values()].sort((x, y) => y.rr - x.rr);
-    const byName = new Map(uniq.map((x) => [x.a, x]));
-    // Order: highest rep req first, but each aug's unowned prereqs go IMMEDIATELY before it (fix 2026-09-27:
-    // Gen II was skipped because Gen I was bought after it and the x1.9 price ramp made Gen II unaffordable).
-    const order = [];
-    const place = (x, depth = 0) => {
-      if (depth > 5 || have.has(x.a) || order.includes(x)) return;
-      for (const p of S.getAugmentationPrereq(x.a)) if (!have.has(p) && byName.has(p)) place(byName.get(p), depth + 1);
-      order.push(x);
-    };
-    for (const x of uniq) place(x);
+    const order = legacyOrder(cands, (a) => S.getAugmentationPrereq(a), have);
     const plan = order.map((x) => ({ a: x.a, f: x.f, rr: x.rr, price: S.getAugmentationPrice(x.a) }));
     for (const x of order) {
       if (have.has(x.a) || S.getAugmentationPrereq(x.a).some((p) => !have.has(p))) { audit("skip", { a: x.a, why: "prereq missing" }); continue; }
