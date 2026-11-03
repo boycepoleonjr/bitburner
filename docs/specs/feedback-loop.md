@@ -27,7 +27,7 @@ Detect -> Record -> Triage -> Fix -> Verify -> Learn
 | Detect | A detector (attention flag, CI test, routine check) sees a condition. A human or agent audit can also find one by hand. | check-in `attention`, CI, routine |
 | Record | An entry is added to the ledger with the fields below, including the signal that should have caught it. | `docs/feedback/ledger.md` |
 | Triage | Severity is set (HIGH stalls progress or risks saves, MED degrades silently, LOW is noise or hygiene). Entries that need the owner carry the question in `owner_decision`. | ledger, owner |
-| Fix | A separate PR, one per finding, with the normal rules in AGENTS.md (plan in `docs/specs/` for non-trivial work, regression tests for every path). | branch `<type>/<slug>` |
+| Fix | A separate PR, one per finding, with the normal rules in AGENTS.md (plan in `docs/specs/` for non-trivial work, regression tests for every path). Per the AGENTS.md PR policy (owner rule, 2026-11-03) it is opened non-draft from the start so the AI reviews run on every push; it is never merged by the agent. | branch `<type>/<slug>` |
 | Verify | The fix PR adds a regression test or a live detector, and the routine checks the signal against live data after the deploy. | `test/`, routine report |
 | Learn | The entry moves to `closed` only when its `detector` is `test` or `flag`. The signal stays in the check for good, and the lesson goes into the handoff or `agent/PLAYBOOK.txt`. | ledger, handoff |
 

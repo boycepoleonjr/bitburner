@@ -52,6 +52,9 @@ Run all of these before marking a PR ready, and report each with pass/fail:
 - audit: `npm audit --audit-level=high`
 <!-- conventions:end agents-commands -->
 
+## PR policy
+New PRs in this repo are opened non-draft (ready for review) from the start, so the AI reviews run on every push (owner rule, 2026-11-03). This overrides the "open a draft PR after the first commit" line in the conventions block above, for this repo only. Never merge; CI must pass before reporting done.
+
 ## Feedback loop
 Findings from audits and supervisor runs are tracked in `docs/feedback/ledger.md` (Detect -> Record -> Triage -> Fix -> Verify ->
 Learn; spec: `docs/specs/feedback-loop.md`). Every finding names the signal that should have caught it; an entry is not closed
