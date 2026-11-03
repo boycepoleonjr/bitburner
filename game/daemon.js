@@ -310,7 +310,7 @@ export function tick(ns, cfg, state, log, nextWaveId, firstLoop) {
   if (ctx) {
     try {
       const moneyRunningGb = [...census(ns, allHosts, cfg).values()].reduce((a, t) => a + t.ramGb, 0);
-      const reasons = mgrOn ? [...rplan.alloc.reasons, ...ramReasons, ...(cloudInfo?.reasons ?? []), `work signal: ${ctx.workSource}`, ctx.hackNeedWhy, `daedalus reqs: ${ctx.reqSource}`]
+      const reasons = mgrOn ? [...rplan.alloc.reasons, ...ramReasons, ...(cloudInfo?.reasons ?? []), `work signal: ${ctx.workSource}`, ctx.hackNeedWhy, ctx.repNeededWhy, `daedalus reqs: ${ctx.reqSource}`]
         : ["RAM manager disabled (ram.manager.enabled=false)"];
       writeStatus(ns, cfg, state, ctx, { enabled: mgrOn, alloc: rplan?.alloc, moneyRunningGb, cloud: cloudInfo, reasons }, now);
     } catch (e) { log.warn("ram", `status: ${e}`); }
