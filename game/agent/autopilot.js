@@ -13,6 +13,7 @@
 import { readSettings } from "lib/settings.js";
 import { decideNode, parseJson, REQUEST_FILE, ACK_FILE, DESTROY_SCRIPT, NO_RAM } from "lib/nodectl.js";
 import { gangPossible, gangFactionFromStatus, gangCrimeAction } from "lib/gangplan.js";
+import { xpStarveCheck } from "lib/ramwatch.js";
 const NEUROFLUX = "NeuroFlux Governor";
 export const PLAN_SCRIPT = "agent/sl-plan.js", PLAN_FILE = "/data/aug-plan.txt";
 /** Settings (data/settings.txt) win over the legacy autopilot-config.txt for the same concept. Exported for tests. */
@@ -30,6 +31,12 @@ export function etaGate({ why, countWhy, buyable, policy, plan, now }) {
   if (why && why === countWhy && nx.etaMin !== 0) return { why: null, held: nx.reason || "eta: wait" };
   if (!why && nx.etaMin === 0 && buyable >= 1 && /^eta:/.test(nx.reason || "")) return { why: nx.reason, held: null };
   return { why, held: null };
+}
+/** RAM-manager detector step (lib/ramwatch.js): pushes the "xp starved by share > 60 min" flag into `flags`; returns the new since-time. Exported for tests. */
+export function xpStarveStep(sinceMs, statusRaw, now, flags) {
+  const w = xpStarveCheck({ sinceMs, statusRaw, now });
+  if (w.flag) flags.push(w.flag);
+  return w.since;
 }
 export const CITY_FACTIONS = new Set(["Sector-12", "Aevum", "Volhaven", "Chongqing", "New Tokyo", "Ishima"]);
 export const cityDone = (augsOf, owned, f) => augsOf(f).filter((a) => a !== NEUROFLUX).every((a) => owned.has(a));
@@ -171,7 +178,7 @@ export async function main(ns) {
   const audit = (kind, data) => ns.write(AUDIT, JSON.stringify({ t: Date.now(), iso: new Date().toISOString(), kind, ...data }) + "\n", "a");
   const c0 = () => cfg();
   const donateAt = (c) => donateFloor(ns.getFavorToDonate(), c.donateFavor);
-  let lastFlags = "";
+  let lastFlags = "", xpStarveSince = 0;
   // Buy every rep-met aug, highest rep requirement first (respecting prereqs), then NeuroFlux until broke. Returns names bought.
   const buyBatch = (owned) => {
     const out = [], have = new Set(owned);
@@ -449,6 +456,8 @@ export async function main(ns) {
         }
       }
     } catch (e) { flags.push("autopilot error: " + e); }
+    // RAM manager detector: hack level is the bottleneck but xp is starved by share for > 60 min (lib/ramwatch.js; no new ns calls)
+    try { xpStarveSince = xpStarveStep(xpStarveSince, ns.read("/data/ram-status.txt"), Date.now(), flags); } catch { }
     // Aug planner snapshot (16x Singularity calls live in agent/sl-plan.js, not here): every 4th loop, if home has room.
     try { if (loopN++ % 4 === 0 && !ns.isRunning(PLAN_SCRIPT, "home") && ns.getServerMaxRam("home") - ns.getServerUsedRam("home") >= ns.getScriptRam(PLAN_SCRIPT, "home")) ns.run(PLAN_SCRIPT); } catch { }
     // Spend plan for the predictor: every purchase the autopilot will make, as {what, thr (money level that fires it), cost}.

@@ -3,7 +3,7 @@
  * Called from daemon.js tick(). New ns calls (RAM): getResetInfo 1 GB, getSharePower 0.2 GB. No Singularity.
  * Spec: docs/specs/ram-manager.md
  */
-import { allocate, chooseExtraTargets, resizePlan, ema, repActiveFrom, hackNeedFrom, daedalusReqs, buildStatus,
+import { allocate, chooseExtraTargets, resizePlan, ema, repActiveFrom, hackNeedFrom, repNeededFrom, daedalusReqs, buildStatus,
   SHARE_SCRIPT, XP_SCRIPT, STATUS_FILE } from "lib/ramplan.js";
 import { strategyNow } from "lib/progress.js";
 import { planWave } from "lib/planner.js";
@@ -12,6 +12,7 @@ import { describe } from "lib/network.js";
 export const AUTOPILOT_STATUS = "data/autopilot-status.txt";
 export const TELEMETRY = "data/telemetry.txt";
 export const DAEDALUS_CACHE = "data/daedalus-req.txt";
+export const AUG_PLAN = "data/aug-plan.txt";
 const TELEMETRY_EVERY_MS = 60_000;
 let teleCache = { at: 0, line: "" };
 
@@ -62,7 +63,9 @@ export function observe(ns, cfg, S, executors, map, hackLevel, now) {
     hack: hackLevel, hackReq: req.hack }, hasRedPill, S);
   const servers = [...map.values()].map((s) => ({ host: s.host, rooted: s.rooted, owned: s.isHome || s.isPurchased || s.isHacknet, maxMoney: s.maxMoney, reqHack: s.reqHack }));
   const hn = hackNeedFrom({ hack: hackLevel, hackReq: req.hack, worldReq: map.get("w0r1d_d43m0n")?.reqHack ?? 0, servers });
-  return { usable, loops, ramOf, repActive: work.active, workSource: work.source, strat, hackNeed: hn.need, hackNeedWhy: hn.why, reqSource: req.source };
+  const rn = repNeededFrom(ns.read(AUG_PLAN), now);
+  return { usable, loops, ramOf, repActive: work.active, workSource: work.source, strat, hackNeed: hn.need, hackNeedWhy: hn.why, reqSource: req.source,
+    repNeeded: rn.needed, repNeededWhy: rn.why };
 }
 
 /**
@@ -73,13 +76,14 @@ export function plan(ns, cfg, S, ctx, ranking, primary, baseSecondaries, ram) {
   const demandOf = (host) => planWave(ns, describe(ns, host), cfg, Infinity, ram, cfg.farm.hackFraction, cfg.farm.maxBatches)?.ramGb ?? 0;
   const max = S["ram.targets.max"] > 0 ? S["ram.targets.max"] : Infinity;
   const base = [primary, ...baseSecondaries].filter(Boolean).slice(0, max);
+  // Deliberately NOT reduced by the xp-priority branch: the RAM share would take is reserved for xp, so the target set stays as is.
   const shareFirst = S["ram.share.enabled"] && ctx.repActive ? ctx.strat.weight * ctx.usable : 0;
   const baseDemand = base.reduce((a, h) => a + demandOf(h), 0);
   const rest = ranking.filter((c) => !base.includes(c.host)).map((c) => ({ host: c.host, demandGb: demandOf(c.host) }));
   const extra = chooseExtraTargets(rest, ctx.usable - shareFirst - baseDemand, max - base.length);
   const demandGb = baseDemand + extra.demandGb;
   const alloc = allocate({ usableGb: ctx.usable, weight: ctx.strat.weight, repActive: ctx.repActive, hackNeed: ctx.hackNeed,
-    demandGb, xpMode: S["ram.xp.mode"], shareEnabled: S["ram.share.enabled"] });
+    repNeeded: ctx.repNeeded, demandGb, xpMode: S["ram.xp.mode"], shareEnabled: S["ram.share.enabled"] });
   return { secondaries: [...base.filter((h) => h !== primary), ...extra.hosts], alloc, demandGb };
 }
 

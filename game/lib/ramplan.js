@@ -11,6 +11,7 @@ export const XP_SCRIPT = "workers/xp-loop.js";
 export const STATUS_FILE = "data/ram-status.txt";
 export const EMA_WINDOW_MS = 5 * 60_000;
 export const WORK_MAX_AGE_MS = 120_000;
+export const PLAN_MAX_AGE_MS = 10 * 60_000; // data/aug-plan.txt is refreshed about every 2 min; older = unknown
 
 const fin = (v) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : 0);
 
@@ -20,10 +21,13 @@ const fin = (v) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : 0
  *  2. money = min(usable − share, demand)   (demand = what the chosen hack targets can absorb)
  *  3. surplus = the rest → xp if xp.mode=always or hacking level is the binding constraint;
  *                         else share if rep work is active; else xp (idle RAM earns nothing); xp.mode=off → idle
+ * xp priority (docs/specs/ram-xp-priority.md): when repNeeded === false (the aug plan says no step needs faction rep) and
+ *   hacking level is the constraint, step 1 gives share 0, so the RAM share would have taken goes to xp via step 3.
+ *   Any other input, including repNeeded omitted or true, takes the old path and returns the old result unchanged.
  * Invariant: money + share + xp + idle = usable, every value finite and >= 0.
  * @returns {{moneyGb:number, shareGb:number, xpGb:number, idleGb:number, reasons:string[]}}
  */
-export function allocate({ usableGb, weight, repActive, hackNeed, demandGb, xpMode = "auto", shareEnabled = true } = {}) {
+export function allocate({ usableGb, weight, repActive, hackNeed, demandGb, xpMode = "auto", shareEnabled = true, repNeeded = true } = {}) {
   const reasons = [];
   const clean = (name, v) => { const c = fin(v); if (c !== v && !(v === 0)) reasons.push(`${name} invalid (${v}); using ${c}`); return c; };
   const usable = clean("usableGb", usableGb);
@@ -34,6 +38,7 @@ export function allocate({ usableGb, weight, repActive, hackNeed, demandGb, xpMo
   let share = 0;
   if (!shareEnabled) reasons.push("share disabled");
   else if (!repActive) reasons.push("no faction work active: share 0");
+  else if (repNeeded === false && hackNeed && xpMode !== "off" && w * usable > 0) reasons.push("share 0: hack level is the bottleneck and no aug step needs faction rep (xp priority)");
   else { share = w * usable; reasons.push(`share = ${(w * 100).toFixed(0)}% of usable (faction work active)`); }
 
   const money = Math.min(usable - share, demand);
@@ -118,6 +123,24 @@ export function hackNeedFrom({ hack, hackReq = 0, worldReq = 0, servers = [] }) 
   const out = servers.filter((s) => s.rooted && !s.owned && s.maxMoney > 0 && s.reqHack > hack).sort((a, b) => b.maxMoney - a.maxMoney)[0];
   if (out) return { need: true, why: `${out.host} needs hack ${out.reqHack}` };
   return { need: false, why: "every money server is hackable" };
+}
+
+/**
+ * Does any aug-plan step still need faction rep? Reads the raw data/aug-plan.txt. Unknown (missing, unparseable, stale) counts as
+ * needed, so the allocation falls back to today's behaviour. Rep exactly equal to the requirement is met.
+ * needMoney / blocked / buyable steps and a held NeuroFlux step do not need rep.
+ * @returns {{needed:boolean, why:string}}
+ */
+export function repNeededFrom(planRaw, now = Date.now(), maxAgeMs = PLAN_MAX_AGE_MS) {
+  const p = safe(planRaw);
+  if (!p || !Number.isFinite(p.t) || !Array.isArray(p.steps)) return { needed: true, why: "aug-plan unavailable: assuming rep may be needed" };
+  if (now - p.t > maxAgeMs) return { needed: true, why: "aug-plan stale: assuming rep may be needed" };
+  const rp = p.redPill;
+  if (rp && rp.owned === false && Number.isFinite(rp.repReq) && rp.repReq > 0 && !(Number.isFinite(rp.rep) && rp.rep >= rp.repReq))
+    return { needed: true, why: `rep needed: The Red Pill (${fin(rp.rep)}/${rp.repReq})` };
+  const st = p.steps.find((x) => x && x.status === "needRep" && !/^held/.test(String(x.why ?? "")));
+  if (st) return { needed: true, why: `rep needed: ${st.aug} (${st.faction || "no faction"})` };
+  return { needed: false, why: "no aug step needs faction rep" };
 }
 
 /** Daedalus requirements: a cached file (written by a script that can afford getBitNodeMultipliers) or the fallback. */
