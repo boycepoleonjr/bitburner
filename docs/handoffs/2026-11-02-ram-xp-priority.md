@@ -1,0 +1,10 @@
+# Handoff 2026-11-02: spare RAM to hack XP while hack level is the bottleneck
+
+- **Bug:** BN10, hack 5760/6000 for w0r1d_d43m0n, `ram-status` alloc `{money:0, share:~75M GB, xp:0}`, `hackNeed:true`, nothing left to buy. In `allocate()` (`game/lib/ramplan.js`) share is taken first at `weight x usable` (weight 1 in the late phase), so the surplus that feeds xp was 0. About 50 min per hack level, 240 levels left.
+- **Fix:** `repNeededFrom` reads `data/aug-plan.txt` (unknown or stale = rep needed). When no step needs faction rep and `hackNeed`, `allocate()` gives share 0, so xp gets what money (kept at `min(usable, demand)`) does not need. Every other input returns the old result byte for byte (golden fixture, 648 cases, generated from main). `ram-status.reasons` says why. Spec: `docs/specs/ram-xp-priority.md`.
+- **Detector:** `lib/ramwatch.js` + `xpStarveStep` in `agent/autopilot.js` push a check-in attention flag when `hackNeed`, `alloc.xp == 0` and `alloc.share > 90%` of usable hold for over 60 min.
+- **RAM:** no new Netscript function anywhere. `test/ram-xp-static.js`: RAM-costing names reachable from `daemon.js` (58) and `agent/autopilot.js` (44) are identical to main. Autopilot does not import `ramplan.js`.
+- **Not done here (needs the owner):** merge; confirm Railway deployed it; `bb push lib/ramplan.js lib/rammgr.js lib/ramwatch.js daemon.js agent/autopilot.js`; `kill daemon.js; run daemon.js`; restart autopilot; check `bb read data/ram-status.txt` shows `alloc.xp > 0`, `alloc.share == 0`; `bb note`. Rollback: push the previous files, or the existing `ram.manager.enabled=false`.
+- **Decision to review:** money keeps `min(usable, demand)` instead of xp taking everything (see spec section 2).
+- **Known false positive:** late phase with hack AND rep both outstanding keeps share near 100% on purpose; the detector flag can fire there (its text says to check aug-plan).
+- **Resume:** branch `fix/ram-xp-over-share`, PR boycepoleonjr/bitburner#34. Run `npm ci && node .github/scripts/check-syntax.js && npm test && npm audit --audit-level=high`.
