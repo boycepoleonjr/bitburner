@@ -57,7 +57,7 @@ export async function main(ns) {
   snap.node = decideNode({ ready, bn: snap.bn, sourceFiles, now, request: parseJson(ns.read(REQUEST_FILE)), ack: parseJson(ns.read(ACK_FILE)) }, s).node;
   const out = plan(snap, s);
   ns.write(PLAN, JSON.stringify(out), "w");
-  { const cat = buildCatalog(snap); if (!sameCatalog(ns.read(CATALOG), cat)) ns.write(CATALOG, JSON.stringify({ t: now, ...cat }), "w"); } // only when it changed
+  { const augCat = buildCatalog(snap); if (!sameCatalog(ns.read(CATALOG), augCat)) ns.write(CATALOG, JSON.stringify({ t: now, ...augCat }), "w"); } // only when it changed
   // Per-BitNode Daedalus requirements for the daemon's RAM manager (lib/ramplan.js daedalusReqs), which can't afford
   // getBitNodeMultipliers itself.
   if (out.daedalus) ns.write("/data/daedalus-req.txt", JSON.stringify({ t: out.t, augs: out.daedalus.augsReq, money: out.daedalus.moneyReq, hack: out.daedalus.hackReq }), "w");

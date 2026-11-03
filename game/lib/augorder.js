@@ -172,7 +172,7 @@ export function buildCatalog(snap) {
   });
   return { augs };
 }
-/** Does the stored catalog text already hold `cat` (ignoring `t`)? Used to skip rewriting an unchanged file. */
-export function sameCatalog(text, cat) {
-  try { const old = JSON.parse(text); return !!old && JSON.stringify(old.augs) === JSON.stringify(cat.augs); } catch { return false; }
+/** Does the stored catalog text already hold the fresh catalog (ignoring `t`)? Used to skip rewriting an unchanged file. */
+export function sameCatalog(text, fresh) {
+  try { const old = JSON.parse(text); return !!old && JSON.stringify(old.augs) === JSON.stringify(fresh.augs); } catch { return false; }
 }
