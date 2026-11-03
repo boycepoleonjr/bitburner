@@ -60,7 +60,7 @@ Recovery time (heuristic, `agent/sl-plan.js recoveryMinutes`): 25% of the median
 ### Snapshot: `game/agent/sl-plan.js` (one-shot)
 All the 16x-RAM Singularity aug calls live here, not in the autopilot, so the autopilot's static RAM is unchanged. The autopilot starts it every 4th loop (about 2 min) when home has room.
 
-It writes `data/aug-plan.txt`. It also writes `data/aug-plan-state.txt` (previous rep values, used for the rep rates). It is read-only: it buys and joins nothing.
+It writes `data/aug-plan.txt`. It also writes `data/aug-plan-state.txt` (previous rep values, used for the rep rates). It also writes `data/aug-catalog.txt` (`{t, augs:[{name, factions:[{f,joined}], repReq, price, prereqs, owned, installed}]}`, from the same snapshot, only when the content changed) for the dashboard's Augmentations → Order tab. It is read-only: it buys and joins nothing.
 
 ### Node control: `game/lib/nodectl.js` (pure) + autopilot + `game/agent/sl-destroy.js` + `server/node-control.js`
 
@@ -134,6 +134,7 @@ doesn't reset the clock; READY disappearing does.
  "redPill":{"owned":bool,"repReq":n,"rep":n},
  "worldDaemon":{"req":n,"hack":n,"ready":bool},
  "steps":[{"order":n,"aug":s,"faction":s,"repReq":n,"price":n,"prereqs":[s],"status":"owned|queued|buyable|needRep|needMoney|blocked","etaMin":n|null,"why":s}],
+ "order":{"sort":"rep|price|cheap|name","pinned":[s],"last":[s],"excluded":[s],"strict":bool,"drivesWork":bool,"warnings":[s],"blocked":[{"aug":s,"by":s}],"projectedCost":n,"defaultProjectedCost":n,"isDefault":bool},
  "install":{"policy":"eta|count","queued":n,"next":{"etaMin":n|null,"reason":s}},
  "node":{"ready":bool,"autoSelect":bool,"autoDestroy":bool,"recommended":{"bn":n|null,"why":s},
          "pending":{"id":s,"stage":"none|requested|acked|destroying|blocked","detail":s}}}
@@ -144,7 +145,8 @@ Notes:
 - `price` is the simulated price at that point in the purchase sequence.
 - The dashboard should treat a step whose `why` starts with `held:` as held. NeuroFlux is the only such step.
 - `stage: "acked"` = backup confirmed and inside the veto window. `"destroying"` = `sl-destroy.js` started.
-- `test/augplan.js` pins the contract.
+- `order` (additive, docs/specs/aug-order.md) echoes the effective `augs.order.*` config. `projectedCost` / `defaultProjectedCost` are the price sums (with the x1.9 ramp) of the currently buyable steps in the configured vs the default order. An aug whose unowned prerequisite is excluded appears as a `blocked` step.
+- `test/augplan.js` pins the contract; its golden test pins the default-settings steps.
 
 ## Recommended BitNode order (default `DEFAULT_BN_ORDER`)
 We own SF1.1 and SF4.1, and SF5.1 on destroying BN5. "First available" skips maxed Source-Files. `node.order` holds unique entries, so a BN repeats until its SF reaches 3.

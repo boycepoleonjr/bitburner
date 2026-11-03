@@ -49,7 +49,7 @@ Views and their primary action:
 |---|---|---|
 | Overview | KPI grid (BitNode destroy tile is double width), Attention, Trends (sparklines from the ring), Data freshness | Refresh now |
 | RAM | Utilization tiles, allocated vs running stacked bars (money/share/xp), active targets → detail, cloud, reasons | RAM settings |
-| Augmentations | Progress (Daedalus, Red Pill, w0r1d_d43m0n, install), ordered path table → detail with "why" | Augmentation settings |
+| Augmentations | Tabs. Path: progress (Daedalus, Red Pill, w0r1d_d43m0n, install), ordered path table → detail with "why". Order: editable buying order (pin / last / exclude / sort / strict / drivesWork) with a draft, live cost preview and warnings (docs/specs/aug-order.md) | Augmentation settings (Path), Apply order (Order) |
 | Node | Destroy milestone tile, readiness, recommended next BN, pending action, inline node.* controls | Node settings |
 | Predictions | pred2 tail → JSON detail | Refresh now |
 | Logs | Agent / Events / Audit / Installs tabs, tail rows → detail | Refresh now |

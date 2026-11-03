@@ -74,7 +74,7 @@ History: BN1 destroyed 2026-09-26 (SF1.1). BN4 destroyed 2026-10-03 01:39 UTC (S
    Cheap, short check-ins.
 
 ## Owner's standing rules (do not break)
-- Aug buying: highest rep requirement first, prerequisites first, NeuroFlux Governor LAST. Leftover cash goes to home RAM/cores.
+- Aug buying: default order is highest rep requirement first, prerequisites immediately before dependents, NeuroFlux Governor LAST. The owner can override the order via `augs.order.*` (dashboard Augs → Order; docs/specs/aug-order.md); prerequisites-first and NeuroFlux-last are not configurable. Leftover cash goes to home RAM/cores.
 - Faction favor ≥150 → donate for rep.
 - Debt is OK early.
 - Rep: faction hacking contracts, not the Algorithms course.
@@ -136,7 +136,7 @@ Every owner/agent-tunable knob is a key in game/lib/settings-schema.js with a de
 - /data/settings-log.txt (every settings change, who made it)
 - /data/ram-status.txt (RAM manager, each daemon loop)
 - /data/gang-status.txt (gang manager; one JSON per loop), /data/gang-state.txt, /data/gang-act.txt, /data/gang-shop.txt
-- /data/aug-plan.txt, /data/node-request.txt, /data/node-ack.txt, state/node-control.json (planner + destroy handshake)
+- /data/aug-plan.txt, /data/aug-catalog.txt (every aug, for the dashboard Order tab), /data/aug-order-state.txt (strict-order timers), /data/node-request.txt, /data/node-ack.txt, state/node-control.json (planner + destroy handshake)
 - /data/telemetry-latest.txt, /data/telemetry-ring.txt (small telemetry views; telemetry.txt is ~20MB, don't poll it)
 
 ## Deeper reference
