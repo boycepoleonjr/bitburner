@@ -13,6 +13,12 @@ updates:
     schedule: { interval: weekly, day: monday }
     groups:
       actions: { patterns: ["*"] }
+    # actions/checkout v5+ is held back repo-wide: claude-code-review.yml and claude.yml pin checkout at v4.4.0 because
+    # v6+ persists the token via includeIf.gitdir and claude-code-action does not clear it (see the comment in
+    # claude-code-review.yml). Dependabot cannot ignore per file. Remove this ignore when that is fixed upstream.
+    ignore:
+      - dependency-name: actions/checkout
+        versions: [">=5"]
     labels: [dependencies]
   - package-ecosystem: docker
     directory: /

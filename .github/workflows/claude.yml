@@ -40,7 +40,9 @@ jobs:
       - name: Skip (no Claude secret configured)
         if: env.HAS_CLAUDE_AUTH != 'true'
         run: echo "::notice::Set CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY to enable @claude."
-      - uses: actions/checkout@v4
+      # Held at checkout v4.4.0 on purpose (same as claude-code-review.yml): v6+ persists the token through
+      # includeIf.gitdir, which claude-code-action does not clear, so the token would stay usable during the Claude run.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         if: env.HAS_CLAUDE_AUTH == 'true'
         with:
           fetch-depth: 1
