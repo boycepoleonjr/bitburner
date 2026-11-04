@@ -1,4 +1,4 @@
-# Synced from boycepoleonjr/conventions v1.3.0.
+# Synced from boycepoleonjr/conventions v1.6.2.
 # Weekly report: is this repo behind the latest conventions, or edited by hand? Never fails required checks.
 name: Conventions check
 on:
