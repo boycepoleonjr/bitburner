@@ -65,6 +65,15 @@ Run all of these before marking a PR ready, and report each with pass/fail:
 
 <!-- conventions:end agents-commands -->
 
+## PR policy
+New PRs in this repo are opened non-draft (ready for review) from the start, so the AI reviews run on every push (owner rule, 2026-11-03). This overrides the "open a draft PR after the first commit" line in the conventions block above, for this repo only. Never merge; CI must pass before reporting done.
+
+## Feedback loop
+Findings from audits and supervisor runs are tracked in `docs/feedback/ledger.md` (Detect -> Record -> Triage -> Fix -> Verify ->
+Learn; spec: `docs/specs/feedback-loop.md`). Every finding names the signal that should have caught it; an entry is not closed
+without a test or a live detector. The hourly supervisor routine (`docs/feedback/routine-prompt.md`) reads the ledger first and is
+read-only unless an entry records the owner's approval. `test/feedback-ledger.js` keeps the ledger parseable.
+
 ## Vision
 A fully autonomous Bitburner run that goes on around the clock with no human input. The owner (Boyce) only reads
 check-in reports. The agent (Claude) supervises, improves the automation, and gets steadily better at predicting its own progress.
