@@ -1,14 +1,14 @@
 {
   "files": {
-    ".claude/skills/dependency-update/SKILL.md": "adf4b1f988a8583d",
+    ".claude/skills/dependency-update/SKILL.md": "4bafcf9e0850a31b",
     ".claude/skills/fix-with-regression-tests/SKILL.md": "348b4366f1c1dbcb",
     ".claude/skills/open-pr/SKILL.md": "f6b8cb5222633085",
-    ".github/workflows/claude-code-review.yml": "fdfe98156497bfc2",
-    ".github/workflows/conventions-check.yml": "d0a30c4a1764754f",
-    ".github/workflows/deploy-secrets-lint.yml": "0532662d6488568a",
-    "AGENTS.md": "54ddb7f13677c44b",
+    ".github/workflows/claude-code-review.yml": "707e01defef31647",
+    ".github/workflows/conventions-check.yml": "4ccba11525e5fd55",
+    ".github/workflows/deploy-secrets-lint.yml": "6d40e96ce48c0567",
+    "AGENTS.md": "fa71099aa377511d",
     "CLAUDE.md": "5288a96a7600cdf8"
   },
   "profile": "generic",
-  "version": "1.6.2"
+  "version": "1.7.0"
 }
