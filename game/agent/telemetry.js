@@ -4,9 +4,10 @@
  * Also keeps a bounded ring for the dashboard (never touches telemetry.txt's format):
  *   data/telemetry-latest.txt  the full latest record (one line, overwritten)
  *   data/telemetry-ring.txt    compact records for the last ui.historyMinutes (overwritten from memory each sample)
+ * Retention: telemetry.txt keeps ui.telemetryRetentionDays days (default 7; 0 = keep all), trimmed at start and once a day.
  * args: [intervalSec=60]
  * @param {NS} ns */
-import { compactRec, pushRing, ringMaxLines, serializeRing } from "lib/telemetry-ring.js";
+import { compactRec, pushRing, ringMaxLines, serializeRing, trimTelemetry, DAY_MS } from "lib/telemetry-ring.js";
 import { tailLines, parseJsonl } from "lib/data-sources.js";
 import { readSettings } from "lib/settings.js";
 
@@ -29,7 +30,19 @@ export async function main(ns) {
   const SK = ["hacking", "strength", "defense", "dexterity", "agility", "charisma"];
   if (host !== "home") for (const f of [RING, SETTINGS]) if (ns.fileExists(f, "home")) ns.scp(f, host, "home");
   const histMin = () => Number(readSettings(ns)["ui.historyMinutes"]) || 360;
-  let ring = seedRing(ns.read(RING), ns.read(FILE), ringMaxLines(histMin(), interval / 1000));
+  // Read telemetry.txt once per trim (start, then daily): drop records older than the retention window, return the kept text.
+  const retentionMs = () => { const d = Number(readSettings(ns)["ui.telemetryRetentionDays"]); return Number.isFinite(d) && d > 0 ? d * DAY_MS : 0; };
+  const loadHistory = () => {
+    const raw = ns.read(FILE);
+    const r = trimTelemetry(raw, { now: Date.now(), maxAgeMs: retentionMs() });
+    if (r.dropped > 0) {
+      ns.write(FILE, r.text, "w");
+      ns.write("/data/events.txt", `${new Date().toLocaleTimeString("en-US", { hour12: false })} [telemetry] trimmed ${r.dropped} records older than ${retentionMs() / DAY_MS} days (${r.kept} kept)\n`, "a");
+    }
+    return r.text;
+  };
+  let lastTrim = Date.now();
+  let ring = seedRing(ns.read(RING), loadHistory(), ringMaxLines(histMin(), interval / 1000));
 
   const netRam = () => {
     const seen = new Set(["home"]), q = ["home"];
@@ -64,6 +77,7 @@ export async function main(ns) {
         // money ledger since install (non-zero categories): positives = earned, negatives = spent
         src: (() => { const s = ns.getMoneySources().sinceInstall, o = {}; for (const [k, v] of Object.entries(s)) if (v && k !== "total") o[k] = Math.round(v); return o; })(),
       };
+      if (Date.now() - lastTrim >= DAY_MS) { lastTrim = Date.now(); loadHistory(); }
       ns.write(FILE, JSON.stringify(rec) + "\n", "a");
       ns.write(LATEST, JSON.stringify(rec), "w");
       if (host !== "home" && ns.fileExists(SETTINGS, "home")) ns.scp(SETTINGS, host, "home");

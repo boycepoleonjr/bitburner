@@ -1,7 +1,8 @@
 /**
  * lib/telemetry-ring.js — bounded recent-history buffer for the dashboard. PURE.
  * agent/telemetry.js keeps the ring in memory and writes it whole (mode "w") to data/telemetry-ring.txt each sample,
- * plus the full latest record to data/telemetry-latest.txt. data/telemetry.txt is unchanged (append-only, predictor).
+ * plus the full latest record to data/telemetry-latest.txt. data/telemetry.txt is append-only except for trimTelemetry
+ * (retention: ui.telemetryRetentionDays, default 7), which agent/telemetry.js runs at start and once a day.
  */
 
 /** Compact copy of a telemetry record: only what charts and KPIs need (~350 bytes vs ~1.5 KB). */
@@ -43,3 +44,37 @@ export function pushRing(ring, entry, { maxLines = 362, maxAgeMs = Infinity, now
 }
 
 export const serializeRing = (ring) => ring.map((r) => JSON.stringify(r)).join("\n") + (ring.length ? "\n" : "");
+
+export const DAY_MS = 86400000;
+/** Records older than this many ms behind the newest one are never trimmed when the file looks stale (clock or restore). */
+const STALE_FILE_MS = DAY_MS;
+
+/**
+ * Retention for data/telemetry.txt (JSONL, one record per line, each starting {"t":<ms>). PURE.
+ * Drops lines whose t is older than now - maxAgeMs. Safe by default: returns the text unchanged when maxAgeMs is not a
+ * positive finite number (0 = keep everything), when the newest record is more than a day older than `now` (stale file or
+ * wrong clock: nothing is trimmed), or when it would leave fewer than minLines (the last minLines lines are kept instead).
+ * Lines without a readable t are kept. Never throws.
+ * @returns {{text:string, dropped:number, kept:number}}
+ */
+export function trimTelemetry(text, { now = Date.now(), maxAgeMs = 0, minLines = 2000 } = {}) {
+  const raw = typeof text === "string" ? text : "";
+  const lines = raw.split("\n");
+  const trailing = lines.length && lines[lines.length - 1] === "";
+  if (trailing) lines.pop();
+  const same = { text: raw, dropped: 0, kept: lines.length };
+  if (!(Number.isFinite(maxAgeMs) && maxAgeMs > 0) || !Number.isFinite(now) || lines.length <= minLines) return same;
+  const tOf = (l) => {
+    const m = /^\{"t":(\d{10,})/.exec(l);
+    if (m) return Number(m[1]);
+    try { const t = JSON.parse(l)?.t; return Number.isFinite(t) ? t : null; } catch { return null; }
+  };
+  let newest = -Infinity;
+  for (let i = lines.length - 1; i >= 0 && newest === -Infinity; i--) { const t = tOf(lines[i]); if (t != null) newest = t; }
+  if (newest === -Infinity || now - newest > STALE_FILE_MS) return same;
+  const cutoff = now - maxAgeMs;
+  let kept = lines.filter((l) => { const t = tOf(l); return t == null || t >= cutoff; });
+  if (kept.length < minLines) kept = lines.slice(lines.length - minLines);
+  if (kept.length === lines.length) return same;
+  return { text: kept.join("\n") + (trailing ? "\n" : ""), dropped: lines.length - kept.length, kept: kept.length };
+}
