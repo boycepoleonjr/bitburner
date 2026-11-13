@@ -187,6 +187,8 @@ PREDICTOR v2, SPEND PLAN, CHECK-IN REPORT FORMAT).
    Test the whole path on demand: POST /api/escalate-test (auth) fires the routine with a "[TEST]" message.
    Watchdog (BB_WATCHDOG_MIN=10): if game/rpc is down or the rpc ping fails for 10 min it restarts Chromium (max 2
    attempts per outage), then escalates once and only probes until recovery. /healthz = bb server liveness (no auth).
+   Read-only access for the supervisor routine: a second token (`/data/state/readonly-token`, or Railway secret `BB_READONLY_TOKEN`; never print it)
+   reaches only GET status/drift/report/settings/plan/dashboard and POST /api/ro/read|query (docs/specs/readonly-api.md).
    Rollback: set BB_CHECKIN_AUTO=0 and BB_WATCHDOG_MIN=0, re-enable the old routine "Bitburner hourly check-in (hosted)".
    Never delete /data/state, /data/backups or the volume.
    Save backups: hourly, server-side, to the /data volume. Load a save: `bb import-save <save.json.gz>`.

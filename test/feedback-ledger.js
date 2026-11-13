@@ -65,10 +65,13 @@ test("the ledger keeps the seeded F-001..F-009 as its first entries (later findi
   const { entries } = parseLedger(fs.readFileSync(path.join(root, "docs/feedback/ledger.md"), "utf8"));
   assert.deepEqual(entries.slice(0, 9).map((e) => e.id), Array.from({ length: 9 }, (_, i) => `F-00${i + 1}`));
 });
-test("appending a new finding (F-010) to the real ledger keeps it valid", () => {
+test("appending a new finding after the last id keeps the real ledger valid", () => {
   const md = fs.readFileSync(path.join(root, "docs/feedback/ledger.md"), "utf8");
-  assert.deepEqual(validateLedger(md + "\n" + entry({ id: "F-010" })), []);
-  assert.deepEqual(parseLedger(md + "\n" + entry({ id: "F-010" })).entries.length, parseLedger(md).entries.length + 1);
+  const { entries } = parseLedger(md);
+  const next = "F-" + String(Math.max(...entries.map((e) => Number(e.id.slice(2)))) + 1).padStart(3, "0");
+  assert.deepEqual(validateLedger(md + "\n" + entry({ id: next })), []);
+  assert.equal(parseLedger(md + "\n" + entry({ id: next })).entries.length, entries.length + 1);
+  has(validateLedger(md + "\n" + entry({ id: entries[0].id })), /duplicate id/);
 });
 
 console.log(`\n${passed} feedback-ledger checks passed${process.exitCode ? " (with failures)" : ""}`);
