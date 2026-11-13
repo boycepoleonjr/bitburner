@@ -11,11 +11,11 @@ Autonomous Bitburner agent (see Vision and Mission below; README.md has the arch
 
 <!-- conventions:begin agents-core -->
 
-## Shared rules (conventions v1.7.0)
+## Shared rules (conventions v1.8.1)
 
 - Read this file, the README, `package.json` or equivalent, and `.github/workflows/` before changing code. Use the repo's real commands.
 - One branch per task (`<type>/<slug>`), Conventional Commits, minimal diffs: no refactors or unrelated edits in a fix PR.
-- Open a draft PR after the first commit. Mark it ready for review only when every command below passes and CI is green; AI reviews trigger on ready. Never merge.
+- Open the PR non-draft (ready for review) so AI reviews run on every push. Run every command below and keep CI green before each push. Never merge.
 - PR description follows `.github/pull_request_template.md`: what, why, every command run with its real pass/fail, risk, and decisions needed.
 - Bug fixes add regression tests for every path of the fix (empty, invalid, valid input, and any guard you add), not just the reported repro. See `.claude/skills/fix-with-regression-tests`.
 - Dependency changes are declared openly in the manifest. Never hide a version change in `overrides` or `resolutions` while the manifest claims a different range. See `.claude/skills/dependency-update`.
@@ -24,7 +24,7 @@ Autonomous Bitburner agent (see Vision and Mission below; README.md has the arch
 - No AI attribution in commits, PR bodies or comments.
 - Never commit secrets, real customer data or `.env` files. Use synthetic data in tests and fixtures.
 - Deploy secrets (cloud tokens, account ids) live only in GitHub Environments restricted to specific branches (plus required reviewers where the plan allows), never as repository or organization secrets. Every job that reads them declares `environment:`; a new deploy branch is added to the environment's branch rule by an owner first; never reference them from `pull_request_target` or at workflow level.
-- Standard: https://github.com/boycepoleonjr/conventions/blob/v1.7.0/STANDARD.md
+- Standard: https://github.com/boycepoleonjr/conventions/blob/v1.8.1/STANDARD.md
 
 <!-- conventions:end agents-core -->
 
@@ -65,9 +65,6 @@ Run all of these before marking a PR ready, and report each with pass/fail:
 - audit: `npm audit --audit-level=high`
 
 <!-- conventions:end agents-commands -->
-
-## PR policy
-New PRs in this repo are opened non-draft (ready for review) from the start, so the AI reviews run on every push (owner rule, 2026-11-03). This overrides the "open a draft PR after the first commit" line in the conventions block above, for this repo only. Never merge; CI must pass before reporting done.
 
 ## Feedback loop
 Findings from audits and supervisor runs are tracked in `docs/feedback/ledger.md` (Detect -> Record -> Triage -> Fix -> Verify ->
