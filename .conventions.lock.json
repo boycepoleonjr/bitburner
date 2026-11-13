@@ -3,7 +3,7 @@
     ".claude/skills/dependency-update/SKILL.md": "4bafcf9e0850a31b",
     ".claude/skills/fix-with-regression-tests/SKILL.md": "348b4366f1c1dbcb",
     ".claude/skills/open-pr/SKILL.md": "6e4693febb68f3c6",
-    ".github/workflows/claude-code-review.yml": "707e01defef31647",
+    ".github/workflows/claude-code-review.yml": "6de78a6b80206f51",
     ".github/workflows/conventions-check.yml": "708c6c435c233bd8",
     ".github/workflows/conventions-sync-check.yml": "602a400a98843507",
     ".github/workflows/deploy-secrets-lint.yml": "a43cbcdf3d30c993",
