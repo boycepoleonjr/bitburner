@@ -159,6 +159,8 @@ We own SF1.1 and SF4.1, and SF5.1 on destroying BN5. "First available" skips max
 4. **BN5 (to SF5.3).** Hacking and intelligence multipliers; hacking-friendly.
 5. **Then BN10** (sleeves), **BN9** (hacknet servers), **BN3** (corporations), **BN11/12**. **BN6/7/8/13/14** need Bladeburner, stock or Stanek automation; these are non-goals for now.
 
+`node.order` is a preference by default: when every entry is maxed the bot falls back to this order. `node.fallback=stop` makes it a limit instead (no auto-pick outside `node.order`, the owner is flagged; docs/specs/node-fallback.md).
+
 For the next run (BN5 to BN1), set `node.order=[1,4]`, `node.autoSelect=true`, `node.autoDestroy=true`. The current BN5 recommendation is BN1 (SF1.1 to 1.2).
 
 ## Plan improvement log (pre-execution-plan-improvement skill)

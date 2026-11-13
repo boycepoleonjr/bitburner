@@ -25,7 +25,7 @@ Tunables are spread across `lib/config.js` DEFAULTS + `data/config-overrides.txt
 ## Initial keys (owner-mandated defaults in bold)
 | Group | Keys |
 |---|---|
-| BitNode | **node.autoSelect=false**, **node.autoDestroy=false**, node.backupBeforeDestroy=true, node.order=[] |
+| BitNode | **node.autoSelect=false**, **node.autoDestroy=false**, node.backupBeforeDestroy=true, node.order=[], node.fallback=recommend (`recommend`\|`stop`; docs/specs/node-fallback.md) |
 | Strategy (0 = money, 1 = faction rep) | **strategy.early=0** (o--), **strategy.mid=0.5** (-o-), **strategy.late=1** (--o), strategy.phase.midAt=0.34, strategy.phase.lateAt=0.9 (phase = fl1ght.exe progress) |
 | RAM | ram.manager.enabled, ram.homeReserveGb=128, ram.cloud.*, ram.share.enabled, ram.xp.mode=auto, ram.xp.target, ram.targets.max=0, ram.batches.max=0, ram.resizeThreshold=0.1 |
 | Augmentations | augs.autoInstall, augs.installPolicy=eta, augs.installAt=6, augs.planner.goal=destroy, augs.donateAtFavor=150, augs.neuroFluxLast=true (informational), augs.order.* (sort=rep, pinned/last/exclude=[], strict=false, strictMaxWaitMin=120, drivesWork=false; docs/specs/aug-order.md) |
@@ -39,6 +39,13 @@ bb settings set augs.order.sort=price
 bb settings unset augs.order.sort augs.order.pinned augs.order.last augs.order.exclude augs.order.strict augs.order.strictMaxWaitMin augs.order.drivesWork
 ```
 The last command restores the default order exactly (rollback).
+
+### node.fallback (enum recommend | stop)
+Only matters with `node.autoSelect=true`. `recommend` (default) is the old behavior: when no `node.order` entry is available (every listed Source-File maxed, or the list is empty) the planner recommendation is used. `stop` never picks outside `node.order`: `pickNextBn` returns `nextBn: null`, `source: "order-exhausted"`, the destroy is not requested, and the autopilot raises the attention flag `node.order exhausted (node.fallback=stop) — owner picks the next BitNode; recommended BN<n>: <why>` next to the READY flag. The flag is an owner decision (held back for `BB_READY_ESCALATE_MIN` like READY). BN12 never runs out (`SF_MAX(12)=Infinity`). Spec: `docs/specs/node-fallback.md`.
+```
+bb settings set node.fallback=stop
+bb settings unset node.fallback      # rollback to recommend
+```
 
 Adding a setting means adding one schema entry (the test suite checks its metadata and default) and reading it with `readSettings(ns)[key]` in the owning script.
 

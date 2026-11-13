@@ -43,6 +43,8 @@ export const SCHEMA = [
     label: "Destroy veto window (min)", help: "After the backup is confirmed, wait this long before destroying. Turning node.autoDestroy off during the wait cancels it." },
   { key: "node.order", group: "node", type: "intList", default: [], ui: "list", min: 1, max: 14, owner: "autopilot",
     label: "BitNode order", help: "Preferred next BitNodes, first available wins. Empty = use the planner's recommendation." },
+  { key: "node.fallback", group: "node", type: "enum", default: "recommend", options: ["recommend", "stop"], ui: "select", owner: "autopilot",
+    label: "When node.order runs out", help: "Only with node.autoSelect on. recommend = pick the planner's recommendation. stop = never pick outside node.order: do not destroy, flag the owner to choose the next BitNode (an empty node.order counts as run out)." },
 
   // ── Strategy (0 = all money, 1 = all faction rep) ──────────────────────────
   { key: "strategy.early", group: "strategy", type: "number", default: 0, min: 0, max: 1, step: 0.05, ui: "slider", ends: MONEY_REP, owner: "daemon",

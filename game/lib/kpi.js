@@ -23,6 +23,7 @@ export const KPI_LABELS = Object.freeze({
 /** Sources older than this are stale (3 telemetry intervals). */
 export const STALE_MS = 3 * 60 * 1000;
 const READY_FLAG = /w0r1d_d43m0n READY/i;
+const OWNER_FLAG = /w0r1d_d43m0n READY|node\.order exhausted/i; // owner decisions; the second is node.fallback=stop (lib/nodectl.js)
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const src = (file, field, value) => ({ file, field, value: value === undefined ? null : value, missing: value === undefined || value === null });
 const kpi = (value, display, status, sources, formula) => ({ value, display: display ?? DASH, status: value == null ? "none" : status, sources, formula });
@@ -115,8 +116,9 @@ export function computeKpis(input = {}) {
   let destroyVal = null, destroyDisp = DASH, destroyStatus = "none", destroyFormula = "aug-plan.worldDaemon.ready, else autopilot flag 'w0r1d_d43m0n READY'";
   if (ready) {
     destroyVal = 0;
-    destroyDisp = settings?.["node.autoDestroy"] ? "READY · auto-destroy on" : "READY · awaiting decision";
-    destroyStatus = settings?.["node.autoDestroy"] ? "good" : "warn";
+    const exhausted = ap?.node?.source === "order-exhausted"; // node.fallback=stop and node.order ran out: the owner picks
+    destroyDisp = exhausted ? "READY · node.order exhausted" : settings?.["node.autoDestroy"] ? "READY · auto-destroy on" : "READY · awaiting decision";
+    destroyStatus = exhausted || !settings?.["node.autoDestroy"] ? "warn" : "good";
   } else if (req != null) {
     const p = (Array.isArray(pred2Tail) ? pred2Tail : []).filter((r) => r && r.spec && (r.spec.kind === "level" || r.spec.kind === "hacking") && num(r.spec.target) >= req && num(r.eta))
       .sort((a, b) => b.made - a.made)[0];
@@ -138,7 +140,7 @@ export function computeKpis(input = {}) {
   out.gangMoneyPerSec = kpi(num(gs?.moneyRate), gs ? `${fmtMoney(num(gs.moneyRate))}/s` : DASH, gStale ? "warn" : "good", gSrc("moneyRate"), "gang-status.moneyRate (gang money per game cycle x 5)");
 
   // ── attention + freshness ──────────────────────────────────────────────────
-  const attention = flags.map((f) => ({ level: READY_FLAG.test(String(f)) ? "warn" : "bad", text: String(f), view: READY_FLAG.test(String(f)) ? "node" : "logs" }));
+  const attention = flags.map((f) => ({ level: OWNER_FLAG.test(String(f)) ? "warn" : "bad", text: String(f), view: OWNER_FLAG.test(String(f)) ? "node" : "logs" }));
   if (lat && latStale) attention.push({ level: "warn", text: `telemetry is stale (${fmtDur(now - lat.t)} old)`, view: "raw", file: F.latest });
   if (!lat) attention.push({ level: "warn", text: "no telemetry-latest.txt yet (restart agent/telemetry.js)", view: "raw", file: F.latest });
   if (rs && Array.isArray(rs.reasons)) for (const r of rs.reasons.slice(0, 3)) attention.push({ level: "info", text: `RAM: ${r}`, view: "ram" });

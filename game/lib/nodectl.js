@@ -11,6 +11,8 @@
  * No ack within ACK_TIMEOUT_MS => stage "blocked", attention NO_ACK (a late ack still unblocks).
  * A failed backup => blocked; a new request (new id) is issued RETRY_MS after the failed ack.
  * node.autoDestroy turned off while a request is open => {action:"cancel"} is written; nothing is destroyed.
+ * node.fallback="stop" (default "recommend"): when node.order has no available entry the planner recommendation is NOT used;
+ * pickNextBn returns source "order-exhausted" and decideNode flags the owner instead of requesting a destroy.
  */
 import { READY_FLAG, sfLevels, firstAvailable, recommendNextBn } from "lib/augplan.js";
 
@@ -21,6 +23,10 @@ export const ACK_TIMEOUT_MS = 15 * 60_000;
 export const RETRY_MS = 15 * 60_000;
 export const NO_ACK = "destroy blocked: no backup ack";
 export const NO_RAM = "destroy blocked: not enough free home RAM for agent/sl-destroy.js";
+export const ORDER_EXHAUSTED = "node.order exhausted"; // prefix of the owner-decision flag; server/checkin.js OWNER_DECISION matches it
+/** Stable text (it only changes when Source-Files change), so the flag dedupes like READY_FLAG. */
+export const orderExhaustedFlag = (rec) => `${ORDER_EXHAUSTED} (node.fallback=stop) — owner picks the next BitNode; ` +
+  (rec && rec.bn != null ? `recommended BN${rec.bn}: ${rec.why}` : "every Source-File is maxed");
 
 export const parseJson = (raw) => { try { const v = JSON.parse(raw || "null"); return v && typeof v === "object" && !Array.isArray(v) ? v : null; } catch { return null; } };
 const fin = (n) => (typeof n === "number" && Number.isFinite(n) ? n : 0);
@@ -28,12 +34,15 @@ const fin = (n) => (typeof n === "number" && Number.isFinite(n) ? n : 0);
 /**
  * Next BitNode. node.autoSelect=true: first available entry of node.order, else the planner recommendation.
  * node.autoSelect=false: null (recommend only; the owner decides).
+ * Nothing left in node.order (or it is empty): node.fallback "recommend" (default) takes the planner recommendation;
+ * "stop" returns nextBn null with source "order-exhausted" and the recommendation is still reported.
  */
 export function pickNextBn({ bn, sourceFiles }, s) {
   const recommended = recommendNextBn({ bn, sourceFiles }, s);
   if (!s["node.autoSelect"]) return { nextBn: null, recommended, source: "manual" };
   const fromOrder = firstAvailable(s["node.order"] || [], sfLevels(sourceFiles, bn));
   if (fromOrder != null) return { nextBn: fromOrder, recommended, source: "node.order" };
+  if (s["node.fallback"] === "stop") return { nextBn: null, recommended, source: "order-exhausted" };
   return { nextBn: recommended.bn, recommended, source: "recommendation" };
 }
 
@@ -50,6 +59,7 @@ export function decideNode(st, s) {
   const now = fin(st.now);
   const pick = pickNextBn(st, s);
   const base = { ready: !!st.ready, autoSelect: !!s["node.autoSelect"], autoDestroy: !!s["node.autoDestroy"], recommended: pick.recommended };
+  if (pick.source === "order-exhausted") base.source = pick.source; // only then, so the default node block is unchanged
   const openReq = st.request && st.request.action === "destroy" && st.request.bn === st.bn ? st.request : null;
   const res = (action, stage, detail, x = {}) => ({
     action, nextBn: x.nextBn ?? null, writeRequest: x.writeRequest ?? null, attention: x.attention ?? [],
@@ -60,7 +70,17 @@ export function decideNode(st, s) {
   if (!st.ready) return openReq ? cancel("w0r1d_d43m0n no longer ready: request cancelled") : res("none", "none", "w0r1d_d43m0n not ready", { id: "" });
   const rec = `recommended BN${pick.recommended.bn ?? "?"}`;
   if (!s["node.autoDestroy"]) return openReq ? cancel("node.autoDestroy turned off: request cancelled") : res("flag", "none", `waiting for the owner (node.autoDestroy off); ${rec}`, { attention: [READY_FLAG], id: "" });
-  if (pick.nextBn == null) return openReq ? cancel("node.autoSelect turned off: request cancelled") : res("flag", "none", `node.autoDestroy on but node.autoSelect off: choose the next BitNode (${rec})`, { attention: [READY_FLAG], id: "" });
+  if (pick.source === "order-exhausted") {
+    const flag = orderExhaustedFlag(pick.recommended), why = (s["node.order"] || []).length ? "node.order exhausted" : "node.order is empty";
+    if (openReq) return res("cancel", "none", `${why} (node.fallback=stop): request cancelled`, { id: "", writeRequest: { id: openReq.id, action: "cancel", bn: st.bn, nextBn: openReq.nextBn, at: now }, attention: [READY_FLAG, flag] });
+    return res("flag", "none", `${why} (node.fallback=stop): not choosing outside it; choose the next BitNode (${pick.recommended.bn != null ? rec : "every Source-File is maxed"})`, { attention: [READY_FLAG, flag], id: "" });
+  }
+  if (pick.nextBn == null) {
+    // autoSelect on and still nothing: every Source-File is maxed (recommend mode); say so instead of blaming autoSelect
+    const maxed = !!s["node.autoSelect"];
+    return openReq ? cancel(maxed ? "every Source-File is maxed: request cancelled" : "node.autoSelect turned off: request cancelled")
+      : res("flag", "none", maxed ? `node.autoDestroy on but every Source-File is maxed: no BitNode left to select` : `node.autoDestroy on but node.autoSelect off: choose the next BitNode (${rec})`, { attention: [READY_FLAG], id: "" });
+  }
   const nextBn = pick.nextBn;
   const delayMs = Math.max(0, fin(s["node.destroyDelayMin"] ?? 10)) * 60_000;
   const newReq = (why) => {
