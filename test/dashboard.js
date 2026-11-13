@@ -133,6 +133,14 @@ test("overview: KPI detail lists raw sources; destroy tile is the large one; att
 });
 
 // ---------------- settings ----------------
+test("node view: shows the next-node source row only when node.order is exhausted (node.fallback=stop)", () => {
+  const withNode = (node) => files({ "data/aug-plan.txt": JSON.stringify({ ...augPlan, node }) });
+  const plain = harness({ fileSet: withNode({ ...augPlan.node }) }).view("node");
+  assert.ok(!/next-node source/.test(text(plain)));
+  const ex = harness({ fileSet: withNode({ ...augPlan.node, autoSelect: true, autoDestroy: true, source: "order-exhausted" }) }).view("node");
+  assert.match(text(ex), /next-node source/); assert.match(text(ex), /order-exhausted/);
+  assert.match(text(ex), /node\.fallback/); // the setting is listed in the node controls (generic select from the schema)
+});
 test("settings: one control per schema key, control type from the schema ui hint", () => {
   const H = harness();
   const t = H.view("settings");

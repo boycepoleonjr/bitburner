@@ -1,0 +1,542 @@
+{
+ "autoSelect off": {
+  "pick": {
+   "nextBn": null,
+   "recommended": {
+    "bn": 1,
+    "why": "BN1: fastest node, SF1 raises every multiplier (SF1 1 -> 2)"
+   },
+   "source": "manual"
+  },
+  "decide": {
+   "action": "flag",
+   "nextBn": null,
+   "writeRequest": null,
+   "attention": [
+    "w0r1d_d43m0n READY — agent decides BitNode destruction"
+   ],
+   "node": {
+    "ready": true,
+    "autoSelect": false,
+    "autoDestroy": false,
+    "recommended": {
+     "bn": 1,
+     "why": "BN1: fastest node, SF1 raises every multiplier (SF1 1 -> 2)"
+    },
+    "pending": {
+     "id": "",
+     "stage": "none",
+     "detail": "waiting for the owner (node.autoDestroy off); recommended BN1"
+    }
+   }
+  },
+  "decideOpen": {
+   "action": "cancel",
+   "nextBn": null,
+   "writeRequest": {
+    "id": "r1",
+    "action": "cancel",
+    "bn": 5,
+    "nextBn": 1,
+    "at": 1794571200000
+   },
+   "attention": [
+    "w0r1d_d43m0n READY — agent decides BitNode destruction"
+   ],
+   "node": {
+    "ready": true,
+    "autoSelect": false,
+    "autoDestroy": false,
+    "recommended": {
+     "bn": 1,
+     "why": "BN1: fastest node, SF1 raises every multiplier (SF1 1 -> 2)"
+    },
+    "pending": {
+     "id": "",
+     "stage": "none",
+     "detail": "node.autoDestroy turned off: request cancelled"
+    }
+   }
+  }
+ },
+ "autoSelect off, destroy on": {
+  "pick": {
+   "nextBn": null,
+   "recommended": {
+    "bn": 1,
+    "why": "BN1: fastest node, SF1 raises every multiplier (SF1 1 -> 2)"
+   },
+   "source": "manual"
+  },
+  "decide": {
+   "action": "flag",
+   "nextBn": null,
+   "writeRequest": null,
+   "attention": [
+    "w0r1d_d43m0n READY — agent decides BitNode destruction"
+   ],
+   "node": {
+    "ready": true,
+    "autoSelect": false,
+    "autoDestroy": true,
+    "recommended": {
+     "bn": 1,
+     "why": "BN1: fastest node, SF1 raises every multiplier (SF1 1 -> 2)"
+    },
+    "pending": {
+     "id": "",
+     "stage": "none",
+     "detail": "node.autoDestroy on but node.autoSelect off: choose the next BitNode (recommended BN1)"
+    }
+   }
+  },
+  "decideOpen": {
+   "action": "cancel",
+   "nextBn": null,
+   "writeRequest": {
+    "id": "r1",
+    "action": "cancel",
+    "bn": 5,
+    "nextBn": 1,
+    "at": 1794571200000
+   },
+   "attention": [
+    "w0r1d_d43m0n READY — agent decides BitNode destruction"
+   ],
+   "node": {
+    "ready": true,
+    "autoSelect": false,
+    "autoDestroy": true,
+    "recommended": {
+     "bn": 1,
+     "why": "BN1: fastest node, SF1 raises every multiplier (SF1 1 -> 2)"
+    },
+    "pending": {
+     "id": "",
+     "stage": "none",
+     "detail": "node.autoSelect turned off: request cancelled"
+    }
+   }
+  }
+ },
+ "order available": {
+  "pick": {
+   "nextBn": 10,
+   "recommended": {
+    "bn": 1,
+    "why": "BN1: fastest node, SF1 raises every multiplier (SF1 1 -> 2)"
+   },
+   "source": "node.order"
+  },
+  "decide": {
+   "action": "request",
+   "nextBn": 10,
+   "writeRequest": {
+    "id": "destroy-bn5-to-10-1794571200000",
+    "action": "destroy",
+    "bn": 5,
+    "nextBn": 10,
+    "at": 1794571200000
+   },
+   "attention": [],
+   "node": {
+    "ready": true,
+    "autoSelect": true,
+    "autoDestroy": true,
+    "recommended": {
+     "bn": 1,
+     "why": "BN1: fastest node, SF1 raises every multiplier (SF1 1 -> 2)"
+    },
+    "pending": {
+     "id": "destroy-bn5-to-10-1794571200000",
+     "stage": "requested",
+     "detail": "backup requested before destroying -> BN10"
+    }
+   }
+  },
+  "decideOpen": {
+   "action": "request",
+   "nextBn": 10,
+   "writeRequest": {
+    "id": "destroy-bn5-to-10-1794571200000",
+    "action": "destroy",
+    "bn": 5,
+    "nextBn": 10,
+    "at": 1794571200000
+   },
+   "attention": [],
+   "node": {
+    "ready": true,
+    "autoSelect": true,
+    "autoDestroy": true,
+    "recommended": {
+     "bn": 1,
+     "why": "BN1: fastest node, SF1 raises every multiplier (SF1 1 -> 2)"
+    },
+    "pending": {
+     "id": "destroy-bn5-to-10-1794571200000",
+     "stage": "requested",
+     "detail": "backup requested before destroying -> BN10"
+    }
+   }
+  }
+ },
+ "order first maxed, second available": {
+  "pick": {
+   "nextBn": 2,
+   "recommended": {
+    "bn": 1,
+    "why": "BN1: fastest node, SF1 raises every multiplier (SF1 0 -> 1)"
+   },
+   "source": "node.order"
+  },
+  "decide": {
+   "action": "request",
+   "nextBn": 2,
+   "writeRequest": {
+    "id": "destroy-bn5-to-2-1794571200000",
+    "action": "destroy",
+    "bn": 5,
+    "nextBn": 2,
+    "at": 1794571200000
+   },
+   "attention": [],
+   "node": {
+    "ready": true,
+    "autoSelect": true,
+    "autoDestroy": true,
+    "recommended": {
+     "bn": 1,
+     "why": "BN1: fastest node, SF1 raises every multiplier (SF1 0 -> 1)"
+    },
+    "pending": {
+     "id": "destroy-bn5-to-2-1794571200000",
+     "stage": "requested",
+     "detail": "backup requested before destroying -> BN2"
+    }
+   }
+  },
+  "decideOpen": {
+   "action": "request",
+   "nextBn": 2,
+   "writeRequest": {
+    "id": "destroy-bn5-to-2-1794571200000",
+    "action": "destroy",
+    "bn": 5,
+    "nextBn": 2,
+    "at": 1794571200000
+   },
+   "attention": [],
+   "node": {
+    "ready": true,
+    "autoSelect": true,
+    "autoDestroy": true,
+    "recommended": {
+     "bn": 1,
+     "why": "BN1: fastest node, SF1 raises every multiplier (SF1 0 -> 1)"
+    },
+    "pending": {
+     "id": "destroy-bn5-to-2-1794571200000",
+     "stage": "requested",
+     "detail": "backup requested before destroying -> BN2"
+    }
+   }
+  }
+ },
+ "order exhausted -> recommendation": {
+  "pick": {
+   "nextBn": 9,
+   "recommended": {
+    "bn": 9,
+    "why": "BN9: hacknet servers (SF9 0 -> 1)"
+   },
+   "source": "recommendation"
+  },
+  "decide": {
+   "action": "request",
+   "nextBn": 9,
+   "writeRequest": {
+    "id": "destroy-bn11-to-9-1794571200000",
+    "action": "destroy",
+    "bn": 11,
+    "nextBn": 9,
+    "at": 1794571200000
+   },
+   "attention": [],
+   "node": {
+    "ready": true,
+    "autoSelect": true,
+    "autoDestroy": true,
+    "recommended": {
+     "bn": 9,
+     "why": "BN9: hacknet servers (SF9 0 -> 1)"
+    },
+    "pending": {
+     "id": "destroy-bn11-to-9-1794571200000",
+     "stage": "requested",
+     "detail": "backup requested before destroying -> BN9"
+    }
+   }
+  },
+  "decideOpen": {
+   "action": "request",
+   "nextBn": 9,
+   "writeRequest": {
+    "id": "destroy-bn11-to-9-1794571200000",
+    "action": "destroy",
+    "bn": 11,
+    "nextBn": 9,
+    "at": 1794571200000
+   },
+   "attention": [],
+   "node": {
+    "ready": true,
+    "autoSelect": true,
+    "autoDestroy": true,
+    "recommended": {
+     "bn": 9,
+     "why": "BN9: hacknet servers (SF9 0 -> 1)"
+    },
+    "pending": {
+     "id": "destroy-bn11-to-9-1794571200000",
+     "stage": "requested",
+     "detail": "backup requested before destroying -> BN9"
+    }
+   }
+  }
+ },
+ "order empty -> recommendation": {
+  "pick": {
+   "nextBn": 1,
+   "recommended": {
+    "bn": 1,
+    "why": "BN1: fastest node, SF1 raises every multiplier (SF1 1 -> 2)"
+   },
+   "source": "recommendation"
+  },
+  "decide": {
+   "action": "request",
+   "nextBn": 1,
+   "writeRequest": {
+    "id": "destroy-bn5-to-1-1794571200000",
+    "action": "destroy",
+    "bn": 5,
+    "nextBn": 1,
+    "at": 1794571200000
+   },
+   "attention": [],
+   "node": {
+    "ready": true,
+    "autoSelect": true,
+    "autoDestroy": true,
+    "recommended": {
+     "bn": 1,
+     "why": "BN1: fastest node, SF1 raises every multiplier (SF1 1 -> 2)"
+    },
+    "pending": {
+     "id": "destroy-bn5-to-1-1794571200000",
+     "stage": "requested",
+     "detail": "backup requested before destroying -> BN1"
+    }
+   }
+  },
+  "decideOpen": {
+   "action": "wait",
+   "nextBn": 1,
+   "writeRequest": null,
+   "attention": [],
+   "node": {
+    "ready": true,
+    "autoSelect": true,
+    "autoDestroy": true,
+    "recommended": {
+     "bn": 1,
+     "why": "BN1: fastest node, SF1 raises every multiplier (SF1 1 -> 2)"
+    },
+    "pending": {
+     "id": "r1",
+     "stage": "requested",
+     "detail": "waiting for backup ack (1s)"
+    }
+   }
+  }
+ },
+ "order exhausted, autoDestroy off": {
+  "pick": {
+   "nextBn": 9,
+   "recommended": {
+    "bn": 9,
+    "why": "BN9: hacknet servers (SF9 0 -> 1)"
+   },
+   "source": "recommendation"
+  },
+  "decide": {
+   "action": "flag",
+   "nextBn": null,
+   "writeRequest": null,
+   "attention": [
+    "w0r1d_d43m0n READY — agent decides BitNode destruction"
+   ],
+   "node": {
+    "ready": true,
+    "autoSelect": true,
+    "autoDestroy": false,
+    "recommended": {
+     "bn": 9,
+     "why": "BN9: hacknet servers (SF9 0 -> 1)"
+    },
+    "pending": {
+     "id": "",
+     "stage": "none",
+     "detail": "waiting for the owner (node.autoDestroy off); recommended BN9"
+    }
+   }
+  },
+  "decideOpen": {
+   "action": "cancel",
+   "nextBn": null,
+   "writeRequest": {
+    "id": "r1",
+    "action": "cancel",
+    "bn": 11,
+    "nextBn": 1,
+    "at": 1794571200000
+   },
+   "attention": [
+    "w0r1d_d43m0n READY — agent decides BitNode destruction"
+   ],
+   "node": {
+    "ready": true,
+    "autoSelect": true,
+    "autoDestroy": false,
+    "recommended": {
+     "bn": 9,
+     "why": "BN9: hacknet servers (SF9 0 -> 1)"
+    },
+    "pending": {
+     "id": "",
+     "stage": "none",
+     "detail": "node.autoDestroy turned off: request cancelled"
+    }
+   }
+  }
+ },
+ "every SF maxed except SF12 (infinite)": {
+  "pick": {
+   "nextBn": 12,
+   "recommended": {
+    "bn": 12,
+    "why": "BN12: next in default order (SF12 0 -> 1)"
+   },
+   "source": "recommendation"
+  },
+  "decide": {
+   "action": "request",
+   "nextBn": 12,
+   "writeRequest": {
+    "id": "destroy-bn13-to-12-1794571200000",
+    "action": "destroy",
+    "bn": 13,
+    "nextBn": 12,
+    "at": 1794571200000
+   },
+   "attention": [],
+   "node": {
+    "ready": true,
+    "autoSelect": true,
+    "autoDestroy": true,
+    "recommended": {
+     "bn": 12,
+     "why": "BN12: next in default order (SF12 0 -> 1)"
+    },
+    "pending": {
+     "id": "destroy-bn13-to-12-1794571200000",
+     "stage": "requested",
+     "detail": "backup requested before destroying -> BN12"
+    }
+   }
+  },
+  "decideOpen": {
+   "action": "request",
+   "nextBn": 12,
+   "writeRequest": {
+    "id": "destroy-bn13-to-12-1794571200000",
+    "action": "destroy",
+    "bn": 13,
+    "nextBn": 12,
+    "at": 1794571200000
+   },
+   "attention": [],
+   "node": {
+    "ready": true,
+    "autoSelect": true,
+    "autoDestroy": true,
+    "recommended": {
+     "bn": 12,
+     "why": "BN12: next in default order (SF12 0 -> 1)"
+    },
+    "pending": {
+     "id": "destroy-bn13-to-12-1794571200000",
+     "stage": "requested",
+     "detail": "backup requested before destroying -> BN12"
+    }
+   }
+  }
+ },
+ "not ready": {
+  "pick": {
+   "nextBn": 9,
+   "recommended": {
+    "bn": 9,
+    "why": "BN9: hacknet servers (SF9 0 -> 1)"
+   },
+   "source": "recommendation"
+  },
+  "decide": {
+   "action": "none",
+   "nextBn": null,
+   "writeRequest": null,
+   "attention": [],
+   "node": {
+    "ready": false,
+    "autoSelect": true,
+    "autoDestroy": true,
+    "recommended": {
+     "bn": 9,
+     "why": "BN9: hacknet servers (SF9 0 -> 1)"
+    },
+    "pending": {
+     "id": "",
+     "stage": "none",
+     "detail": "w0r1d_d43m0n not ready"
+    }
+   }
+  },
+  "decideOpen": {
+   "action": "cancel",
+   "nextBn": null,
+   "writeRequest": {
+    "id": "r1",
+    "action": "cancel",
+    "bn": 11,
+    "nextBn": 1,
+    "at": 1794571200000
+   },
+   "attention": [],
+   "node": {
+    "ready": false,
+    "autoSelect": true,
+    "autoDestroy": true,
+    "recommended": {
+     "bn": 9,
+     "why": "BN9: hacknet servers (SF9 0 -> 1)"
+    },
+    "pending": {
+     "id": "",
+     "stage": "none",
+     "detail": "w0r1d_d43m0n no longer ready: request cancelled"
+    }
+   }
+  }
+ }
+}

@@ -189,3 +189,19 @@ proposed_fix: "Applied in this change: server/readonly.js adds a read-only token
 owner_decision: "Approved 2026-11-02: enforce read-only server-side with a separate token/endpoint. Open: the owner approves the changed routine prompt before it is pasted into claude.ai, and places the token (a secret, never printed) in the routine's environment."
 status: in-progress
 ```
+
+```yaml
+id: F-011
+title: "node.autoSelect silently leaves node.order for the planner's default order (BN9, BN12)"
+found: 2026-11-13
+severity: MED
+evidence: "game/lib/nodectl.js pickNextBn: with no available node.order entry it returns recommendNextBn() = firstAvailable(DEFAULT_BN_ORDER); with node.order=[10,2,3,11] and SF_MAX(12)=Infinity the bot would auto-select BN9 x3 and then BN12 forever (BN6/7/8/13/14 never come); BN9 and BN8 cannot be played unattended"
+root_cause: "The fallback to the recommendation was unconditional, and the owner's list was only a preference, not a limit."
+signal: "aug-plan node.source = order-exhausted (dashboard BitNode view), and the attention flag 'node.order exhausted' when w0r1d_d43m0n is ready"
+detector: test
+recorded_in: "data/aug-plan.txt node block, check-in attention, test/node-fallback.js (CI)"
+consumer: "owner (picks the next BitNode); CI"
+proposed_fix: "Applied in this change: setting node.fallback (recommend|stop, default recommend); stop = never auto-pick outside node.order, flag the owner instead. See docs/specs/node-fallback.md. Follow-up: BN12/BN15 handling, SF_MAX, DEFAULT_BN_ORDER."
+owner_decision: "Open: after merge, deploy, bb push and restarting the autopilot, the owner sets node.fallback=stop (bb settings set node.fallback=stop). Default stays recommend until then."
+status: in-progress
+```
