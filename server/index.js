@@ -20,8 +20,11 @@ import { createWatchdog, spawnRestart, PING_TIMEOUT_MS } from "./watchdog.js";
 import { createSettingsApi } from "./settings.js";
 import { createNodeControl, readPlan } from "./node-control.js";
 import { createDashboardApi } from "./dashboard.js";
+import { loadReadonlyToken, tokenClass, isReadonlyRoute, createReadonlyApi } from "./readonly.js";
 
 const TOKEN = loadToken();
+// Second, restricted token for the supervisor routine (docs/specs/readonly-api.md). The value is never logged.
+const RO = loadReadonlyToken({ env: process.env, dir: C.STATE_DIR, fullToken: TOKEN });
 const log = (...a) => console.log(new Date().toISOString(), ...a);
 
 // ---------- game Remote API (JSON-RPC 2.0, server -> game requests) ----------
@@ -71,6 +74,7 @@ const isUp = () => Boolean(game && rpcSock);
 const state = createState({ dir: C.STATE_DIR, log });
 await state.ensureDir();
 for (const l of C.configSummary()) log(l);
+log(RO.summary);
 const notifier = createNotifier({ webhookUrl: C.DISCORD_ON ? C.DISCORD_WEBHOOK_URL : "", escalateUrl: C.ESCALATE_URL, escalateToken: C.ESCALATE_TOKEN, log });
 const checkin = createCheckin({
   rpc, isUp, log, state, auto: C.CHECKIN_AUTO, escalationEnabled: notifier.escalationEnabled, readyEscalateMs: C.READY_ESCALATE_MIN * 60000,
@@ -89,6 +93,7 @@ const nodeControl = createNodeControl({ rpc, isUp, state, log, backup: () => bac
   pollMs: Number(process.env.BB_NODE_POLL_MS) || undefined });
 nodeControl.start();
 const dashboardApi = createDashboardApi({ rpc });
+const roApi = createReadonlyApi({ rpc });
 
 // ---------- HTTP API ----------
 const body = (req) => new Promise((res) => { const chunks = []; req.on("data", (c) => chunks.push(c)); req.on("end", () => { const b = Buffer.concat(chunks).toString("utf8"); try { res(b ? JSON.parse(b) : {}); } catch { res({}); } }); }); // decode once: a multi-byte char can straddle chunks
@@ -123,6 +128,9 @@ const routes = {
   "GET /api/plan": async () => readPlan(rpc),
   // KPIs shown by the in-game dashboard (game/lib/kpi.js), computed from the same small files. Read-only.
   "GET /api/dashboard": async () => dashboardApi.get(),
+  // Read-only token routes (server/readonly.js): data/*.txt reads and fixed ns queries. Callable with either token.
+  "POST /api/ro/read": async (b) => roApi.read(b),
+  "POST /api/ro/query": async (b) => roApi.query(b),
   "POST /api/remote": async (b) => remote(b.method, b.params || {}),
   "POST /api/pull": async (b) => pull(remote, b),
   "POST /api/push": async (b) => push(remote, b),
@@ -137,7 +145,10 @@ const server = http.createServer(async (req, res) => {
     const l = await checkin.getLatest().catch(() => null);
     return send(200, { ok: true, game: !!game, rpc: !!rpcSock, lastCheckinAgeMin: l ? Math.round((Date.now() - l.atMs) / 6000) / 10 : null });
   }
-  if ((req.headers.authorization || "") !== `Bearer ${TOKEN}`) return send(401, { ok: false, error: "bad token" });
+  const cls = tokenClass(req.headers.authorization, { full: TOKEN, readonly: RO.token });
+  if (!cls) return send(401, { ok: false, error: "bad token" });
+  // The read-only token reaches only the allowlisted routes; every other route (eval, js, write, settings POST, ...) is refused.
+  if (cls === "readonly" && !isReadonlyRoute(route)) return send(403, { ok: false, error: "read-only token: route not allowed" });
   const fn = routes[route];
   if (!fn) return send(404, { ok: false, error: "no route" });
   try { send(200, await fn(await body(req))); } catch (e) { send(e.status || 500, { ok: false, error: e.message }); }

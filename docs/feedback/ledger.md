@@ -173,3 +173,19 @@ proposed_fix: "bb push AGENTS.txt (after this PR merges and deploys). A permanen
 owner_decision: "none"
 status: open
 ```
+
+```yaml
+id: F-010
+title: "Supervisor routine's read-only rule is enforced by prompt text only"
+found: 2026-11-03
+severity: MED
+evidence: "server/index.js (before this change): the single Bearer BB_TOKEN reached every route; POST /api/eval, /api/js, /api/write and POST /api/settings run with the token the proxy injects for the routine; the read-only rule was only in docs/feedback/routine-prompt.md (reviewer note on #32)"
+root_cause: "The bb server had one token class, so nothing but the prompt stopped the routine from writing."
+signal: "a request carrying the read-only token that reaches a mutating route or an rpc op other than read or a fixed query"
+detector: test
+recorded_in: "test/readonly-api.js (CI); the server answers 403 'read-only token: route not allowed'"
+consumer: "CI; the supervisor routine once it sends the read-only token"
+proposed_fix: "Applied in this change: server/readonly.js adds a read-only token (generated into /data/state/readonly-token, or BB_READONLY_TOKEN) restricted to GET status, drift, report, settings, plan, dashboard plus POST /api/ro/read (data/*.txt) and /api/ro/query (fixed snippets). See docs/specs/readonly-api.md. Still to do: update docs/feedback/routine-prompt.md to send the read-only token to the ro routes, and store the token in the routine's environment."
+owner_decision: "Approved 2026-11-02: enforce read-only server-side with a separate token/endpoint. Open: the owner approves the changed routine prompt before it is pasted into claude.ai, and places the token (a secret, never printed) in the routine's environment."
+status: in-progress
+```
