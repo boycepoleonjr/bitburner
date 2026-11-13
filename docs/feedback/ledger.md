@@ -38,12 +38,12 @@ severity: HIGH
 evidence: "data/ram-status.txt alloc {money:0, share:74.97M GB, xp:0} with hackNeed:true; game/lib/ramplan.js:37 (share = w * usable) runs before the xp branch at :45; hack level 5750 -> 5759 in 7.6 h against 6000 needed (about 50 min per level)"
 root_cause: "In phase late the strategy weight is 1, so allocate() gives share 100% of usable RAM whenever faction work is active. Nothing left to buy needs rep (aug-plan: nothing left to buy, NeuroFlux held), so xp gets 0."
 signal: "ram-status hackNeed=true AND alloc.xp=0 AND alloc.share>90% of usable for more than 1 h, or the hack-level slope from telemetry-ring is below what the pred2 ETA assumes"
-detector: none
+detector: test
 recorded_in: "data/ram-status.txt reasons (new line) and a check-in attention flag; routine computes the hack-level slope from data/telemetry-ring.txt"
 consumer: "hourly supervisor routine (reports; read-only); owner decides the change"
-proposed_fix: "game/lib/ramplan.js allocate(): when hackNeed and the aug plan has no rep-gated step left, use share weight 0 (or let xp win over share). No-code option: bb settings set strategy.late=0 (owner's call). Add a regression test in test/ramplan.js."
-owner_decision: "Approve strategy.late=0 or the allocate() change? Not approved yet."
-status: open
+proposed_fix: "Applied in #34: game/lib/ramplan.js allocate() takes repNeeded (from the aug plan) and gives share 0 while hack level is the bottleneck and no step needs rep; strategy.late left unchanged."
+owner_decision: "Approved 2026-11-02: fix allocate(), do not change strategy.late. Merged in #34 with test/ramplan-xp-priority.js; live (GET /api/drift: 0 files differ). Live signal not yet observed (the game is in BN2 early phase): the routine re-checks it at the next late phase."
+status: closed
 ```
 
 ```yaml
@@ -74,8 +74,8 @@ detector: none
 recorded_in: "data/aug-plan.txt node.pendingChain (new) and a check-in attention flag"
 consumer: "supervisor routine; owner edits node.order"
 proposed_fix: "Owner removes 5 from node.order. game/lib/augplan.js: move 12 to the end of DEFAULT_BN_ORDER or cap it; add an all-maxed message in nodectl.js:63; update the BN2 reason. Tests in test/augplan.js."
-owner_decision: "Remove 5 from node.order? Cap or reorder BN12? Is BN15 in scope?"
-status: open
+owner_decision: "Approved 2026-11-02: BN5 removed from node.order (settings-log rev 6, now [10,2,3,11]); BN12 left as is; BN15 out of scope. The remaining tail items are accepted, not fixed."
+status: wontfix
 ```
 
 ```yaml
@@ -86,12 +86,12 @@ severity: MED
 evidence: ".github/workflows/claude-code-review.yml:41 comment: held at checkout v4.4.0 because v6+ persists the token through includeIf.gitdir; PR #27 moves it to v7.0.1 (the file is synced from conventions v1.3.0, so it should also be edited upstream); the PR's test check last ran 2026-10-26, before the 2026-11-02 update"
 root_cause: "Dependabot groups all workflow files and ignores the intentional pin. The pin is only a comment, so nothing fails when it is removed."
 signal: "any open or merged diff that changes the checkout ref in claude-code-review.yml away from the pinned SHA"
-detector: none
+detector: test
 recorded_in: "CI test (new) that greps claude-code-review.yml for the pinned SHA; open Dependabot PR age in the routine report"
 consumer: "CI (red check blocks the PR); supervisor routine lists stale Dependabot PRs"
-proposed_fix: ".github/dependabot.yml: ignore actions/checkout in the two Claude workflows, or split the group. Then merge the rest of #27. Not touched by this ledger."
-owner_decision: "Split PR #27 so the Claude workflows keep the pinned checkout? Not approved yet."
-status: open
+proposed_fix: "Applied: the checkout bumps were split out in #33 and claude-code-review.yml keeps its SHA pin; test/workflow-checkout-pin.js fails CI if any actions/checkout in that file is not a full-SHA pin with a version comment below v5."
+owner_decision: "Approved 2026-11-02: keep open until a CI test pins the checkout. test/workflow-checkout-pin.js is that test, so the entry is closed."
+status: closed
 ```
 
 ```yaml
@@ -122,8 +122,8 @@ detector: none
 recorded_in: "supervisor routine report (Monitor last-run age); optionally a check-in attention flag from the container"
 consumer: "owner (knows Monitor is best-effort); routine treats the container check-in as the primary alarm"
 proposed_fix: "Have the container (server/checkin.js) raise the incident and attention flags itself and treat Monitor as a backup. No schedule change can fix GitHub's throttling."
-owner_decision: "Accept Monitor as best-effort?"
-status: open
+owner_decision: "Approved 2026-11-02: accept the Monitor workflow as best-effort. The container check-in is the primary alarm; the supervisor routine reports the Monitor last-run age."
+status: wontfix
 ```
 
 ```yaml
