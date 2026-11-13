@@ -102,12 +102,12 @@ severity: MED
 evidence: ".github/workflows/claude.yml:40 'Skip (no Claude secret configured)' only writes a notice and the job ends green; claude-code-review.yml:20-22 skips drafts, forks and bot authors (PR #27 claude-review check = skipped); .github/workflows/ci.yml:26 node-version 22 against Dockerfile:6 FROM node:26-bookworm-slim"
 root_cause: "Skips are deliberate but unrecorded, and production runs a Node major that CI never tests."
 signal: "a required or expected job concluding skipped, or a Dockerfile Node major different from the CI node-version"
-detector: none
+detector: test
 recorded_in: "CI test (new) comparing the Dockerfile FROM major with ci.yml node-version; skipped-job count in the routine report"
 consumer: "CI (red on mismatch); supervisor routine"
-proposed_fix: "claude.yml: fail with exit 1 when the secret is missing, like claude-code-review.yml. ci.yml: test the Dockerfile's Node major (add a matrix entry). Not applied."
-owner_decision: "Run CI on Node 26 as well as 22, or pin the Dockerfile back to 22?"
-status: open
+proposed_fix: "Node part applied: ci.yml runs the parse check and npm test on Node 22 and Node 26 inside the single required job test; test/ci-node-versions.js fails CI if the Dockerfile's Node major is not tested. Still open: claude.yml should fail (exit 1) when its secret is missing, like claude-code-review.yml. Not applied."
+owner_decision: "Approved 2026-11-02: test Node 26 in CI (production already runs 26); do not pin the Dockerfile back to 22. Not yet decided: the claude.yml missing-secret skip."
+status: in-progress
 ```
 
 ```yaml

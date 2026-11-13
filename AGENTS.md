@@ -4,7 +4,7 @@ Canonical copy: repo root (github.com/boycepoleonjr/bitburner). `bb push` mirror
 
 ## Project
 Autonomous Bitburner agent (see Vision and Mission below; README.md has the architecture diagram).
-- Stack: ES-module Node (>=18, CI on Node 22) with one dependency (`ws`). `game/` is Netscript 2 JS that runs inside the game; `server/` is the bb bridge server + CLI (`npx bb`); tests are plain Node scripts in `test/` (`npm test`).
+- Stack: ES-module Node (>=18, CI on Node 22 and 26; the Dockerfile runs 26) with one dependency (`ws`). `game/` is Netscript 2 JS that runs inside the game; `server/` is the bb bridge server + CLI (`npx bb`); tests are plain Node scripts in `test/` (`npm test`).
 - Hosting and deploy: Railway project `bitburner`, service `game` (Dockerfile + `deploy/`, `railway.toml`; Chromium runs the game 24/7 next to the bb server, state on the `/data` volume). Merges to main auto-deploy after CI passes. In-game code is deployed separately with `bb push`.
 - Default branch: `main` (protected; CI check `test` must pass).
 - No lint, typecheck or build step. CI also runs a syntax check of in-game scripts (`.github/scripts/check-syntax.js`).

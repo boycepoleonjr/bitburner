@@ -29,3 +29,12 @@ jobs:
       - name: Parse-check in-game scripts
         run: node .github/scripts/check-syntax.js
       - run: npm test
+      # Production (Dockerfile) runs Node 26, so the same checks run there too. One job keeps the required check name "test".
+      # test/ci-node-versions.js fails if the Dockerfile's Node major is not tested here.
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 26
+      - name: Parse-check in-game scripts (Node 26)
+        run: node .github/scripts/check-syntax.js
+      - name: Tests (Node 26)
+        run: npm test
