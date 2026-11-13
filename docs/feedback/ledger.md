@@ -134,12 +134,12 @@ severity: LOW
 evidence: "ns.read length of data/telemetry.txt = 67446704 bytes (AGENTS.md and game/lib/data-sources.js:24 say about 19-20 MB); no rotation in game/agent/telemetry.js; the predictor re-parses it at every check-in (game/agent/predictor.txt resolve())"
 root_cause: "Append-only history for the predictor with no retention."
 signal: "telemetry.txt above 100 MB, or check-in duration rising"
-detector: none
+detector: test
 recorded_in: "data/ram-status or check-in warn line with the file size"
 consumer: "supervisor routine; owner approves rotation"
-proposed_fix: "Rotate per install or keep the last N days; keep a compact history for the backtest. Not applied."
-owner_decision: "How much history should the predictor keep?"
-status: open
+proposed_fix: "Applied: game/lib/telemetry-ring.js trimTelemetry plus agent/telemetry.js trim telemetry.txt to ui.telemetryRetentionDays (default 7, 0 = keep all) at start and once a day, and log a [telemetry] line to data/events.txt. Takes effect after bb push and a restart of telemetry.js. The routine still reports the file size."
+owner_decision: "Approved 2026-11-02: keep 7 days of telemetry history. Consequence: the predictor backtest sees about a week instead of the whole history (see docs/specs/settings.md ui.telemetryRetentionDays)."
+status: in-progress
 ```
 
 ```yaml

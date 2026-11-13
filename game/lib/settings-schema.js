@@ -147,6 +147,8 @@ export const SCHEMA = [
     label: "Refresh interval (ms)", help: "How often the dashboard re-reads data." },
   { key: "ui.historyMinutes", group: "ui", type: "int", default: 360, min: 10, max: 10080, ui: "number", owner: "dashboard",
     label: "Chart history (min)", help: "Telemetry window shown in charts (also the length of data/telemetry-ring.txt)." },
+  { key: "ui.telemetryRetentionDays", group: "ui", type: "int", default: 7, min: 0, max: 365, ui: "number", owner: "dashboard",
+    label: "Telemetry history (days)", help: "data/telemetry.txt keeps this many days (trimmed at telemetry start and daily). 0 = keep everything. Shorter history gives the predictor fewer backtest samples." },
   { key: "ui.slowRefreshMs", group: "ui", type: "int", default: 30000, min: 1000, max: 600000, ui: "number", owner: "dashboard",
     label: "Slow refresh (ms)", help: "How often large files (predictions, logs, raw view) are re-read. Their tails only." },
   { key: "ui.tailLines", group: "ui", type: "int", default: 200, min: 20, max: 2000, ui: "number", owner: "dashboard",

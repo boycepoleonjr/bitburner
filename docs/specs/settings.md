@@ -29,7 +29,7 @@ Tunables are spread across `lib/config.js` DEFAULTS + `data/config-overrides.txt
 | Strategy (0 = money, 1 = faction rep) | **strategy.early=0** (o--), **strategy.mid=0.5** (-o-), **strategy.late=1** (--o), strategy.phase.midAt=0.34, strategy.phase.lateAt=0.9 (phase = fl1ght.exe progress) |
 | RAM | ram.manager.enabled, ram.homeReserveGb=128, ram.cloud.*, ram.share.enabled, ram.xp.mode=auto, ram.xp.target, ram.targets.max=0, ram.batches.max=0, ram.resizeThreshold=0.1 |
 | Augmentations | augs.autoInstall, augs.installPolicy=eta, augs.installAt=6, augs.planner.goal=destroy, augs.donateAtFavor=150, augs.neuroFluxLast=true (informational), augs.order.* (sort=rep, pinned/last/exclude=[], strict=false, strictMaxWaitMin=120, drivesWork=false; docs/specs/aug-order.md) |
-| Dashboard | ui.refreshMs=1000, ui.historyMinutes=360 |
+| Dashboard | ui.refreshMs=1000, ui.historyMinutes=360, ui.telemetryRetentionDays=7 |
 
 ### stringList (augs.order.pinned / last / exclude)
 Accepted input: an array; a string starting with `[` (JSON); otherwise a string split on `|` if it contains one, else on `,`. Entries are trimmed, at most 80 characters, unique, at most 200. Any entry starting with `NeuroFlux` is rejected, and `augs.order.exclude` also rejects `The Red Pill` (schema field `forbid`). Unknown aug names are accepted and shown as warnings in `data/aug-plan.txt` (`order.warnings`) and the dashboard.
