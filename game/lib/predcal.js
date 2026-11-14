@@ -7,12 +7,14 @@
  *   - tests (test/predcal.js) import it directly
  * Spec: docs/specs/predictor-v3.md.
  *
- * Model, per cell (kind x horizon bucket x cycle phase, pooled up to kind x bucket, kind, all):
- *   point  = weighted geometric mean of the bias-corrected base models (s5, s15, s45, quad, income, ledger, planned);
- *            weights = softmax(-L_m / tau), L_m = decayed mean |ln(actual/pred_m) - b_m|, b_m = decayed median bias.
- *   band   = point * exp([q_lo, q_hi]); q = decayed empirical quantiles of the honest residual ln(actual/point)
- *            (point as it was predicted at the time), shrunk toward the parent cell by n/(n+K),
- *            levels alpha/2 and 1 - alpha/2 with alpha adapted online (adaptive conformal inference) toward 0.20.
+ * Model, per cell (kind x horizon bucket, optionally x cycle phase; pooled up to kind and all):
+ *   point  = weighted geometric mean of ensemble members: each base model (s5, s15, s45, quad, income, ledger, planned)
+ *            raw and bias-corrected ("m~", b_m = median ln(actual/pred_m) in the cell), their median, and v2's own point;
+ *            weights = softmax(-L / tau), L = mean PREQUENTIAL |log error| (each scored with the state of its own time).
+ *   band   = point * exp([q_lo, q_hi]); q = (optionally decayed) empirical quantiles of the honest residual
+ *            ln(actual/point) (point as it was predicted at the time) over the last maxObs outcomes, shrunk toward the
+ *            parent cell by n/(n+K), levels alpha_lo and 1 - alpha_hi adapted online per edge (adaptive conformal
+ *            inference) toward 0.10 each.
  *   Only samples whose outcome was known before a prediction was made ever reach that prediction (knownAt <= made).
  */
 
@@ -22,19 +24,24 @@ export const BUCKETS = [["<20m", 20], ["20-60m", 60], ["1-3h", 180], [">3h", Inf
 /** Cycle phase = time since the last augmentation install (the regime resets there). */
 export const CYCLES = [["c0", 1], ["c1", 4], ["c2", Infinity]];
 
+/**
+ * Defaults = the configuration scripts/predictor-backtest.js chose on the TUNING half of the live log (2026-09-27 to
+ * 2026-10-21) by interval score + coverage penalty, out of a 144-point grid; never tuned on the held-out half.
+ * docs/specs/predictor-v3.md "Results" has the numbers.
+ */
 export const DEFAULTS = Object.freeze({
   target: 0.8,          // nominal band coverage
-  halfLifeH: 72,        // decay of old outcomes (hours of made time)
-  maxObs: 400,          // max outcomes kept per cell
-  shrinkK: 30,          // pseudo-count pulling a cell toward its parent
-  tau: 0.15,            // ensemble softmax temperature (log-error units)
-  minModelN: 8,         // a base model needs this many outcomes in a cell to get its own weight
-  gamma: 0.01,          // ACI step size (on the quantile level)
+  halfLifeH: 0,         // decay of old outcomes in hours of made time; 0 = none (grid: 72 h lost on the tuning half)
+  maxObs: 400,          // max outcomes kept per cell (the window that makes the fit follow regime changes)
+  shrinkK: 30,          // pseudo-count pulling a cell's band toward its parent
+  tau: 0.3,             // ensemble softmax temperature (log-error units)
+  minModelN: 8,         // a member needs this many outcomes in a cell to get its own weight
+  gamma: 0.1,           // ACI step size (on the quantile level of each edge)
   track: 0,             // online quantile tracking step (log units) on the band edges (conformal PID, P term); 0 = off
   alphaMin: 0.02, alphaMax: 0.5,
   useCycle: false,      // split cells by cycle phase (time since install); off: the backtest found it too sparse
   pointMode: "ensemble",// "ensemble" | "best" | "median"
-  aci: true,             // adaptive conformal inference, one alpha per band edge (asymmetric drift)
+  aci: true,            // adaptive conformal inference, one alpha per band edge (asymmetric drift)
   scale: "none",        // "disp": residuals normalised by sMin + model dispersion (locally adaptive bands) | "none"
   sMin: 0.1,
   dedup: 0,             // 1: band quantiles weight each outcome by 1/(outcomes of the same target in the cell) (cluster-robust)
