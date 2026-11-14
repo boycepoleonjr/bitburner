@@ -138,8 +138,8 @@ detector: test
 recorded_in: "data/ram-status or check-in warn line with the file size"
 consumer: "supervisor routine; owner approves rotation"
 proposed_fix: "Applied: game/lib/telemetry-ring.js trimTelemetry plus agent/telemetry.js trim telemetry.txt to ui.telemetryRetentionDays (default 7, 0 = keep all) at start and once a day, and log a [telemetry] line to data/events.txt. Takes effect after bb push and a restart of telemetry.js. The routine still reports the file size."
-owner_decision: "Approved 2026-11-02: keep 7 days of telemetry history. Consequence: the predictor backtest sees about a week instead of the whole history (see docs/specs/settings.md ui.telemetryRetentionDays)."
-status: in-progress
+owner_decision: "Approved 2026-11-02: keep 7 days of telemetry history. Live 2026-11-13: #44 pushed, telemetry.js restarted, data/telemetry.txt 86 MB -> 12.8 MB, events.txt line [telemetry] trimmed 55878 records older than 7 days (9585 kept). telemetry.js RAM 7.1 -> 8.4 GB. Consequence: the predictor backtest sees about a week of history (see docs/specs/settings.md ui.telemetryRetentionDays)."
+status: closed
 ```
 
 ```yaml
@@ -186,8 +186,8 @@ detector: test
 recorded_in: "test/readonly-api.js (CI); the server answers 403 'read-only token: route not allowed'"
 consumer: "CI; the supervisor routine once it sends the read-only token"
 proposed_fix: "Applied in this change: server/readonly.js adds a read-only token (generated into /data/state/readonly-token, or BB_READONLY_TOKEN) restricted to GET status, drift, report, settings, plan, dashboard plus POST /api/ro/read (data/*.txt) and /api/ro/query (fixed snippets). See docs/specs/readonly-api.md. Still to do: update docs/feedback/routine-prompt.md to send the read-only token to the ro routes, and store the token in the routine's environment."
-owner_decision: "Approved 2026-11-02: enforce read-only server-side with a separate token/endpoint. Open: the owner approves the changed routine prompt before it is pasted into claude.ai, and places the token (a secret, never printed) in the routine's environment."
-status: in-progress
+owner_decision: "Approved 2026-11-02: enforce read-only server-side. Live 2026-11-13: token set as Railway variable BB_READONLY_TOKEN and stored in the owner Vault (never printed); the supervisor routine runs in the bitburner-ro cloud environment whose proxy injects only that token; verified 200 on the allowed routes and 403 on eval, write and settings POST. docs/feedback/routine-prompt.md is now the v8 text."
+status: closed
 ```
 
 ```yaml
@@ -202,6 +202,6 @@ detector: test
 recorded_in: "data/aug-plan.txt node block, check-in attention, test/node-fallback.js (CI)"
 consumer: "owner (picks the next BitNode); CI"
 proposed_fix: "Applied in this change: setting node.fallback (recommend|stop, default recommend); stop = never auto-pick outside node.order, flag the owner instead. See docs/specs/node-fallback.md. Follow-up: BN12/BN15 handling, SF_MAX, DEFAULT_BN_ORDER."
-owner_decision: "Open: after merge, deploy, bb push and restarting the autopilot, the owner sets node.fallback=stop (bb settings set node.fallback=stop). Default stays recommend until then."
-status: in-progress
+owner_decision: "Live 2026-11-13: #49 deployed, lib files pushed, autopilot restarted (RAM 76.35 unchanged), node.fallback=stop set (settings rev 7), node.order set to [2,3,11,6,7] (rev 8). Follow-up (BN12/BN15, per-node targets, early warning, BN8/BN9 readiness specs) is in progress under F-003."
+status: closed
 ```
