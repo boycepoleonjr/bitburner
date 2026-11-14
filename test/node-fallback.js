@@ -151,29 +151,29 @@ async function maxedModule() {
   fs.writeFileSync(path.join(dir, "nodectl.js"), fs.readFileSync(path.join(GAME, "lib/nodectl.js"), "utf8").replace('from "lib/augplan.js"', 'from "./augplan.js"'));
   return import(pathToFileURL(path.join(dir, "nodectl.js")).href);
 }
-test("every Source-File maxed: the pending detail says so (recommend and stop), not autoSelect off", async () => {
+test("every target met: the pending detail says so (recommend and stop), not autoSelect off", async () => {
   const M = await maxedModule();
   const st = mkState({ bn: 13, sourceFiles: SF_ALL.concat([{ n: 12, lvl: 3 }]) });
   for (const fb of ["recommend", "stop"]) {
     const d = M.decideNode(st, S({ ...ON, "node.fallback": fb, "node.order": [10] }));
     assert.equal(d.action, "flag", fb); assert.equal(d.writeRequest, null); assert.equal(d.nextBn, null);
-    assert.match(d.node.pending.detail, /every Source-File is maxed/, fb);
+    assert.match(d.node.pending.detail, /every BitNode target is met/, fb);
     assert.doesNotMatch(d.node.pending.detail, /autoSelect off/, fb);
     assert.equal(d.node.recommended.bn, null);
+    assert.equal(d.node.source, "all-targets-met");
+    // its own flag next to READY; in stop mode it replaces the (redundant) order-exhausted flag
+    assert.deepEqual(d.attention, [READY_FLAG, M.ALL_MET_FLAG], fb);
+    assert.doesNotMatch(d.attention.join("|"), /BNundefined|BN\?|BNnull|autoSelect/);
   }
-  const stop = M.decideNode(st, S({ ...ON, "node.fallback": "stop", "node.order": [10] }));
-  assert.equal(stop.node.source, "order-exhausted");
-  assert.deepEqual(stop.attention, [READY_FLAG, M.orderExhaustedFlag(stop.node.recommended)]);
-  assert.match(stop.attention[1], /every Source-File is maxed/); assert.doesNotMatch(stop.attention[1], /BNundefined|BN\?|BNnull/);
-  // recommend: still only the READY flag, as before
-  assert.deepEqual(M.decideNode(st, S({ ...ON, "node.order": [10] })).attention, [READY_FLAG]);
+  assert.match(M.orderExhaustedFlag(null), /every BitNode target is met/);
   // an open request in that state is cancelled with the same honest text
   const req = { id: "r1", action: "destroy", bn: 13, nextBn: 1, at: T0 - 1000 };
   const c = M.decideNode({ ...st, request: req }, S({ ...ON }));
-  assert.equal(c.action, "cancel"); assert.match(c.node.pending.detail, /every Source-File is maxed/);
-  // autoSelect really off keeps the autoSelect text (real module)
-  assert.match(decideNode(st, S({ "node.autoDestroy": true })).node.pending.detail, /autoSelect off/);
-  assert.match(M.decideNode(st, S({ "node.autoDestroy": true })).node.pending.detail, /autoSelect off/);
+  assert.equal(c.action, "cancel"); assert.match(c.node.pending.detail, /every BitNode target is met/); assert.deepEqual(c.attention, [READY_FLAG, M.ALL_MET_FLAG]);
+  // autoSelect really off (and something left to select) keeps the autoSelect text, in the real and the patched module
+  const open = mkState({ bn: 13, sourceFiles: [{ n: 1, lvl: 3 }] });
+  assert.match(decideNode(open, S({ "node.autoDestroy": true, "node.order": [10], "node.autoSelect": false })).node.pending.detail, /autoSelect off/);
+  assert.match(M.decideNode(open, S({ "node.autoDestroy": true })).node.pending.detail, /autoSelect off/);
 });
 test("real SF_MAX: with an explicit BN12 target stop + node.order [12] is not exhausted (BN12 has no game cap; default target is 0, see node-targets)", () => {
   const s = S({ ...STOP, "node.order": [12], "node.targets": { 12: 1000 } });

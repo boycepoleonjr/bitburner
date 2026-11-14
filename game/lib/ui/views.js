@@ -298,6 +298,7 @@ export function createViews(React, { schema = [], groups = [] } = {}) {
         h(K.Grid, { min: 200 }, h(K.KpiTile, { label: "w0r1d_d43m0n", k: d, size: "lg", onClick: () => actions.go("overview") })),
         h(K.KeyValue, { rows: [["ready", fmtValue(node ? node.ready : d?.value === 0)], ["requirement", ap?.worldDaemon ? `hack ${ap.worldDaemon["hack"] ?? DASH} / ${ap.worldDaemon.req ?? DASH}` : DASH],
           ["recommended next", node?.recommended ? `BN${node.recommended.bn} · ${node.recommended.why ?? ""}` : DASH],
+          ...(node?.source === "all-targets-met" ? [["next-node source", "all-targets-met: every BitNode is at its node.targets level, the owner raises a target or stops"]] : []),
           ...(node?.source === "order-exhausted" ? [["next-node source", "order-exhausted: node.order has no available entry (node.fallback=stop), the owner picks"]] : []),
           ["pending action", node?.pending ? `${node.pending.id ?? ""} ${node.pending.stage ?? ""} ${node.pending.detail ?? ""}`.trim() : "none"]] }),
         !ap ? h(K.EmptyState, { title: "data/aug-plan.txt not found", detail: "Readiness falls back to the autopilot's w0r1d_d43m0n READY flag." }) : null),

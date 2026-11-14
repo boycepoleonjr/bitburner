@@ -13,14 +13,15 @@ import { orderAugs, cfgFromSettings, isDefaultCfg, projectedCost, DEFAULT_ORDER_
 
 export const NFG = "NeuroFlux Governor";
 export const RED_PILL = "The Red Pill";
+export const ALL_MET = "every BitNode target is met"; // no BitNode is below its node.targets level (lib/nodectl.js flags it)
 export const READY_FLAG = "w0r1d_d43m0n READY — agent decides BitNode destruction"; // server/checkin.js OWNER_DECISION matches this
 export const PRICE_STEP = 1.9;          // each queued aug multiplies the next price (game constant, before BN mult)
 export const DAEDALUS = { money: 100e9, hack: 2500 };
 export const DEFAULT_RECOVERY_MIN = 60; // post-install recovery estimate when no install history exists
 /** Default next-BitNode preference (rationale: docs/specs/aug-planner.md "Recommended BitNode order").
- * 12 stays in its place but has default target 0 (never auto-picked). docs/specs/node-targets.md */
-export const DEFAULT_BN_ORDER = [1, 4, 2, 5, 10, 9, 3, 11, 12, 6, 7, 8, 13, 14];
-export const BN_MAX = 14;
+ * 12 stays in its place but has default target 0 (never auto-picked); 15 is last (v3.0.1 has BN1..BN15). docs/specs/node-targets.md */
+export const DEFAULT_BN_ORDER = [1, 4, 2, 5, 10, 9, 3, 11, 12, 6, 7, 8, 13, 14, 15];
+export const BN_MAX = 15;
 /** Hard Source-File cap per BitNode: 3, except BN12 (no cap in the game). Verified against bitburner-src v3.0.1 BitNode.tsx. */
 export const SF_MAX = (n) => (n === 12 ? Infinity : 3);
 /** Default target level when node.targets has no entry: SF_MAX, except BN12 = 0 (the owner opts in with an explicit target). */
@@ -328,7 +329,7 @@ export function recommendNextBn(snap, s = {}) {
     9: "BN9: hacknet servers",
     3: "BN3: corporations",
   };
-  return { bn, why: bn == null ? "every Source-File is maxed" : `${reasons[bn] || `BN${bn}: next in default order`} (SF${bn} ${lv[bn] || 0} -> ${(lv[bn] || 0) + 1})` };
+  return { bn, why: bn == null ? ALL_MET : `${reasons[bn] || `BN${bn}: next in default order`} (SF${bn} ${lv[bn] || 0} -> ${(lv[bn] || 0) + 1})` };
 }
 
 function fmt(n) { const a = Math.abs(n); return a >= 1e15 ? (a / 1e15).toFixed(2) + "q" : a >= 1e12 ? (a / 1e12).toFixed(2) + "t" : a >= 1e9 ? (a / 1e9).toFixed(2) + "b" : a >= 1e6 ? (a / 1e6).toFixed(1) + "m" : Math.round(a).toString(); }

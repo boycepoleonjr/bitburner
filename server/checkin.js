@@ -21,7 +21,7 @@ export function normalizeAttention(a) {
   return [...new Set((Array.isArray(a) ? a : []).map((x) => String(x).replace(/\s+/g, " ").trim()).filter(Boolean))].sort((x, y) => x.localeCompare(y));
 }
 // Attention the owner decides on (destroying a BitNode, or choosing one when node.order has run out): shown in Discord, escalated only once overdue (readyEscalateMs).
-export const OWNER_DECISION = [/w0r1d_d43m0n READY/i, /node\.order exhausted/i]; // READY, and node.fallback=stop with node.order run out (lib/nodectl.js ORDER_EXHAUSTED)
+export const OWNER_DECISION = [/w0r1d_d43m0n READY/i, /node\.order exhausted/i, /every BitNode target is met/i]; // READY; node.fallback=stop with node.order run out (lib/nodectl.js ORDER_EXHAUSTED); every node.targets level met (ALL_MET_FLAG)
 export const escalatable = (a) => normalizeAttention(a).filter((x) => !OWNER_DECISION.some((re) => re.test(x)));
 export const attentionKey = (a) => createHash("sha256").update(JSON.stringify(normalizeAttention(a))).digest("hex");
 

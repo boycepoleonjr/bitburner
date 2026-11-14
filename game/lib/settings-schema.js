@@ -9,7 +9,7 @@
  * here reaches every run that never touched that key.
  *
  * Field types: bool | number | int | enum | string | intList | stringList (optional `forbid`: entries that are rejected)
- *              | intMap (JSON object BitNode "1".."14" -> integer; node.targets)
+ *              | intMap (JSON object BitNode "1".."15" -> integer; node.targets)
  * ui hints:    toggle | slider | number | select | text | list
  */
 
@@ -28,9 +28,9 @@ export const GROUPS = [
 ];
 
 const MONEY_REP = ["Money", "Faction rep"];
-/** BitNodes that exist in v3.0.1 (BN1..BN14 here; BN15 follows in the next commit) and the Source-File level cap a node.targets entry may ask for: 3, except BN12 (no game cap; 1000 here).
+/** BitNodes that exist in v3.0.1 (BN1..BN15) and the Source-File level cap a node.targets entry may ask for: 3, except BN12 (no game cap; 1000 here).
  * lib/augplan.js SF_MAX/targetOf hold the same numbers (test/node-targets.js keeps them equal). */
-export const BN_COUNT = 14;
+export const BN_COUNT = 15;
 export const TARGET_CAP = (n) => (n === 12 ? 1000 : 3);
 /** The seven factions that can host a gang (bitburner-src Gang/data/Constants.ts Names). */
 export const GANG_FACTIONS = Object.freeze(["Slum Snakes", "Tetrads", "The Syndicate", "The Dark Army", "Speakers for the Dead", "NiteSec", "The Black Hand"]);
@@ -46,7 +46,7 @@ export const SCHEMA = [
     label: "Backup before destroy", help: "Force a save backup right before destroying a BitNode, so it can be undone by importing it." },
   { key: "node.destroyDelayMin", group: "node", type: "int", default: 10, min: 0, max: 1440, ui: "number", owner: "autopilot",
     label: "Destroy veto window (min)", help: "After the backup is confirmed, wait this long before destroying. Turning node.autoDestroy off during the wait cancels it." },
-  { key: "node.order", group: "node", type: "intList", default: [], ui: "list", min: 1, max: 14, owner: "autopilot",
+  { key: "node.order", group: "node", type: "intList", default: [], ui: "list", min: 1, max: BN_COUNT, owner: "autopilot",
     label: "BitNode order", help: "Preferred next BitNodes, first available wins. Empty = use the planner's recommendation." },
   { key: "node.targets", group: "node", type: "intMap", default: {}, ui: "text", owner: "autopilot",
     label: "Target Source-File level per BitNode", help: "JSON map BitNode -> target Source-File level, e.g. {\"12\":5} or 12:5,3:0. Empty = every BitNode targets 3 except BN12, which targets 0 (never auto-picked). A node is picked only while its Source-File is below its target; 0 switches a node off. Max 3 (BN12: 1000)." },

@@ -5,10 +5,13 @@ import fs from "node:fs";
 import { importGame } from "./helpers/game-import.js";
 import { defaults, coerce, SCHEMA, BY_KEY, emptyFile, applyPatch, serialize, parseFile, effective, BN_COUNT, TARGET_CAP } from "../game/lib/settings-schema.js";
 import { controlsFromSchema } from "../game/lib/ui/settings-model.js";
+import { computeKpis } from "../game/lib/kpi.js";
+import { OWNER_DECISION } from "../server/checkin.js";
+import { NOW, latest, ring, autopilot, ramStatus, augPlan, pred2Tail } from "./fixtures/dashboard-data.js";
 
-const { pickNextBn, decideNode } = await importGame("lib/nodectl.js");
+const { pickNextBn, decideNode, ALL_MET_FLAG, orderExhaustedFlag } = await importGame("lib/nodectl.js");
 const A = await importGame("lib/augplan.js");
-const { SF_MAX, DEFAULT_BN_ORDER, firstAvailable, bnAvailable, targetOf, defaultTarget, recommendNextBn, sfLevels } = A;
+const { SF_MAX, ALL_MET, READY_FLAG, DEFAULT_BN_ORDER, firstAvailable, bnAvailable, targetOf, defaultTarget, recommendNextBn, sfLevels } = A;
 const golden = JSON.parse(fs.readFileSync(new URL("./fixtures/node-targets-golden.json", import.meta.url), "utf8"));
 
 const tests = [];
@@ -71,15 +74,15 @@ test("schema: node.targets is an intMap, default {}, group node, owned by the au
   assert.deepEqual(effective({ "node.targets": { 12: 5 } })["node.targets"], { 12: 5 });
 });
 test("schema: coerce accepts object, JSON string, short form and empty; sorts keys", () => {
-  for (const [raw, want] of [[{ 12: 5 }, { 12: 5 }], ['{"12":5}', { 12: 5 }], ["12:5,3:0", { 3: 0, 12: 5 }], [" 12 : 5 , 3 : 0 ", { 3: 0, 12: 5 }], ["", {}], ["  ", {}], [{}, {}], ["{}", {}], [{ 14: 3, 1: 0 }, { 1: 0, 14: 3 }], [{ 12: 1000 }, { 12: 1000 }]])
+  for (const [raw, want] of [[{ 12: 5 }, { 12: 5 }], ['{"12":5}', { 12: 5 }], ["12:5,3:0", { 3: 0, 12: 5 }], [" 12 : 5 , 3 : 0 ", { 3: 0, 12: 5 }], ["", {}], ["  ", {}], [{}, {}], ["{}", {}], [{ 15: 3, 1: 0 }, { 1: 0, 15: 3 }], [{ 12: 1000 }, { 12: 1000 }]])
     assert.deepEqual(coerce("node.targets", raw), { ok: true, value: want }, JSON.stringify(raw));
 });
 test("schema: coerce rejects invalid targets (never clamps)", () => {
-  const bad = [[{ 15: 1 }, /unknown BitNode/], [{ 0: 1 }, /unknown BitNode/], [{ x: 1 }, /unknown BitNode/], [{ "03": 1 }, /unknown BitNode/], [{ "-1": 1 }, /unknown BitNode/],
+  const bad = [[{ 16: 1 }, /unknown BitNode/], [{ 0: 1 }, /unknown BitNode/], [{ x: 1 }, /unknown BitNode/], [{ "03": 1 }, /unknown BitNode/], [{ "-1": 1 }, /unknown BitNode/],
     [{ 3: 4 }, /BN3: target must be <= 3/], [{ 12: 1001 }, /BN12: target must be <= 1000/], [{ 3: -1 }, /integer >= 0/], [{ 3: 1.5 }, /integer >= 0/], [{ 3: "2" }, /integer >= 0/],
     [{ 3: null }, /integer >= 0/], [{ 3: NaN }, /integer >= 0/], [{ 3: Infinity }, /integer >= 0|<=/], [[1, 2], /expected a JSON object/], [null, /expected a JSON object/], [5, /expected a JSON object/],
     [true, /expected a JSON object/], ["[1]", /expected a JSON object/], ["{bad json", /expected a JSON object/], ["3", /expected a JSON object/], ["3:1,3:2", /listed twice/],
-    ["12:x", /expected a JSON object/], ["12:", /expected a JSON object/], ["a:1", /expected a JSON object/], ["3:1:2", /expected a JSON object/], ["15:1", /unknown BitNode/], ["3:4", /<= 3/]];
+    ["12:x", /expected a JSON object/], ["12:", /expected a JSON object/], ["a:1", /expected a JSON object/], ["3:1:2", /expected a JSON object/], ["16:1", /unknown BitNode/], ["3:4", /<= 3/]];
   for (const [raw, re] of bad) { const r = coerce("node.targets", raw); assert.equal(r.ok, false, JSON.stringify(raw)); assert.match(r.error, re, JSON.stringify(raw)); assert.match(r.error, /^node\.targets: /); }
 });
 test("schema: TARGET_CAP / BN_COUNT agree with augplan SF_MAX (BN12 has no game cap)", () => {
@@ -123,7 +126,7 @@ test("BN12 is never available, picked or recommended by default; an explicit tar
   assert.equal(bnAvailable(12, {}, { 12: 5 }), true); assert.equal(bnAvailable(12, { 12: 4 }, { 12: 5 }), true); assert.equal(bnAvailable(12, { 12: 5 }, { 12: 5 }), false);
   assert.equal(bnAvailable(12, { 12: 50 }, { 12: 1000 }), true);
   // recommendation: with everything else maxed the default has nothing, an explicit target recommends BN12
-  const snap = { bn: 13, sourceFiles: sfAll(3, { 12: 0 }).filter((x) => x.n <= 14) };
+  const snap = { bn: 13, sourceFiles: sfAll(3, { 12: 0 }) };
   assert.equal(recommendNextBn(snap, S()).bn, null);
   const rec = recommendNextBn(snap, S({ "node.targets": { 12: 5 } }));
   assert.equal(rec.bn, 12); assert.match(rec.why, /BN12/);
@@ -157,6 +160,86 @@ test("empty node.order: the recommendation (default order, BN12 skipped) is used
   assert.equal(pickNextBn({ bn: 5, sourceFiles: sf }, S({ "node.autoSelect": true })).nextBn, 1);
   assert.equal(pickNextBn({ bn: 5, sourceFiles: sf }, S({ "node.autoSelect": true, "node.fallback": "stop" })).source, "order-exhausted");
   assert.equal(sfLevels(sf, 5)[5], 1);
+});
+
+// ---------------- 4. BN15 ----------------
+test("BN15 is a selectable BitNode: SF_MAX 3, available below 3, last in the default order, 0 and 16 are not BitNodes", () => {
+  assert.equal(SF_MAX(15), 3); assert.equal(defaultTarget(15), 3); assert.equal(A.BN_MAX, 15);
+  assert.equal(DEFAULT_BN_ORDER.at(-1), 15); assert.equal(DEFAULT_BN_ORDER.length, 15); assert.equal(new Set(DEFAULT_BN_ORDER).size, 15);
+  for (const l of [0, 1, 2]) assert.equal(bnAvailable(15, { 15: l }), true, `SF15 ${l}`);
+  assert.equal(bnAvailable(15, { 15: 3 }), false);
+  for (const n of [0, 16, -1, 1.5, "15", null, undefined, NaN]) assert.equal(bnAvailable(n, {}, { 12: 5 }), false, String(n));
+  assert.equal(firstAvailable([16, 0, 15], {}), 15);
+  assert.equal(pickNextBn({ bn: 13, sourceFiles: [{ n: 15, lvl: 2 }] }, S({ "node.autoSelect": true, "node.order": [15] })).nextBn, 15);
+  assert.equal(pickNextBn({ bn: 15, sourceFiles: [{ n: 15, lvl: 2 }] }, S({ "node.autoSelect": true, "node.order": [15], "node.fallback": "stop" })).nextBn, null, "the destroy in progress takes SF15 to 3");
+  assert.deepEqual(coerce("node.order", "15,2"), { ok: true, value: [15, 2] }, "node.order accepts BN15");
+  for (const bad of ["16", "0", [16]]) assert.equal(coerce("node.order", bad).ok, false, JSON.stringify(bad));
+});
+test("BN15: the recommendation reaches it only after every other target is met; {\"15\":0} switches it off", () => {
+  const sf = sfAll(3, { 15: 0, 12: 0 });
+  const rec = recommendNextBn({ bn: 14, sourceFiles: sf }, S());
+  assert.equal(rec.bn, 15); assert.match(rec.why, /BN15/); assert.match(rec.why, /SF15 0 -> 1/);
+  assert.equal(recommendNextBn({ bn: 14, sourceFiles: sf }, S({ "node.targets": { 15: 0 } })).bn, null);
+  assert.deepEqual(coerce("node.targets", { 15: 3 }), { ok: true, value: { 15: 3 } });
+});
+
+// ---------------- 5. every target met ----------------
+const MET = { bn: 13, sourceFiles: sfAll(3, { 12: 0 }) };               // BN13 in progress, everything else at 3, BN12 at its default target
+const R = (o = {}) => ({ ready: true, now: golden.T0, request: null, ack: null, ...MET, ...o });
+test("all targets met: the planner recommends nothing, with the explicit text", () => {
+  const rec = recommendNextBn(MET, S());
+  assert.equal(rec.bn, null); assert.equal(rec.why, ALL_MET); assert.equal(ALL_MET, "every BitNode target is met");
+  assert.match(ALL_MET_FLAG, /^every BitNode target is met — nothing left to select/); assert.match(ALL_MET_FLAG, /node\.targets/);
+  // the destroy in progress counts: BN7 at SF7 2 is the last open one and the current node
+  const last = { bn: 7, sourceFiles: sfAll(3, { 12: 0, 7: 2 }) };
+  assert.equal(recommendNextBn(last, S()).bn, null);
+  assert.equal(recommendNextBn({ bn: 7, sourceFiles: sfAll(3, { 12: 0, 7: 1 }) }, S()).bn, 7, "SF7 1 -> 2 is still below 3");
+});
+test("all targets met + ready: flag, source, no request, never 'autoSelect off' (recommend and stop, autoSelect on and off)", () => {
+  for (const fb of ["recommend", "stop"]) for (const sel of [true, false]) {
+    const s = S({ "node.autoDestroy": true, "node.autoSelect": sel, "node.fallback": fb, "node.order": [10] });
+    const d = decideNode(R(), s), tag = `${fb} autoSelect=${sel}`;
+    assert.equal(d.action, "flag", tag); assert.equal(d.writeRequest, null, tag); assert.equal(d.nextBn, null, tag);
+    assert.deepEqual(d.attention, [READY_FLAG, ALL_MET_FLAG], tag);
+    assert.equal(d.node.source, "all-targets-met", tag); assert.equal(d.node.recommended.bn, null, tag);
+    assert.match(d.node.pending.detail, /every BitNode target is met/, tag); assert.doesNotMatch(d.node.pending.detail, /autoSelect off|BNnull|BN\?|BNundefined/, tag);
+    // dedupe: the same text on later loops and later clocks
+    for (const now of [golden.T0 + 60_000, golden.T0 + 5 * 3600_000]) assert.deepEqual(decideNode(R({ now }), s).attention, d.attention, tag);
+    // an open request is cancelled
+    const req = { id: "r1", action: "destroy", bn: 13, nextBn: 1, at: golden.T0 - 1000 };
+    const c = decideNode(R({ request: req, ack: { id: "r1", backupOk: true, at: golden.T0 - 500 } }), s);
+    assert.equal(c.action, "cancel", tag); assert.equal(c.writeRequest.action, "cancel"); assert.deepEqual(c.attention, [READY_FLAG, ALL_MET_FLAG], tag);
+  }
+});
+test("all targets met + autoDestroy off: the owner is told (READY + all-met flag); not ready: nothing", () => {
+  const off = decideNode(R(), S());
+  assert.equal(off.action, "flag"); assert.deepEqual(off.attention, [READY_FLAG, ALL_MET_FLAG]); assert.match(off.node.pending.detail, /every BitNode target is met/);
+  const req = { id: "r1", action: "destroy", bn: 13, nextBn: 1, at: golden.T0 - 1000 };
+  assert.deepEqual(decideNode(R({ request: req }), S()).attention, [READY_FLAG, ALL_MET_FLAG]);
+  const nr = decideNode(R({ ready: false }), S({ "node.autoDestroy": true, "node.autoSelect": true }));
+  assert.equal(nr.action, "none"); assert.deepEqual(nr.attention, []); assert.equal(nr.node.pending.detail, "w0r1d_d43m0n not ready");
+});
+test("an explicit BN12 target ends the all-met state: BN12 is selected again until SF12 reaches the target", () => {
+  const s = S({ "node.autoDestroy": true, "node.autoSelect": true, "node.order": [10], "node.targets": { 12: 5 } });
+  const d = decideNode(R(), s);
+  assert.equal(d.action, "request"); assert.equal(d.writeRequest.nextBn, 12); assert.ok(!("source" in d.node)); assert.deepEqual(d.attention, []);
+  const reached = decideNode(R({ sourceFiles: sfAll(3, { 12: 5 }) }), s);
+  assert.equal(reached.action, "flag"); assert.deepEqual(reached.attention, [READY_FLAG, ALL_MET_FLAG]);
+});
+test("all targets met is not the order-exhausted flag: with something left to recommend the old flag is unchanged", () => {
+  const sf = sfAll(3, { 12: 0, 9: 0 });
+  const d = decideNode(R({ sourceFiles: sf }), S({ "node.autoDestroy": true, "node.autoSelect": true, "node.fallback": "stop", "node.order": [10] }));
+  assert.equal(d.node.source, "order-exhausted"); assert.equal(d.node.recommended.bn, 9);
+  assert.deepEqual(d.attention, [READY_FLAG, orderExhaustedFlag(d.node.recommended)]);
+});
+test("owner-decision matchers: server OWNER_DECISION and the dashboard KPI treat the all-met flag like READY", () => {
+  assert.ok(OWNER_DECISION.some((re) => re.test(ALL_MET_FLAG)));
+  assert.ok(!OWNER_DECISION.some((re) => re.test("destroy blocked: no backup ack")));
+  const input = (node, flags) => ({ latest, ring, ramStatus, augPlan: { ...augPlan, node }, autopilot: { ...autopilot, flags }, pred2Tail, settings: S({ "node.autoDestroy": true }), now: NOW });
+  const k = computeKpis(input({ ...augPlan.node, autoDestroy: true, source: "all-targets-met" }, [READY_FLAG, ALL_MET_FLAG]));
+  assert.equal(k.kpis.destroy.display, "READY · every target met"); assert.equal(k.kpis.destroy.status, "warn");
+  const a = k.attention.find((x) => x.text === ALL_MET_FLAG);
+  assert.ok(a); assert.equal(a.level, "warn"); assert.equal(a.view, "node");
 });
 
 // ---------------- runner ----------------

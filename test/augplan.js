@@ -148,7 +148,7 @@ test("next BitNode: SF levels after this destroy, maxed nodes skipped, BN12 need
   assert.equal(firstAvailable([12], { 12: 50 }, { 12: 100 }), 12, "an explicit target makes BN12 available again");
   assert.equal(recommendNextBn({ bn: 5, sourceFiles: [{ n: 1, lvl: 1 }, { n: 4, lvl: 1 }] }).bn, 1);
   assert.equal(recommendNextBn({ bn: 1, sourceFiles: [{ n: 1, lvl: 2 }] }).bn, 4);
-  assert.deepEqual([...new Set(DEFAULT_BN_ORDER)].sort((a, b) => a - b), Array.from({ length: 14 }, (_, i) => i + 1));
+  assert.deepEqual([...new Set(DEFAULT_BN_ORDER)].sort((a, b) => a - b), Array.from({ length: 15 }, (_, i) => i + 1));
 });
 test("garbage-tolerant: empty snapshot does not throw", () => {
   const p = plan({}, S());

@@ -46,11 +46,12 @@ test("coerce: strings from CLI/forms are typed", () => {
   assert.deepEqual(coerce("ram.homeReserveGb", "256"), { ok: true, value: 256 });
   assert.deepEqual(coerce("node.order", "3,10, 2"), { ok: true, value: [3, 10, 2] });
   assert.deepEqual(coerce("node.order", "[12]"), { ok: true, value: [12] });
+  assert.deepEqual(coerce("node.order", "15"), { ok: true, value: [15] }); // BN15 (docs/specs/node-targets.md)
   assert.deepEqual(coerce("node.order", ""), { ok: true, value: [] });
 });
 test("coerce: rejects (never clamps) bad values", () => {
   for (const [k, v] of [["strategy.late", 1.5], ["strategy.late", -0.1], ["ram.homeReserveGb", 1.5], ["ram.homeReserveGb", "abc"],
-    ["ram.xp.mode", "sometimes"], ["node.autoSelect", "maybe"], ["node.order", [1, 1]], ["node.order", [15]], ["node.order", "x"],
+    ["ram.xp.mode", "sometimes"], ["node.autoSelect", "maybe"], ["node.order", [1, 1]], ["node.order", [16]], ["node.order", "x"],
     ["strategy.mid", NaN], ["strategy.mid", Infinity], ["nope.key", 1]]) {
     assert.equal(coerce(k, v).ok, false, `${k}=${v}`);
   }
