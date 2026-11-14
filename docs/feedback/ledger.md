@@ -51,15 +51,15 @@ id: F-002
 title: "Predictor 80% band covers far less than 80% of live outcomes"
 found: 2026-11-02
 severity: HIGH
-evidence: "GET /api/report: 1732 scored, 55% in 80% band; data/pred-calib.txt policy q80 level=0.014, rep=0.002, money=0.062; last 200 resolved live predictions 46.5% in band; rep >3h with model quad 23% and money >3h planned 15%; game/agent/predictor.txt:140 (w = pol ? pol.q80 : Z80 * pick.sd) and :150 (q80 from the backtest, last 300 errors)"
-root_cause: "q80 is one value per metric kind, sized from about 93k autocorrelated backtest samples (1.7k live) and applied to every horizon bucket, so long-horizon bands are far too tight."
-signal: "live band coverage over the last 200 resolved predictions below 70%, per kind and horizon bucket"
-detector: none
-recorded_in: "data/pred-calib.txt field liveCoverage (new), shown in the check-in Predictions row as a warning"
-consumer: "predictor calibrate(): widens the band by target/observed coverage; supervisor routine reports it"
-proposed_fix: "game/agent/predictor.txt:140 minimal: w = Math.max(pol?.q80 ?? 0, Z80 * pick.sd, 0.15). Proper: compute q80 per kind and bucket from live-resolved errors at :150."
-owner_decision: "none (calibration only, no game-side spending). Needs bb push and a predictor restart."
-status: open
+evidence: "GET /api/report: 1732 scored, 55% in 80% band (2026-11-02); 2026-11-14 snapshot of data/pred2.txt: 2532 resolved, 54% in band (block-bootstrap CI 47-61%), PIT histogram U-shaped (46% of outcomes in the outer two deciles), 1885 predictions voided by installs of which 20.7% (held-out) had a band ending before the install; game/agent/predictor.txt policy q80 per kind applied to every bucket; offline telemetry backtest median |log err| 0.00-0.03 on long horizons vs live 0.03-0.9 (docs/specs/predictor-v3.md D1-D5)"
+root_cause: "q80 is one value per metric kind, sized from about 93k easy synthetic-target backtest samples (1.7k live) and applied to every horizon bucket, so long-horizon bands are far too tight; v2's backtest-chosen point is also worse than the plain median of its own models on live rep targets (rep >3h median log error 0.288 vs 0.038); about 70% of squared error comes from within-run regime breaks (work switch, home RAM purchase, daemon resize)."
+signal: "live band coverage of the active predictor version outside 70-90% over the last predictor.alertWindow (50) resolved predictions, per kind and horizon bucket with at least predictor.alertMinN (30)"
+detector: flag
+recorded_in: "data/pred-calib.txt liveCoverage (cells + alerts) and v3 snapshot; check-in attention 'predictor <version> 80% band coverage outside 70-90% in <cells>' and 'predictor v3 calibration <missing|stale|invalid>: answering with v2'; report().live3 (v3 vs v2 shadow coverage on the same outcomes)"
+consumer: "check-in attention -> escalation routine and Discord; hourly supervisor routine reads liveCoverage; owner flips predictor.version"
+proposed_fix: "Implemented in PR #52 (feat/predictor-v3): game/lib/predcal.js online prequential ensemble + per-edge adaptive conformal bands with hierarchical shrinkage, tuned with scripts/predictor-backtest.js on the first half of the live log; behind setting predictor.version (default v2). Held-out (2026-10-21 to 2026-11-14): coverage 52.8% -> 72.9% (CI 65-82%), interval score 4.29 -> 3.18, median log error 0.204 -> 0.114, rep buckets -46% to -72%; level >3h and money >3h point error not improved (8 and 28 install cycles)."
+owner_decision: "Pending: merge PR #52, set predictor.version=v3 before bb push of lib/predcal.js agent/predictor.txt agent/checkin-lib.txt lib/settings-schema.js agent/PLAYBOOK.txt, verify live3 after 24 h. Close when live v3 coverage holds 70-90% in the major buckets."
+status: in-progress
 ```
 
 ```yaml

@@ -50,7 +50,9 @@
       `| Augs | ${a.buyable || 0} buyable · install at ${apc.augTrigger || 6}${apc.autoInstall ? " (auto)" : ""} |`,
       `| Activity | ${did} |`,
       `| Next event | ${out.next || (out.boot ? `bootstrap (daemon-lite): ${out.boot.stage}` : "—")} |`,
-      `| Predictions | ${(() => { const p = out.pred || {}, l = p.live || {}; return l.n ? `${l.n} scored · ${Math.round(100 * l.inBand)}% in 80% band · ${Math.round(100 * l.within25)}% within ±25%` : `${l.open || 0} open, none scored yet`; })()} |`,
+      `| Predictions | ${(() => { const p = out.pred || {}, l = p.live || {}; const v = p.version === "v3" ? (p.v3 && p.v3.ok ? "v3 · " : "v3→v2 fallback · ") : "", l3 = p.live3 || {};
+        if (p.version === "v3" && l3.n) return `${v}${l3.n} scored by v3 · ${Math.round(100 * l3.inBand)}% in 80% band (v2 shadow ${Math.round(100 * l3.v2inBand)}%) · ${Math.round(100 * l3.within25)}% within ±25% · all-time ${l.n} / ${Math.round(100 * l.inBand)}%`;
+        return l.n ? `${v}${l.n} scored · ${Math.round(100 * l.inBand)}% in 80% band · ${Math.round(100 * l.within25)}% within ±25%` : `${v}${l.open || 0} open, none scored yet`; })()} |`,
       `| Next check | ${nextAt} ET (+${out.nextMin}m) |`,
     ].join("\n");
   };
@@ -95,6 +97,7 @@
     const nextLabel = nx && nx.spec ? (st.next.find((n) => n.target === nx.spec.target && n.kind === nx.spec.kind) || {}).label : null;
     // 4. attention rules
     for (const f of st.flags || []) out.attention.push(f);
+    for (const f of nx.attention || []) out.attention.push(f); // predictor: v3 fallback, live 80%-band coverage outside 70-90%
     const a = st.augs || {};
     const augTrigger = opts.augTrigger ?? 6;
     const apc = readJ("/data/autopilot-config.txt") || {};

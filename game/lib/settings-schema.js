@@ -23,6 +23,7 @@ export const GROUPS = [
   { id: "ram", label: "RAM manager" },
   { id: "augs", label: "Augmentations" },
   { id: "gang", label: "Gang" },
+  { id: "predictor", label: "Predictor" },
   { id: "ui", label: "Dashboard" },
 ];
 
@@ -143,6 +144,14 @@ export const SCHEMA = [
     label: "Member augmentation budget", help: "Per shop run, share of spendable cash (money minus the aug planner's reserve) for member augmentations." },
   { key: "gang.equipmentSpendFraction", group: "gang", type: "number", default: 0.1, min: 0, max: 1, step: 0.01, ui: "slider", owner: "gang",
     label: "Equipment budget", help: "Per shop run, share of spendable cash for non-augmentation equipment." },
+
+  // ── Predictor (agent/predictor.txt, lib/predcal.js; docs/specs/predictor-v3.md) ──
+  { key: "predictor.version", group: "predictor", type: "enum", default: "v2", options: ["v2", "v3"], ui: "select", owner: "checkin",
+    label: "Predictor version", help: "v3 = online ensemble + adaptive conformal 80% bands (lib/predcal.js). v3 falls back to v2, with an attention flag, when its calibration is missing, stale or invalid. Rollback: set v2." },
+  { key: "predictor.alertWindow", group: "predictor", type: "int", default: 50, min: 10, max: 500, ui: "number", owner: "checkin",
+    label: "Coverage window", help: "Last N resolved predictions per kind and horizon bucket used for the live coverage check (data/pred-calib.txt liveCoverage)." },
+  { key: "predictor.alertMinN", group: "predictor", type: "int", default: 30, min: 5, max: 500, ui: "number", owner: "checkin",
+    label: "Coverage alert minimum", help: "A bucket raises the check-in coverage attention only with at least this many resolved predictions of the active version in its window, and coverage outside 70-90%." },
 
   // ── Dashboard ──────────────────────────────────────────────────────────────
   { key: "ui.refreshMs", group: "ui", type: "int", default: 1000, min: 250, max: 60000, ui: "number", owner: "dashboard",

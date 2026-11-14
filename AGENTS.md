@@ -131,7 +131,10 @@ History: BN1 destroyed 2026-09-26 (SF1.1). BN4 destroyed 2026-10-03 01:39 UTC (S
   (data/telemetry-latest.txt, data/telemetry-ring.txt written by agent/telemetry.js, ram-status, aug-plan,
   autopilot-status, settings). Agents get the same KPIs from `bb dashboard` / GET /api/dashboard (game/lib/kpi.js).
 - agent/telemetry.js — 60s JSONL → /data/telemetry.txt
-- agent/predictor.txt (window.__pred2) — walk-forward-calibrated ETA predictions → /data/pred2.txt, /data/pred-calib.txt
+- agent/predictor.txt (window.__pred2) — walk-forward-calibrated ETA predictions → /data/pred2.txt, /data/pred-calib.txt.
+  Setting predictor.version (v2 default | v3): v3 = lib/predcal.js prequential ensemble + adaptive conformal bands, falls
+  back to v2 with attention when its calibration is missing/stale/invalid; live coverage per kind|bucket in pred-calib
+  liveCoverage (attention outside 70-90%). Offline backtest: scripts/predictor-backtest.js (docs/specs/predictor-v3.md).
 - agent/checkin-lib.txt — __checkin(): heartbeats, backups (hourly in-browser IndexedDB + hourly server-side to the
   Railway /data volume), predictions, attention list, formatted report, nextMin.
 - GitHub (docs/GITHUB.md): CI (`test` check) gates merges to main and Railway deploys. The Monitor workflow (every 30 min)
