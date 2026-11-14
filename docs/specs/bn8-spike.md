@@ -14,6 +14,15 @@ Items 1, 3 and 4 are decided by the game source (below), so they need no live ru
 against ground truth; this PR ships the read-only logger, the estimator and scorer (pure, unit-tested on a simulated market that uses the
 game's real update rules), and an offline report. The owner runs the logger and sends back one file.
 
+## 1b. Live context (audit readback, 2026-11-14)
+`node.targets` is `{"8":0,"9":0,"15":0}` (settings rev 10). Live Source-Files: SF1, SF2, SF4, SF5, SF10 at 3; **no SF8**; the game is in BN3. Remaining destroys: 11
+(BN3 x2 after this one, BN11 x3, BN6 x3, BN7 x3) with `node.order=[2,3,11,6,7]` and `node.fallback=stop`; the order-running-low warning has not fired (11 > 2). Consequences:
+- BN8 is at least 11 destroys away and held at target 0, so **the logger cannot wait for a BN8 run**; it has to run in the current node.
+- TIX API access is not free outside BN8 without SF8: `ns.stock.getPrice` needs WSE ($200m) + TIX API ($5b). The logger never buys them. `hooks.stocksHook`/`tools/stocks.js` buy WSE, TIX API, 4S Market Data and 4S TIX API in order when
+  `cash * 0.25 >= cost`, so whether they are already owned is visible in `data/stocks.txt` (`access`); that file was not part of the readback (open question for the audit session).
+- The 4S TIX API ($25b; BN3 does not change the 4S multipliers) is probably far in BN3, which is why the spike now has a gate that needs prices only (G5 below). With prices alone the live run still
+  decides the question that matters for the BN8 plan: does following the blind estimator earn after spread on the real market.
+
 ## 2. Findings from the v3.0.1 source (read 2026-11-14)
 Files under `https://raw.githubusercontent.com/bitburner-official/bitburner-src/v3.0.1/src/`:
 `Prestige.ts`, `StockMarket/{StockMarket.ts, Stock.ts, StockMarketHelpers.ts, BuyingAndSelling.tsx, data/Constants.ts, data/InitStockMetadata.ts}`,
@@ -52,6 +61,8 @@ Evaluated by `analyze` on a log that contains forecasts (so after the 4S TIX API
 | G2 estimator direction | for stocks with `abs(f - 0.5) >= 0.08`, `f_hat` is on the correct side of 0.5 by at least 0.01 in at least 75% of ticks (the margin keeps an estimator that always answers about 0.5 from passing) | same |
 | G3 volatility units | observed maximum per-tick move over the log is within 3% of `getVolatility` for at least 80% of stocks with 2000+ ticks (it is a maximum, so the largest observed move approaches it from below) | the edge formula's constant is re-derived from the data |
 | G4 tick cadence | median tick interval between 4 s and 8 s | the stage timings in `bn8-readiness.md` §4.1 are re-based |
+| G5 strategy replay (**prices only**) | replay the blind strategy on the logged real prices: long when the estimate is above 0.55, short below 0.45, one one-way spread paid per position change, equal weight over the stocks. Over non-overlapping 25-tick blocks the mean return must be > 0 with t >= 2. Needs at least 40 blocks (1000 ticks); positive but t < 2 is **inconclusive** until 150 blocks (3750 ticks), then FAIL; mean <= 0 is FAIL | the blind stage becomes "sit in cash until 4S" |
+G5 is the decisive gate for the blind stage and the only one a price-only log (no 4S) can evaluate together with G4. On the simulated market a 5000-tick log passes it (t of 3.2 to 4.1); a structureless random walk fails it hard (t of -30: the strategy only pays the spread), and 2600-tick logs are often inconclusive (t of 1.4 to 1.6), so plan on the full 5000 ticks (about 8 h).
 The report also prints spread statistics, per-stock `maxShares`, and the realized edge of a long/short follower of `f_hat` versus one that follows the true forecast (an upper bound), without commissions and with 2x spread.
 
 ## 4b. What the simulator says (not the live market)
@@ -75,6 +86,6 @@ default cap keeps the file under about 4 MB. The estimator is an experiment: it 
 
 ## 8. How the owner runs it
 1. After merge and deploy, `bb push tools/stock-spike.js` (the pure lib is only needed by the Node report, not in game).
-2. In a BN8 run or any node where TIX API is owned: `run tools/stock-spike.js` on home; leave it for 2 h or more (the more ticks, the better; 8 h fills the default cap).
+2. In the current node (BN3 per the readback), once WSE + TIX API are owned (check `data/stocks.txt`; the logger never buys them): `run tools/stock-spike.js` on home and leave it for 8 h (5000 ticks, the default cap) for a decisive G5.
 3. `bb read data/stock-spike.txt > spike.txt && node server/stockspike-report.js spike.txt`; send the report (or the file) back.
-4. For G1 to G3 the 4S TIX API must be owned at some point of the log (the logger switches to recording forecasts automatically).
+4. G1 to G3 need the 4S TIX API at some point of the log (the logger switches to recording forecasts automatically); G4 and G5 do not. A price-only report is therefore expected to read "not every gate could be evaluated" with G5 PASS or FAIL.

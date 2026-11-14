@@ -64,7 +64,7 @@ up-ticks, shrunk toward 0.5 (exponential weights, half-life 20 ticks, 8 pseudo-c
 market-wide correction is needed: the shared `v` scales the size of the moves, the direction of each stock is independent. On the simulated
 market of `test/helpers/stock-sim.js` (the game's real update rules) it reaches 77% of ticks within 0.10 of the true forecast and the correct side
 in 80% of ticks, and earns a small positive edge net of spread; whether the live market agrees is what the logger in `docs/specs/bn8-spike.md` measures
-(gates G1 to G4). This is still the least certain part of the design.
+(gates G1 to G5). This is still the least certain part of the design.
 
 ### 4.2 Edge model
 Per stock, with `f` = forecast (4S) or the shrunk estimate (blind) and `vol = ns.stock.getVolatility(sym)` (a decimal: the maximum per-tick move):

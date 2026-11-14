@@ -9,7 +9,7 @@ import { importGame, GAME } from "./helpers/game-import.js";
 import { simulate } from "./helpers/stock-sim.js";
 
 const SP = await importGame("lib/stockspike.js");
-const { moveSigns, streamEstimator, estimateForecast, backtest, parseSpikeLog, analyze, formatReport, GATES } = SP;
+const { moveSigns, streamEstimator, estimateForecast, backtest, replay, parseSpikeLog, analyze, formatReport, GATES } = SP;
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const tests = [];
@@ -102,23 +102,23 @@ test("parseSpikeLog: reads info and ticks, counts unreadable lines, drops ticks 
 });
 
 // ---------------- analyzer + gates ----------------
-test("analyze on a simulated log with forecasts: every gate evaluates and passes", () => {
-  const sim = simulate({ seed: 21, ticks: 2600 });
+test("analyze on a simulated log with forecasts: every gate evaluates and passes (5000 ticks, the default cap)", () => {
+  const sim = simulate({ seed: 44, ticks: 5000 });
   const rep = analyze(parseSpikeLog(sim.text));
-  assert.equal(rep.ticks, 2600); assert.equal(rep.stocks, 33); assert.equal(rep.hasForecasts, true);
-  assert.deepEqual(rep.gates, { G1: true, G2: true, G3: true, G4: true });
+  assert.equal(rep.ticks, 5000); assert.equal(rep.stocks, 33); assert.equal(rep.hasForecasts, true);
+  assert.deepEqual(rep.gates, { G1: true, G2: true, G3: true, G4: true, G5: true });
   assert.equal(rep.pass, true);
   assert.equal(rep.cadence.medianMs, 6000);
   assert.ok(rep.vol.eligible === 33 && rep.vol.matched === 33, JSON.stringify([rep.vol.eligible, rep.vol.matched]));
   assert.ok(rep.spread.median > 0 && rep.spread.min <= rep.spread.max);
   const txt = formatReport(rep);
-  for (const s of ["G1 estimator      PASS", "G2 direction      PASS", "G3 volatility     PASS", "G4 tick cadence   PASS", "verdict: all gates pass"]) assert.ok(txt.includes(s), s);
+  for (const s of ["G1 estimator      PASS", "G2 direction      PASS", "G3 volatility     PASS", "G4 tick cadence   PASS", "G5 strategy replay PASS", "verdict: all gates pass"]) assert.ok(txt.includes(s), s);
 });
 test("analyze: a log without forecasts evaluates only the cadence; the verdict says not everything could be evaluated", () => {
   const sim = simulate({ seed: 22, ticks: 300 });
   const text = [JSON.stringify({ ...sim.info, has4S: false }), ...sim.ticks.map((t) => JSON.stringify({ k: "t", t: t.t, p: t.p }))].join("\n");
   const rep = analyze(parseSpikeLog(text));
-  assert.deepEqual(rep.gates, { G1: null, G2: null, G3: null, G4: true }); assert.equal(rep.pass, null); assert.equal(rep.hasForecasts, false);
+  assert.deepEqual(rep.gates, { G1: null, G2: null, G3: null, G4: true, G5: null }); assert.equal(rep.pass, null); assert.equal(rep.hasForecasts, false);
   assert.match(formatReport(rep), /not every gate could be evaluated/);
 });
 test("analyze: wrong volatility units (a percent instead of a decimal) fail G3; a slow clock fails G4; the verdict is FAIL", () => {
@@ -140,12 +140,55 @@ test("analyze: too few ticks for G3 (under 2000) leaves it null; empty and garba
   }
 });
 
+// ---------------- G5: replay on prices only ----------------
+const randomWalk = (seed, ticks, n = 33) => {
+  let a = seed >>> 0; const r = () => { a = (Math.imul(a, 1664525) + 1013904223) >>> 0; return a / 4294967296; };
+  const px = new Array(n).fill(1000), rows = [];
+  for (let k = 0; k < ticks; k++) { for (let i = 0; i < n; i++) px[i] *= r() < 0.5 ? 1.005 : 1 / 1.005; rows.push({ p: px.slice() }); }
+  return rows;
+};
+test("replay on simulated prices (no forecasts used): positive and significant at 5000 ticks; the verdicts are null below 1000 ticks", () => {
+  const sim = simulate({ seed: 45, ticks: 5000 }), sp = { spread: sim.info.ask.map((a, i) => (a - sim.info.bid[i]) / (a + sim.info.bid[i])) };
+  const r = replay(sim.ticks.map((t) => ({ p: t.p })), sp);
+  console.log(`     replay: ${r.blocks} blocks, mean ${r.meanPerTick.toExponential(2)}/tick, t = ${r.t.toFixed(2)}`);
+  assert.ok(r.meanPerTick > 0); assert.ok(r.t >= GATES.replayT); assert.equal(r.g5, true);
+  assert.equal(replay(sim.ticks.slice(0, 900).map((t) => ({ p: t.p })), sp).g5, null);
+});
+test("replay: a positive but not yet significant result is inconclusive (null), not a pass", () => {
+  const sim = simulate({ seed: 42, ticks: 2600 });
+  const r = replay(sim.ticks.map((t) => ({ p: t.p })), { spread: sim.info.ask.map((a, i) => (a - sim.info.bid[i]) / (a + sim.info.bid[i])) });
+  assert.ok(r.meanPerTick > 0 && r.t < GATES.replayT && r.blocks >= GATES.replayMinBlocks && r.blocks < GATES.replayFailBlocks);
+  assert.equal(r.g5, null);
+});
+test("replay: a structureless random walk loses to the spread and fails G5 (the gate can fail)", () => {
+  const r = replay(randomWalk(9, 3000), { spread: new Array(33).fill(0.003) });
+  assert.ok(r.meanPerTick < 0); assert.equal(r.g5, false);
+  // the same walk with a zero spread still does not pass: no edge to find
+  assert.notEqual(replay(randomWalk(9, 3000), { spread: new Array(33).fill(0) }).g5, true);
+});
+test("replay: empty, one-tick, NaN and constant prices give nulls or false, never exceptions", () => {
+  for (const x of [[], [{ p: [1] }], null]) { const r = replay(x); assert.equal(r.g5, null); assert.equal(r.blockMean, null); }
+  const flat = Array.from({ length: 2000 }, () => ({ p: [5, 5, NaN] }));
+  const r = replay(flat); assert.ok(!r.g5); assert.doesNotThrow(() => replay(flat, {}, { estimator: { halfLife: 0, prior: 0 } }));
+});
+test("analyze on a price-only log (what the live game gives before the 4S TIX API): only G4 and G5 evaluate; the verdict says so", () => {
+  const sim = simulate({ seed: 45, ticks: 5000 });
+  const text = [JSON.stringify({ ...sim.info, has4S: false }), ...sim.ticks.map((t) => JSON.stringify({ k: "t", t: t.t, p: t.p }))].join("\n");
+  const rep = analyze(parseSpikeLog(text));
+  assert.deepEqual(rep.gates, { G1: null, G2: null, G3: null, G4: true, G5: true }); assert.equal(rep.pass, null);
+  assert.match(formatReport(rep), /G5 strategy replay PASS/);
+  // a price-only log of a random walk fails G5 and so fails the verdict
+  const rw = randomWalk(3, 3000), t0 = Date.UTC(2026, 10, 14);
+  const bad = analyze(parseSpikeLog([JSON.stringify({ k: "i", t: t0, s: new Array(33).fill("X"), max: [], ask: new Array(33).fill(1.003), bid: new Array(33).fill(0.997), has4S: false }), ...rw.map((r, k) => JSON.stringify({ k: "t", t: t0 + k * 6000, p: r.p }))].join("\n")));
+  assert.equal(bad.gates.G5, false); assert.equal(bad.pass, false);
+});
+
 // ---------------- report CLI ----------------
 test("server/stockspike-report.js: prints the report, --json prints JSON, exit 1 when a gate fails, 2 for usage and unreadable files", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bbss-")), f = path.join(dir, "spike.txt");
   try {
     const run = (...a) => spawnSync(process.execPath, [path.join(ROOT, "server/stockspike-report.js"), ...a], { encoding: "utf8" });
-    fs.writeFileSync(f, simulate({ seed: 31, ticks: 2300 }).text);
+    fs.writeFileSync(f, simulate({ seed: 44, ticks: 5000 }).text);
     const ok = run(f); assert.equal(ok.status, 0, ok.stderr); assert.match(ok.stdout, /verdict: all gates pass/);
     assert.equal(JSON.parse(run(f, "--json").stdout).pass, true);
     const sim = simulate({ seed: 32, ticks: 2300 });

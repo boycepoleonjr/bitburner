@@ -23,6 +23,10 @@ export const GATES = Object.freeze({
   volTol: 0.03,        // G3: the largest observed log move is within this fraction of ln(1 + getVolatility) ...
   volShare: 0.80,      //     for at least this share of stocks ...
   volMinTicks: 2000,   //     that have this many ticks
+  replayBlock: 25,     // G5: block length (ticks) for the t-statistic of the replayed strategy
+  replayMinBlocks: 40, //     blocks needed before G5 is evaluated (40 x 25 = 1000 ticks)
+  replayT: 2,          //     the mean block return of the replayed strategy must be > 0 with t >= this
+  replayFailBlocks: 150, //   positive but t < replayT after this many blocks (3750 ticks) counts as a FAIL; before that it is inconclusive
   tickMinMs: 4000,     // G4: median tick interval inside [tickMinMs, tickMaxMs]
   tickMaxMs: 8000,
 });
@@ -107,6 +111,53 @@ export function backtest(ticks, info = {}, opts = {}) {
   };
 }
 
+/** G5 verdict: null until enough blocks; true when positive and significant; false when not positive, or still not significant after many blocks. */
+function g5Verdict(nb, mean, tstat, g) {
+  if (nb < g.replayMinBlocks || mean == null) return null;
+  if (mean > 0 && tstat >= g.replayT) return true;
+  if (mean <= 0 || nb >= g.replayFailBlocks) return false;
+  return null; // positive but not yet significant: log more ticks
+}
+
+/**
+ * Replays the blind strategy on REAL logged prices, no forecasts needed (docs/specs/bn8-spike.md G5): at each tick the estimator
+ * decides a position for the next tick (long above 0.55, short below 0.45, else flat), one one-way spread is paid per position change,
+ * and the portfolio return is the equal-weight mean over stocks. The t-statistic is taken over non-overlapping blocks of `replayBlock`
+ * ticks so the weak serial correlation of tick returns does not inflate it. In-sample by construction (nothing is fitted, the two
+ * estimator parameters are fixed), but it is the test that matters: does following the estimate make money after spread.
+ * @returns {{ticks:number, blocks:number, meanPerTick:number|null, blockMean:number|null, t:number|null, g5:boolean|null}}
+ */
+export function replay(ticks, info = {}, opts = {}) {
+  const g = { ...GATES, ...opts }, est = { ...ESTIMATOR, ...(opts.estimator || {}) };
+  const rows = (ticks || []).filter((r) => Array.isArray(r?.p));
+  const m = rows.length ? rows[0].p.length : 0;
+  const ests = Array.from({ length: m }, () => streamEstimator(est)), pos = new Array(m).fill(0);
+  const spread = (i) => num(info.spread?.[i]) ?? 0.003;
+  const series = [];
+  for (let t = 1; t < rows.length; t++) {
+    let sum = 0, cnt = 0;
+    for (let i = 0; i < m; i++) {
+      const a = num(rows[t - 1].p[i]), b = num(rows[t].p[i]);
+      if (a == null || b == null || a <= 0 || b <= 0) continue;
+      const move = b / a - 1;
+      ests[i].push(b > a ? 1 : b < a ? -1 : 0);
+      const fh = ests[i].value(), np = fh > 0.55 ? 1 : fh < 0.45 ? -1 : 0;
+      if (t > g.warmup) { sum += pos[i] * move - Math.abs(np - pos[i]) * spread(i); cnt++; }
+      pos[i] = np;
+    }
+    if (t > g.warmup && cnt) series.push(sum / m);
+  }
+  const nb = Math.floor(series.length / g.replayBlock), bm = [];
+  for (let k = 0; k < nb; k++) { let s = 0; for (let j = 0; j < g.replayBlock; j++) s += series[k * g.replayBlock + j]; bm.push(s); }
+  const mean = bm.length ? bm.reduce((a, x) => a + x, 0) / bm.length : null;
+  const sd = bm.length > 1 ? Math.sqrt(bm.reduce((a, x) => a + (x - mean) ** 2, 0) / (bm.length - 1)) : null;
+  const tstat = mean != null && sd != null ? (sd > 0 ? mean / (sd / Math.sqrt(bm.length)) : mean > 0 ? Infinity : mean < 0 ? -Infinity : 0) : null;
+  return {
+    ticks: rows.length, blocks: nb, meanPerTick: series.length ? series.reduce((a, x) => a + x, 0) / series.length : null,
+    blockMean: mean, t: tstat, g5: g5Verdict(nb, mean, tstat, g),
+  };
+}
+
 /** Parses the JSONL log. Never throws: unreadable lines are counted in `skipped`. */
 export function parseSpikeLog(text) {
   const infos = [], ticks = [];
@@ -179,7 +230,8 @@ export function analyze(parsed, opts = {}) {
   // G1/G2 estimator
   const withF = ticks.filter((t) => Array.isArray(t.f));
   rep.estimator = withF.length > g.warmup + 1 ? backtest(withF, { spread: spread.map((x) => x ?? undefined) }, opts) : null;
-  rep.gates = { G1: rep.estimator?.g1 ?? null, G2: rep.estimator?.g2 ?? null, G3: rep.vol.g3, G4: rep.cadence.g4 };
+  rep.replay = replay(ticks, { spread: spread.map((x) => x ?? undefined) }, opts);
+  rep.gates = { G1: rep.estimator?.g1 ?? null, G2: rep.estimator?.g2 ?? null, G3: rep.vol.g3, G4: rep.cadence.g4, G5: rep.replay.g5 };
   const vals = Object.values(rep.gates);
   rep.pass = vals.some((x) => x === false) ? false : vals.every((x) => x === true) ? true : null; // null = not every gate could be evaluated
   return rep;
@@ -198,6 +250,8 @@ export function formatReport(rep) {
   L.push(`G1 estimator      ${gate(rep.gates.G1)}  ${e ? `${pct(e.withinShare)} of ${e.pairs} pairs within 0.10 of the true forecast (mean abs error ${e.meanAbsErr.toFixed(3)})` : "needs ticks with forecasts (4S TIX API)"}`);
   L.push(`G2 direction      ${gate(rep.gates.G2)}  ${e && e.sideShare != null ? `${pct(e.sideShare)} on the correct side of 0.5 over ${e.sidePairs} pairs with |f-0.5| >= 0.08` : "n/a"}`);
   if (e) L.push(`edge per stock per tick (fraction of position): gross estimator ${e.grossPerStockTick.estimator.toExponential(2)}, oracle ${e.grossPerStockTick.oracle.toExponential(2)}; net of spread estimator ${e.netPerStockTick.estimator.toExponential(2)}, oracle ${e.netPerStockTick.oracle.toExponential(2)}`);
+  const rp = rep.replay;
+  L.push(`G5 strategy replay ${gate(rep.gates.G5)}  ${rp && rp.meanPerTick != null ? `mean ${rp.meanPerTick.toExponential(2)} per tick net of spread on real prices, ${rp.blocks} blocks, t = ${rp.t == null ? "n/a" : rp.t.toFixed(2)} (needs >= ${GATES.replayMinBlocks} blocks and t >= ${GATES.replayT})` : "not enough ticks"}`);
   L.push(`spread (one way)  median ${pct(rep.spread.median, 2)}, range ${pct(rep.spread.min, 2)} to ${pct(rep.spread.max, 2)}`);
   if (rep.maxShares.length) L.push(`max shares        min ${Math.min(...rep.maxShares).toExponential(2)}, max ${Math.max(...rep.maxShares).toExponential(2)}`);
   L.push(`verdict: ${rep.pass === true ? "all gates pass" : rep.pass === false ? "at least one gate FAILS (see bn8-spike.md §4 for the consequence)" : "not every gate could be evaluated yet (log more ticks, or after the 4S TIX API)"}`);
