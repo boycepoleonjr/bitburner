@@ -146,7 +146,7 @@ Backups by runtime (the MySaves folder export was retired 2026-09-29):
 
 ## Settings (one schema, every surface)
 
-Every owner/agent-tunable knob is a key in game/lib/settings-schema.js with a default, stored as overrides in /data/settings.txt (changes logged to /data/settings-log.txt). Change them with `bb settings set key=value` (or POST /api/settings), the in-game dashboard, or writeSettings() in-game. Never edit the file by hand. Owner defaults: node.autoSelect=false, node.autoDestroy=false, node.fallback=recommend (`stop` = never auto-pick a BitNode outside node.order; docs/specs/node-fallback.md), strategy early/mid/late = 0 / 0.5 / 1 (money -> faction rep). Spec: docs/specs/settings.md.
+Every owner/agent-tunable knob is a key in game/lib/settings-schema.js with a default, stored as overrides in /data/settings.txt (changes logged to /data/settings-log.txt). Change them with `bb settings set key=value` (or POST /api/settings), the in-game dashboard, or writeSettings() in-game. Never edit the file by hand. Owner defaults: node.autoSelect=false, node.autoDestroy=false, node.fallback=recommend (`stop` = never auto-pick a BitNode outside node.order; docs/specs/node-fallback.md), node.targets={} (every node targets SF 3, BN12 targets 0 = never auto-picked; docs/specs/node-targets.md), strategy early/mid/late = 0 / 0.5 / 1 (money -> faction rep). Spec: docs/specs/settings.md.
 
 ## Logs (read before changing anything)
 - /data/audit.txt (autopilot decisions)

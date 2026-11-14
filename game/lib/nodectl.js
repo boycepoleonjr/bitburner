@@ -40,7 +40,7 @@ const fin = (n) => (typeof n === "number" && Number.isFinite(n) ? n : 0);
 export function pickNextBn({ bn, sourceFiles }, s) {
   const recommended = recommendNextBn({ bn, sourceFiles }, s);
   if (!s["node.autoSelect"]) return { nextBn: null, recommended, source: "manual" };
-  const fromOrder = firstAvailable(s["node.order"] || [], sfLevels(sourceFiles, bn));
+  const fromOrder = firstAvailable(s["node.order"] || [], sfLevels(sourceFiles, bn), s["node.targets"]);
   if (fromOrder != null) return { nextBn: fromOrder, recommended, source: "node.order" };
   if (s["node.fallback"] === "stop") return { nextBn: null, recommended, source: "order-exhausted" };
   return { nextBn: recommended.bn, recommended, source: "recommendation" };

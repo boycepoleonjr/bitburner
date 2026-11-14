@@ -9,6 +9,7 @@
  * here reaches every run that never touched that key.
  *
  * Field types: bool | number | int | enum | string | intList | stringList (optional `forbid`: entries that are rejected)
+ *              | intMap (JSON object BitNode "1".."14" -> integer; node.targets)
  * ui hints:    toggle | slider | number | select | text | list
  */
 
@@ -27,6 +28,10 @@ export const GROUPS = [
 ];
 
 const MONEY_REP = ["Money", "Faction rep"];
+/** BitNodes that exist in v3.0.1 (BN1..BN14 here; BN15 follows in the next commit) and the Source-File level cap a node.targets entry may ask for: 3, except BN12 (no game cap; 1000 here).
+ * lib/augplan.js SF_MAX/targetOf hold the same numbers (test/node-targets.js keeps them equal). */
+export const BN_COUNT = 14;
+export const TARGET_CAP = (n) => (n === 12 ? 1000 : 3);
 /** The seven factions that can host a gang (bitburner-src Gang/data/Constants.ts Names). */
 export const GANG_FACTIONS = Object.freeze(["Slum Snakes", "Tetrads", "The Syndicate", "The Dark Army", "Speakers for the Dead", "NiteSec", "The Black Hand"]);
 
@@ -43,6 +48,8 @@ export const SCHEMA = [
     label: "Destroy veto window (min)", help: "After the backup is confirmed, wait this long before destroying. Turning node.autoDestroy off during the wait cancels it." },
   { key: "node.order", group: "node", type: "intList", default: [], ui: "list", min: 1, max: 14, owner: "autopilot",
     label: "BitNode order", help: "Preferred next BitNodes, first available wins. Empty = use the planner's recommendation." },
+  { key: "node.targets", group: "node", type: "intMap", default: {}, ui: "text", owner: "autopilot",
+    label: "Target Source-File level per BitNode", help: "JSON map BitNode -> target Source-File level, e.g. {\"12\":5} or 12:5,3:0. Empty = every BitNode targets 3 except BN12, which targets 0 (never auto-picked). A node is picked only while its Source-File is below its target; 0 switches a node off. Max 3 (BN12: 1000)." },
   { key: "node.fallback", group: "node", type: "enum", default: "recommend", options: ["recommend", "stop"], ui: "select", owner: "autopilot",
     label: "When node.order runs out", help: "Only with node.autoSelect on. recommend = pick the planner's recommendation. stop = never pick outside node.order: do not destroy, flag the owner to choose the next BitNode (an empty node.order counts as run out)." },
 
@@ -157,12 +164,13 @@ export const SCHEMA = [
     label: "Tail lines", help: "Lines read from the end of large files for the Predictions, Logs and Raw views." },
 ];
 
+const copyVal = (v) => (Array.isArray(v) ? [...v] : v && typeof v === "object" ? { ...v } : v);
 export const BY_KEY = Object.freeze(Object.fromEntries(SCHEMA.map((f) => [f.key, f])));
 
 /** Default value of every key (fresh copies for lists). */
 export function defaults() {
   const out = {};
-  for (const f of SCHEMA) out[f.key] = Array.isArray(f.default) ? [...f.default] : f.default;
+  for (const f of SCHEMA) out[f.key] = copyVal(f.default);
   return out;
 }
 
@@ -202,6 +210,34 @@ export function coerce(key, raw) {
       }
       if (new Set(v).size !== v.length) return bad("entries must be unique");
       return { ok: true, value: [...v] };
+    }
+    case "intMap": {
+      if (typeof v === "string") {
+        const t = v.trim();
+        if (t === "") v = {};
+        else if (t.startsWith("{")) v = safeJson(t);
+        else {
+          const m = {};
+          for (const part of t.split(",")) {
+            const kv = part.split(":");
+            if (kv.length !== 2 || !/^\s*\d+\s*$/.test(kv[0]) || !/^\s*-?\d+\s*$/.test(kv[1])) return bad("expected a JSON object like {\"12\":5} or a list like 12:5,3:0");
+            const k = String(Number(kv[0]));
+            if (k in m) return bad(`BN${k} is listed twice`);
+            m[k] = Number(kv[1]);
+          }
+          v = m;
+        }
+      }
+      if (!v || typeof v !== "object" || Array.isArray(v)) return bad("expected a JSON object like {\"12\":5}");
+      const out = {};
+      for (const [k, lvl] of Object.entries(v)) {
+        const n = /^\d+$/.test(k) ? Number(k) : NaN;
+        if (!Number.isInteger(n) || n < 1 || n > BN_COUNT || String(n) !== k) return bad(`unknown BitNode "${k}" (1..${BN_COUNT})`);
+        if (!Number.isInteger(lvl) || lvl < 0) return bad(`BN${n}: target must be an integer >= 0`);
+        if (lvl > TARGET_CAP(n)) return bad(`BN${n}: target must be <= ${TARGET_CAP(n)}`);
+        out[k] = lvl;
+      }
+      return { ok: true, value: Object.fromEntries(Object.keys(out).sort((a, b) => a - b).map((k) => [k, out[k]])) };
     }
     case "stringList": {
       if (typeof v === "string") {
@@ -259,7 +295,7 @@ export function parseFile(raw) {
 /** Defaults overlaid with (already validated) overrides. */
 export function effective(values = {}) {
   const out = defaults();
-  for (const [k, v] of Object.entries(values)) if (k in out) out[k] = Array.isArray(v) ? [...v] : v;
+  for (const [k, v] of Object.entries(values)) if (k in out) out[k] = copyVal(v);
   return out;
 }
 

@@ -175,8 +175,8 @@ test("every Source-File maxed: the pending detail says so (recommend and stop), 
   assert.match(decideNode(st, S({ "node.autoDestroy": true })).node.pending.detail, /autoSelect off/);
   assert.match(M.decideNode(st, S({ "node.autoDestroy": true })).node.pending.detail, /autoSelect off/);
 });
-test("real SF_MAX: BN12 never runs out, so stop + node.order [12] is never exhausted (documented follow-up)", () => {
-  const s = S({ ...STOP, "node.order": [12] });
+test("real SF_MAX: with an explicit BN12 target stop + node.order [12] is not exhausted (BN12 has no game cap; default target is 0, see node-targets)", () => {
+  const s = S({ ...STOP, "node.order": [12], "node.targets": { 12: 1000 } });
   for (const lvl of [0, 3, 40]) assert.equal(pickNextBn({ bn: 5, sourceFiles: [{ n: 12, lvl }] }, s).nextBn, 12);
 });
 

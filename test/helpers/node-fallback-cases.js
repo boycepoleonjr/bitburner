@@ -12,7 +12,8 @@ export const CASES = [
   { name: "order exhausted -> recommendation", st: { bn: 11, sourceFiles: SF_MIX }, s: { ...ON, "node.order": [10, 2, 3, 11] } },
   { name: "order empty -> recommendation", st: { bn: 5, sourceFiles: [{ n: 1, lvl: 1 }] }, s: { ...ON } },
   { name: "order exhausted, autoDestroy off", st: { bn: 11, sourceFiles: SF_MIX }, s: { "node.autoSelect": true, "node.order": [10, 2, 3, 11] } },
-  { name: "every SF maxed except SF12 (infinite)", st: { bn: 13, sourceFiles: SF_ALL }, s: { ...ON, "node.order": [10] } },
+  // BN12 has default target 0 since node.targets (docs/specs/node-targets.md); an explicit target of 100 reproduces the old "SF12 never maxes" state
+  { name: "every SF maxed except SF12 (infinite)", st: { bn: 13, sourceFiles: SF_ALL }, s: { ...ON, "node.order": [10], "node.targets": { 12: 100 } } },
   { name: "not ready", st: { ready: false, bn: 11, sourceFiles: SF_MIX }, s: { ...ON, "node.order": [10, 2, 3, 11] } },
 ];
 export const mkState = (o = {}) => ({ ready: true, bn: 5, sourceFiles: [], now: T0, request: null, ack: null, ...o });
