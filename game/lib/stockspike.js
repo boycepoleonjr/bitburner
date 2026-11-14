@@ -27,12 +27,15 @@ export const GATES = Object.freeze({
   replayMinBlocks: 40, //     blocks needed before G5 is evaluated (40 x 25 = 1000 ticks)
   replayT: 2,          //     the mean block return of the replayed strategy must be > 0 with t >= this
   replayFailBlocks: 150, //   positive but t < replayT after this many blocks (3750 ticks) counts as a FAIL; before that it is inconclusive
+  jumpLog: 0.1,        // a per-tick |ln move| above this cannot be a market move (the maximum is ln(1.04) = 0.039): the market was re-created (install/destroy)
   tickMinMs: 4000,     // G4: median tick interval inside [tickMinMs, tickMaxMs]
   tickMaxMs: 8000,
 });
 export const ESTIMATOR = Object.freeze({ halfLife: 20, prior: 8 }); // exponential sign window (ticks) and pseudo-counts at 0.5
 
 const num = (x) => (typeof x === "number" && Number.isFinite(x) ? x : null);
+/** True when the move from a to b is too large to be a normal tick: the stock market was re-created (aug install or destroy re-rolls every price). */
+const isJump = (a, b, g) => Math.abs(Math.log(b / a)) > g.jumpLog;
 
 /** +1 up, -1 down, 0 unchanged for each consecutive price pair. Non-finite prices give 0. */
 export function moveSigns(prices) {
@@ -75,7 +78,7 @@ export function backtest(ticks, info = {}, opts = {}) {
   const rows = (ticks || []).filter((t) => Array.isArray(t?.p));
   const m = rows.length ? rows[0].p.length : 0;
   const ests = Array.from({ length: m }, () => streamEstimator(est));
-  const pos = new Array(m).fill(0), oraclePos = new Array(m).fill(0);
+  const pos = new Array(m).fill(0), oraclePos = new Array(m).fill(0), since = new Array(m).fill(0); // since = ticks seen after the last market re-creation
   let pairs = 0, within = 0, absErr = 0, sidePairs = 0, sideOk = 0, estGross = 0, oracleGross = 0, estCost = 0, oracleCost = 0, posTicks = 0;
   const spread = (i) => num(info.spread?.[i]) ?? 0.003;
   for (let t = 1; t < rows.length; t++) {
@@ -83,19 +86,21 @@ export function backtest(ticks, info = {}, opts = {}) {
     for (let i = 0; i < m; i++) {
       const a = num(prev.p[i]), b = num(cur.p[i]);
       if (a == null || b == null || a <= 0 || b <= 0) continue;
+      if (isJump(a, b, g)) { ests[i] = streamEstimator(est); pos[i] = 0; oraclePos[i] = 0; since[i] = 0; continue; } // market re-created: start over
       // realized move of this tick is earned by the position that was held BEFORE seeing it
       const move = b / a - 1;
-      if (t > g.warmup) { estGross += pos[i] * move; oracleGross += oraclePos[i] * move; posTicks++; }
+      since[i]++;
+      if (since[i] > g.warmup) { estGross += pos[i] * move; oracleGross += oraclePos[i] * move; posTicks++; }
       ests[i].push(b > a ? 1 : b < a ? -1 : 0);
       const f = num(cur.f?.[i]), fh = ests[i].value();
-      if (f != null && t >= g.warmup) {
+      if (f != null && since[i] >= g.warmup) {
         pairs++; absErr += Math.abs(fh - f); if (Math.abs(fh - f) < g.within) within++;
         if (Math.abs(f - 0.5) >= g.minEdge) { sidePairs++; if (Math.abs(fh - 0.5) >= g.sideMargin && (fh - 0.5) * (f - 0.5) > 0) sideOk++; }
       }
       // positions for the next tick: long above 0.5 + 0.05, short below 0.5 - 0.05 (estimate); oracle uses the true forecast with the same dead band
       const want = (x) => (x == null ? 0 : x > 0.55 ? 1 : x < 0.45 ? -1 : 0);
       const np = want(fh), op = want(f);
-      if (t > g.warmup) { estCost += Math.abs(np - pos[i]) * spread(i); oracleCost += Math.abs(op - oraclePos[i]) * spread(i); }
+      if (since[i] > g.warmup) { estCost += Math.abs(np - pos[i]) * spread(i); oracleCost += Math.abs(op - oraclePos[i]) * spread(i); }
       pos[i] = np; oraclePos[i] = op;
     }
   }
@@ -131,7 +136,7 @@ export function replay(ticks, info = {}, opts = {}) {
   const g = { ...GATES, ...opts }, est = { ...ESTIMATOR, ...(opts.estimator || {}) };
   const rows = (ticks || []).filter((r) => Array.isArray(r?.p));
   const m = rows.length ? rows[0].p.length : 0;
-  const ests = Array.from({ length: m }, () => streamEstimator(est)), pos = new Array(m).fill(0);
+  const ests = Array.from({ length: m }, () => streamEstimator(est)), pos = new Array(m).fill(0), since = new Array(m).fill(0);
   const spread = (i) => num(info.spread?.[i]) ?? 0.003;
   const series = [];
   for (let t = 1; t < rows.length; t++) {
@@ -139,13 +144,15 @@ export function replay(ticks, info = {}, opts = {}) {
     for (let i = 0; i < m; i++) {
       const a = num(rows[t - 1].p[i]), b = num(rows[t].p[i]);
       if (a == null || b == null || a <= 0 || b <= 0) continue;
+      if (isJump(a, b, g)) { ests[i] = streamEstimator(est); pos[i] = 0; since[i] = 0; continue; } // market re-created: start over, no P&L across the jump
       const move = b / a - 1;
+      since[i]++;
       ests[i].push(b > a ? 1 : b < a ? -1 : 0);
       const fh = ests[i].value(), np = fh > 0.55 ? 1 : fh < 0.45 ? -1 : 0;
-      if (t > g.warmup) { sum += pos[i] * move - Math.abs(np - pos[i]) * spread(i); cnt++; }
+      if (since[i] > g.warmup) { sum += pos[i] * move - Math.abs(np - pos[i]) * spread(i); cnt++; }
       pos[i] = np;
     }
-    if (t > g.warmup && cnt) series.push(sum / m);
+    if (cnt) series.push(sum / m);
   }
   const nb = Math.floor(series.length / g.replayBlock), bm = [];
   for (let k = 0; k < nb; k++) { let s = 0; for (let j = 0; j < g.replayBlock; j++) s += series[k * g.replayBlock + j]; bm.push(s); }
@@ -201,6 +208,13 @@ export function analyze(parsed, opts = {}) {
   rep.spread = { median: median(spread), min: Math.min(...spread.filter((x) => x != null)), max: Math.max(...spread.filter((x) => x != null)) };
   if (!Number.isFinite(rep.spread.min)) rep.spread = { median: null, min: null, max: null };
   rep.maxShares = info.max || [];
+  // market re-creations: ticks where at least half of the stocks jump by more than a tick can move (an aug install or a destroy re-rolls every price)
+  rep.resets = 0;
+  for (let t = 1; t < ticks.length; t++) {
+    let j = 0, c = 0;
+    for (let i = 0; i < m; i++) { const a = num(ticks[t - 1].p[i]), b = num(ticks[t].p[i]); if (a == null || b == null || a <= 0 || b <= 0) continue; c++; if (isJump(a, b, g)) j++; }
+    if (c && j * 2 >= c) rep.resets++;
+  }
 
   // G3 volatility units: largest observed |ln move| vs ln(1 + getVolatility)
   const withV = ticks.filter((t) => Array.isArray(t.v));
@@ -212,6 +226,7 @@ export function analyze(parsed, opts = {}) {
       for (let i = 0; i < m; i++) {
         const a = num(ticks[t - 1].p[i]), b = num(ticks[t].p[i]);
         if (a == null || b == null || a <= 0 || b <= 0) continue;
+        if (isJump(a, b, g)) continue; // market re-created (install/destroy): not a market move
         maxLog[i] = Math.max(maxLog[i], Math.abs(Math.log(b / a))); cnt[i]++;
       }
     }
@@ -244,6 +259,7 @@ const gate = (x) => (x === true ? "PASS" : x === false ? "FAIL" : "n/a (not enou
 export function formatReport(rep) {
   const L = [];
   L.push(`BN8 spike report: ${rep.ticks} ticks, ${rep.stocks} stocks${rep.skipped ? `, ${rep.skipped} unreadable line(s) skipped` : ""}, forecasts in log: ${rep.hasForecasts ? "yes" : "no"}`);
+  if (rep.resets) L.push(`market re-created ${rep.resets} time(s) in the log (aug install or destroy): each stock's estimator restarts after it and no move across it is counted`);
   L.push(`G4 tick cadence   ${gate(rep.gates.G4)}  median ${rep.cadence.medianMs == null ? "n/a" : (rep.cadence.medianMs / 1000).toFixed(2) + " s"}`);
   L.push(`G3 volatility     ${gate(rep.gates.G3)}  ${rep.vol.eligible ? `${rep.vol.matched}/${rep.vol.eligible} stocks match ln(1 + volatility) within tolerance` : "no stock has enough ticks with 4S volatility"}`);
   const e = rep.estimator;

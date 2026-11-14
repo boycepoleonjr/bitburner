@@ -183,6 +183,44 @@ test("analyze on a price-only log (what the live game gives before the 4S TIX AP
   assert.equal(bad.gates.G5, false); assert.equal(bad.pass, false);
 });
 
+// ---------------- market re-creation (aug install / destroy re-rolls every price) ----------------
+// from tick `at` on, every price is multiplied by a stock-specific factor outside 0.9..1.1 (what a re-created market looks like in the log)
+const withReset = (ticks, ats, seed = 1) => {
+  let a = seed >>> 0; const r = () => { a = (Math.imul(a, 1664525) + 1013904223) >>> 0; return a / 4294967296; };
+  const m = ticks[0].p.length, factors = ats.map(() => Array.from({ length: m }, () => (r() < 0.5 ? 0.2 + 0.6 * r() : 1.5 + 3.5 * r())));
+  return ticks.map((tk, k) => ({ ...tk, p: tk.p.map((x, i) => x * ats.reduce((acc, at, j) => (k >= at ? acc * factors[j][i] : acc), 1)) }));
+};
+test("market re-creation in the log (an install mid-run): detected, never counted as a move; G3 and the replay are not polluted", () => {
+  const sim = simulate({ seed: 44, ticks: 5000 });
+  const clean = analyze(parseSpikeLog(sim.text));
+  const ticks = withReset(sim.ticks, [1700, 3400], 5);
+  const text = [JSON.stringify(sim.info), ...ticks.map((x) => JSON.stringify(x))].join("\n");
+  const rep = analyze(parseSpikeLog(text));
+  assert.equal(rep.resets, 2); assert.equal(clean.resets, 0);
+  assert.equal(rep.gates.G3, true, "the jump is not a tick move");
+  assert.equal(rep.vol.matched, rep.vol.eligible);
+  assert.equal(rep.gates.G4, true);
+  // the replayed edge stays the same order of magnitude (two cold starts cost 40 ticks per stock each), instead of being swamped by a x0.2..x5 jump
+  const base = replay(sim.ticks.map((x) => ({ p: x.p })), { spread: sim.info.ask.map(() => 0.003) }).meanPerTick;
+  const cut = replay(ticks.map((x) => ({ p: x.p })), { spread: sim.info.ask.map(() => 0.003) }).meanPerTick;
+  assert.ok(Math.abs(cut - base) < 0.3 * Math.abs(base), `${cut} vs ${base}`);
+  assert.match(formatReport(rep), /market re-created 2 time\(s\)/);
+  assert.ok(!/market re-created/.test(formatReport(clean)));
+});
+test("a single stock jumping (a split-like outlier) is ignored for that stock, and is not counted as a market re-creation", () => {
+  const sim = simulate({ seed: 44, ticks: 2200 });
+  const ticks = sim.ticks.map((x, k) => (k === 900 ? { ...x, p: x.p.map((v, i) => (i === 0 ? v * 3 : v)) } : k > 900 ? { ...x, p: x.p.map((v, i) => (i === 0 ? v * 3 : v)) } : x));
+  const rep = analyze(parseSpikeLog([JSON.stringify(sim.info), ...ticks.map((x) => JSON.stringify(x))].join("\n")));
+  assert.equal(rep.resets, 0); assert.equal(rep.gates.G3, true);
+  // estimator scoring restarts for that stock only: nothing throws, pairs are still scored
+  assert.ok(backtest(ticks).pairs > 0);
+});
+test("garbage: every stock jumps on every tick gives no scored pairs, no replay verdict and no exceptions", () => {
+  const junk = Array.from({ length: 1500 }, (_, k) => ({ p: [10 * (k % 2 ? 10 : 1), 5 * (k % 2 ? 7 : 1)], f: [0.5, 0.5] }));
+  const b = backtest(junk), r = replay(junk);
+  assert.equal(b.pairs, 0); assert.equal(r.g5, null); assert.equal(r.blocks, 0);
+});
+
 // ---------------- report CLI ----------------
 test("server/stockspike-report.js: prints the report, --json prints JSON, exit 1 when a gate fails, 2 for usage and unreadable files", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bbss-")), f = path.join(dir, "spike.txt");

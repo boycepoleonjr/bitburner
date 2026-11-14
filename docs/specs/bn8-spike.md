@@ -65,6 +65,12 @@ Evaluated by `analyze` on a log that contains forecasts (so after the 4S TIX API
 G5 is the decisive gate for the blind stage and the only one a price-only log (no 4S) can evaluate together with G4. On the simulated market a 5000-tick log passes it (t of 3.2 to 4.1); a structureless random walk fails it hard (t of -30: the strategy only pays the spread), and 2600-tick logs are often inconclusive (t of 1.4 to 1.6), so plan on the full 5000 ticks (about 8 h).
 The report also prints spread statistics, per-stock `maxShares`, and the realized edge of a long/short follower of `f_hat` versus one that follows the true forecast (an upper bound), without commissions and with 2x spread.
 
+## 4a. Market re-creation inside a log
+An aug install or a destroy re-creates the whole market (finding 4): every price jumps by a random factor in one tick, and forecasts are re-rolled. A log that spans an install (likely over 8 h in BN3,
+where the autopilot installs several times a day) contains that jump. The analysis treats a per-stock move above `|ln| > 0.1` (a normal tick moves at most `ln(1.04) = 0.039`) as a re-creation of that stock:
+no move across it counts for G3 or the replay, the stock's estimator restarts, and it is scored again only after the 40-tick warmup. Ticks where at least half of the stocks jump are reported as
+"market re-created N time(s)". Starting a fresh log after an install is therefore not required. (Raised in review of #55.)
+
 ## 4b. What the simulator says (not the live market)
 `test/helpers/stock-sim.js` implements the update rules of §2 (shared `v`, per-stock direction, 75-tick sign flips with probability 0.45, `otlkMag` drift) with
 parameters in the ranges of `InitStockMetadata.ts`. Five seeds of 4000 ticks, 33 stocks, default estimator (half-life 20, prior 8): within 0.10 of the true
