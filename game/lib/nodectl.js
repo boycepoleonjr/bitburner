@@ -14,7 +14,7 @@
  * node.fallback="stop" (default "recommend"): when node.order has no available entry the planner recommendation is NOT used;
  * pickNextBn returns source "order-exhausted" and decideNode flags the owner instead of requesting a destroy.
  */
-import { READY_FLAG, ALL_MET, sfLevels, firstAvailable, recommendNextBn } from "lib/augplan.js";
+import { READY_FLAG, ALL_MET, BN_MAX, sfLevels, firstAvailable, recommendNextBn, targetOf } from "lib/augplan.js";
 
 export const REQUEST_FILE = "data/node-request.txt";
 export const ACK_FILE = "data/node-ack.txt";
@@ -27,6 +27,8 @@ export const ORDER_EXHAUSTED = "node.order exhausted"; // prefix of the owner-de
 /** Stable text (it only changes when Source-Files change), so the flag dedupes like READY_FLAG. */
 export const orderExhaustedFlag = (rec) => `${ORDER_EXHAUSTED} (node.fallback=stop) — owner picks the next BitNode; ` +
   (rec && rec.bn != null ? `recommended BN${rec.bn}: ${rec.why}` : ALL_MET);
+export const ORDER_LOW = "node.order running low"; // prefix of the early-warning flag; server/checkin.js OWNER_DECISION and lib/kpi.js OWNER_FLAG match it
+export const ORDER_LOW_AT = 2;                     // warn when this many destroys or fewer are left in node.order
 /** Nothing is below its node.targets level any more (owner decision; also a stable text). docs/specs/node-targets.md */
 export const ALL_MET_FLAG = `${ALL_MET} — nothing left to select; owner raises node.targets (for example {"12":5}) or stops here`;
 
@@ -46,6 +48,45 @@ export function pickNextBn({ bn, sourceFiles }, s) {
   if (fromOrder != null) return { nextBn: fromOrder, recommended, source: "node.order" };
   if (s["node.fallback"] === "stop") return { nextBn: null, recommended, source: "order-exhausted" };
   return { nextBn: recommended.bn, recommended, source: "recommendation" };
+}
+
+/**
+ * What node.order still has to give. Levels are counted after the destroy in progress (sfLevels), so the current BitNode's own level-up
+ * is not "left". PURE.
+ * @returns {{remaining:number, left:Array<{bn:number,levels:number}>, next:{bn:number|null, why:string}}}
+ *   left = entries of node.order still below their node.targets level (first occurrence only); next = the planner recommendation
+ *   once every order entry has reached its target (what takes over, or stops, when the order runs out).
+ */
+export function orderOutlook({ bn, sourceFiles }, s) {
+  const targets = s["node.targets"], lv = sfLevels(sourceFiles, bn), after = { ...lv }, seen = new Set(), left = [];
+  for (const n of s["node.order"] || []) {
+    if (!Number.isInteger(n) || n < 1 || n > BN_MAX || seen.has(n)) continue;
+    seen.add(n);
+    const t = targetOf(n, targets), k = Math.max(0, t - (lv[n] || 0));
+    if (k > 0) left.push({ bn: n, levels: k });
+    after[n] = Math.max(lv[n] || 0, t);
+  }
+  const next = recommendNextBn({ bn: 0, sourceFiles: Object.entries(after).map(([n, lvl]) => ({ n: Number(n), lvl })) }, s);
+  return { remaining: left.reduce((a, x) => a + x.levels, 0), left, next };
+}
+
+/**
+ * Early warning (docs/specs/node-targets.md): attention text when node.autoSelect is on and node.order has ORDER_LOW_AT destroys or
+ * fewer left; null otherwise. An empty node.order with node.fallback=recommend means "use the planner" and never warns; with
+ * node.fallback=stop an empty order is already exhausted and warns. The text depends only on Source-File levels and settings, so
+ * it is stable across loops and dedupes like READY_FLAG. PURE.
+ */
+export function orderWarning(st, s) {
+  if (!s["node.autoSelect"]) return null;
+  const order = s["node.order"] || [], stop = s["node.fallback"] === "stop";
+  if (!order.length && !stop) return null;
+  const o = orderOutlook(st, s);
+  if (o.remaining > ORDER_LOW_AT) return null;
+  const left = !order.length ? "empty" : `${o.remaining} left: ${o.left.length ? o.left.map((x) => `BN${x.bn} x${x.levels}`).join(", ") : "none"}`;
+  const rec = o.next.bn != null ? o.next.why : ALL_MET; // why already starts with "BN<n>: "
+  return `${ORDER_LOW} (${left}) — ` + (stop
+    ? `node.fallback=stop will then stop and flag the owner; ${o.next.bn != null ? `the planner would recommend ${rec}` : rec}`
+    : `then the planner's recommendation takes over: ${o.next.bn != null ? rec : `${ALL_MET}, nothing left to select`}`);
 }
 
 /** The ack for this request (successful or not), never one older than the request. */

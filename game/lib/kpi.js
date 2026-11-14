@@ -23,7 +23,7 @@ export const KPI_LABELS = Object.freeze({
 /** Sources older than this are stale (3 telemetry intervals). */
 export const STALE_MS = 3 * 60 * 1000;
 const READY_FLAG = /w0r1d_d43m0n READY/i;
-const OWNER_FLAG = /w0r1d_d43m0n READY|node\.order exhausted|every BitNode target is met/i; // owner decisions: node.fallback=stop (lib/nodectl.js) and every node.targets level met
+const OWNER_FLAG = /w0r1d_d43m0n READY|node\.order exhausted|every BitNode target is met|node\.order running low/i; // owner decisions: node.fallback=stop (lib/nodectl.js) and every node.targets level met
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const src = (file, field, value) => ({ file, field, value: value === undefined ? null : value, missing: value === undefined || value === null });
 const kpi = (value, display, status, sources, formula) => ({ value, display: display ?? DASH, status: value == null ? "none" : status, sources, formula });

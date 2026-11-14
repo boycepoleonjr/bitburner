@@ -2,6 +2,9 @@
 // (spec: docs/specs/node-targets.md). The golden file was generated from lib/nodectl.js BEFORE node.targets existed.
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { importGame } from "./helpers/game-import.js";
 import { defaults, coerce, SCHEMA, BY_KEY, emptyFile, applyPatch, serialize, parseFile, effective, BN_COUNT, TARGET_CAP } from "../game/lib/settings-schema.js";
 import { controlsFromSchema } from "../game/lib/ui/settings-model.js";
@@ -9,7 +12,7 @@ import { computeKpis } from "../game/lib/kpi.js";
 import { OWNER_DECISION } from "../server/checkin.js";
 import { NOW, latest, ring, autopilot, ramStatus, augPlan, pred2Tail } from "./fixtures/dashboard-data.js";
 
-const { pickNextBn, decideNode, ALL_MET_FLAG, orderExhaustedFlag } = await importGame("lib/nodectl.js");
+const { pickNextBn, decideNode, ALL_MET_FLAG, orderExhaustedFlag, orderOutlook, orderWarning, ORDER_LOW, ORDER_LOW_AT } = await importGame("lib/nodectl.js");
 const A = await importGame("lib/augplan.js");
 const { SF_MAX, ALL_MET, READY_FLAG, DEFAULT_BN_ORDER, firstAvailable, bnAvailable, targetOf, defaultTarget, recommendNextBn, sfLevels } = A;
 const golden = JSON.parse(fs.readFileSync(new URL("./fixtures/node-targets-golden.json", import.meta.url), "utf8"));
@@ -240,6 +243,85 @@ test("owner-decision matchers: server OWNER_DECISION and the dashboard KPI treat
   assert.equal(k.kpis.destroy.display, "READY · every target met"); assert.equal(k.kpis.destroy.status, "warn");
   const a = k.attention.find((x) => x.text === ALL_MET_FLAG);
   assert.ok(a); assert.equal(a.level, "warn"); assert.equal(a.view, "node");
+});
+
+// ---------------- 6. early warning ----------------
+const SEL = { "node.autoSelect": true };
+const W = (bn, sf, o = {}) => orderWarning({ bn, sourceFiles: toSf(sf) }, S({ ...SEL, ...o }));
+const sfs = (o) => Array.from({ length: 15 }, (_, i) => o[i + 1] ?? 0);
+test("early warning fires at 2 or fewer destroys left in node.order, not at 3 (levels counted after the destroy in progress)", () => {
+  assert.equal(ORDER_LOW_AT, 2); assert.equal(ORDER_LOW, "node.order running low");
+  const o = { "node.order": [7] };
+  assert.equal(W(5, sfs({}), o), null, "3 left");
+  for (const [sf7, left] of [[1, 2], [2, 1], [3, 0]]) {
+    const w = W(5, sfs({ 7: sf7 }), o);
+    assert.ok(w, `SF7 ${sf7}`); assert.ok(w.startsWith(`${ORDER_LOW} (${left} left: ${left ? `BN7 x${left}` : "none"})`), w);
+  }
+  // the destroy in progress counts: in BN7 with SF7 0 the destroy takes it to 1, so 2 are left
+  assert.match(W(7, sfs({}), o), /\(2 left: BN7 x2\)/);
+  assert.equal(W(7, sfs({}), { "node.order": [7, 6] }), null, "BN6 x3 + BN7 x2 left = 5");
+  // the live order at the start of its walk is far from the threshold
+  assert.equal(W(2, sfs({ 2: 2 }), { "node.order": LIVE }), null);
+  assert.match(W(7, sfs({ 2: 3, 3: 3, 11: 3, 6: 3, 7: 0 }), { "node.order": LIVE }), /\(2 left: BN7 x2\)/);
+  assert.match(W(6, sfs({ 2: 3, 3: 3, 11: 3, 6: 2, 7: 1 }), { "node.order": LIVE }), /\(2 left: BN7 x2\)/);
+});
+test("early warning: what is left, in node.order's own order, each BitNode once; targets and invalid entries are respected", () => {
+  const w = W(5, sfs({ 3: 2, 6: 2 }), { "node.order": [6, 3, 6, 99, 0, 1.5, 7], "node.targets": { 7: 0 } });
+  assert.match(w, /\(2 left: BN6 x1, BN3 x1\)/, w);
+  assert.equal(W(5, sfs({}), { "node.order": [12], "node.targets": { 12: 1000 } }), null, "BN12 with a big explicit target never runs low");
+  assert.match(W(5, sfs({ 12: 4 }), { "node.order": [12], "node.targets": { 12: 5 } }), /\(1 left: BN12 x1\)/);
+  assert.match(W(5, sfs({}), { "node.order": [12] }), /\(0 left: none\)/, "BN12 at its default target 0 has nothing left");
+  const o = orderOutlook({ bn: 5, sourceFiles: toSf(sfs({ 6: 2 })) }, S({ "node.order": [6, 6] }));
+  assert.deepEqual(o.left, [{ bn: 6, levels: 1 }]); assert.equal(o.remaining, 1);
+});
+test("early warning: only with node.autoSelect on; an empty order warns only with node.fallback=stop", () => {
+  assert.equal(orderWarning({ bn: 5, sourceFiles: [] }, S({ "node.order": [7], "node.targets": { 7: 0 } })), null, "autoSelect off");
+  assert.equal(W(5, sfs({}), {}), null, "empty order, recommend: the planner is in charge by design");
+  const stop = W(5, sfs({}), { "node.fallback": "stop" });
+  assert.ok(stop.startsWith(`${ORDER_LOW} (empty) — node.fallback=stop will then stop and flag the owner`), stop);
+});
+test("early warning names the planner recommendation that takes over, per node.fallback (and every-target-met when nothing is left)", () => {
+  const sf = sfs({ 2: 3, 3: 3, 11: 3, 6: 3, 7: 2 });
+  const rec = W(5, sf, { "node.order": LIVE }), stop = W(5, sf, { "node.order": LIVE, "node.fallback": "stop" });
+  assert.match(rec, /^node\.order running low \(1 left: BN7 x1\) — then the planner's recommendation takes over: BN1: /, rec);
+  assert.match(stop, /^node\.order running low \(1 left: BN7 x1\) — node\.fallback=stop will then stop and flag the owner; the planner would recommend BN1: /, stop);
+  assert.doesNotMatch(rec + stop, /BN1: BN1|BNnull|undefined/);
+  // the recommendation is the one after the order is used up: BN1/4/5/10/9 are maxed, so BN8 comes next, not BN1
+  const sf2 = sfs({ 1: 3, 4: 3, 5: 3, 10: 3, 9: 3, 2: 3, 3: 3, 11: 3, 6: 3, 7: 2 });
+  assert.match(W(5, sf2, { "node.order": LIVE }), /takes over: BN8: /);
+  // BN12 is not recommended by default, but is with an explicit target
+  assert.match(W(5, sf2, { "node.order": LIVE, "node.targets": { 12: 4 } }), /takes over: BN12: /);
+  // nothing left to recommend either
+  const all = sfs({ 1: 3, 2: 3, 3: 3, 4: 3, 5: 3, 6: 3, 7: 2, 8: 3, 9: 3, 10: 3, 11: 3, 13: 3, 14: 3, 15: 3 });
+  assert.equal(W(5, all, { "node.order": LIVE }), `${ORDER_LOW} (1 left: BN7 x1) — then the planner's recommendation takes over: ${ALL_MET}, nothing left to select`);
+  assert.match(W(5, all, { "node.order": LIVE, "node.fallback": "stop" }), /stop and flag the owner; every BitNode target is met$/);
+});
+test("early warning text is stable (dedupes like READY) and only changes when Source-File levels change", () => {
+  const a = W(5, sfs({ 7: 2 }), { "node.order": [7] });
+  for (let i = 0; i < 3; i++) assert.equal(W(5, sfs({ 7: 2 }), { "node.order": [7] }), a);
+  assert.notEqual(W(5, sfs({ 7: 3 }), { "node.order": [7] }), a);
+  assert.equal(W(5, sfs({ 7: 2 }), { "node.order": [7] }), a, "does not depend on the current time or on READY");
+});
+test("early warning is an owner decision: server OWNER_DECISION and the dashboard attention level treat it like READY", () => {
+  const w = W(5, sfs({ 7: 2 }), { "node.order": [7] });
+  assert.ok(OWNER_DECISION.some((re) => re.test(w)));
+  assert.ok(!OWNER_DECISION.some((re) => re.test("node.order is fine")));
+  const k = computeKpis({ latest, ring, ramStatus, augPlan, autopilot: { ...autopilot, flags: [w] }, pred2Tail, settings: S(), now: NOW });
+  const a = k.attention.find((x) => x.text === w);
+  assert.ok(a); assert.equal(a.level, "warn"); assert.equal(a.view, "node");
+});
+test("autopilot wiring: nodeOrderStep pushes the warning into flags (the check-in attention path); the loop calls it", async () => {
+  const src = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "game", "agent", "autopilot.js");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bbnt-")), tmp = path.join(dir, "autopilot.mjs");
+  fs.copyFileSync(src, tmp);
+  let ap; try { ap = await import(pathToFileURL(tmp).href); } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  const flags = [], ri = (n, sf) => ({ currentNode: n, ownedSF: new Map(Object.entries(sf).map(([k, v]) => [Number(k), v])) });
+  assert.equal(ap.nodeOrderStep(ri(5, {}), S({ ...SEL, "node.order": [7] }), flags), null); assert.deepEqual(flags, []);
+  const w = ap.nodeOrderStep(ri(5, { 7: 2 }), S({ ...SEL, "node.order": [7] }), flags);
+  assert.deepEqual(flags, [w]); assert.match(w, /^node\.order running low \(1 left: BN7 x1\)/);
+  assert.equal(ap.nodeOrderStep({ currentNode: 5 }, S({ ...SEL, "node.fallback": "stop" }), flags) != null, true, "no ownedSF is tolerated");
+  const text = fs.readFileSync(src, "utf8");
+  assert.match(text, /nodeOrderStep\(ns\.getResetInfo\(\), readSettings\(ns\), flags\)/, "the main loop calls the step");
 });
 
 // ---------------- runner ----------------

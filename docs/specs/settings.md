@@ -63,3 +63,5 @@ Legacy override files keep working. Each consumer PR maps its keys: settings win
 
 ### node.targets
 Only matters for BitNode selection (`node.order`, the planner recommendation). A BitNode is picked while its Source-File level (after the destroy in progress) is below its target. Empty (default) = target 3 for every node, 0 for BN12 (never auto-picked). `bb settings set node.targets='{"12":5}'` or `12:5,3:0`; `0` switches a node off; values above 3 are rejected (BN12: 1000). Spec: `docs/specs/node-targets.md`.
+
+With `node.autoSelect` on, the autopilot also raises the attention flag `node.order running low (N left: BN7 x2) — ...` once `node.order` has 2 or fewer destroys left (counted after the destroy in progress; an empty order warns only with `node.fallback=stop`). It names what is left and the planner recommendation that takes over (or `every BitNode target is met`). It is an owner decision, held back like READY. A node block with `source: "all-targets-met"` and the flag `every BitNode target is met — nothing left to select ...` mean no BitNode is below its target.
