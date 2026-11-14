@@ -58,7 +58,7 @@ detector: flag
 recorded_in: "data/pred-calib.txt liveCoverage (cells + alerts) and v3 snapshot; check-in attention 'predictor <version> 80% band coverage outside 70-90% in <cells>' and 'predictor v3 calibration <missing|stale|invalid>: answering with v2'; report().live3 (v3 vs v2 shadow coverage on the same outcomes)"
 consumer: "check-in attention -> escalation routine and Discord; hourly supervisor routine reads liveCoverage; owner flips predictor.version"
 proposed_fix: "Implemented in PR #52 (feat/predictor-v3): game/lib/predcal.js online prequential ensemble + per-edge adaptive conformal bands with hierarchical shrinkage, tuned with scripts/predictor-backtest.js on the first half of the live log; behind setting predictor.version (default v2). Held-out (2026-10-21 to 2026-11-14): coverage 52.8% -> 72.9% (CI 65-82%), interval score 4.29 -> 3.18, median log error 0.204 -> 0.114, rep buckets -46% to -72%; level >3h and money >3h point error not improved (8 and 28 install cycles)."
-owner_decision: "Pending: merge PR #52, set predictor.version=v3 before bb push of lib/predcal.js agent/predictor.txt agent/checkin-lib.txt lib/settings-schema.js agent/PLAYBOOK.txt, verify live3 after 24 h. Close when live v3 coverage holds 70-90% in the major buckets."
+owner_decision: "Approved 2026-11-13. Live 2026-11-14: #52 merged and pushed (11 files incl. lib/predcal.js), predictor.version=v3 (settings rev 9), autopilot RAM unchanged at 76.35 GB; the check-in Predictions row shows v3. Held-out backtest: coverage 72.9% (v2 52.8%), decision-bucket median log error -48%, but the destroy ETA (level >3h) point error +12% and money >3h +34% (see docs/specs/predictor-v3.md). A daily claude.ai routine (Bitburner predictor lab, read-only, opens a PR only for pre-registered experiments that win on held-out data) keeps working on it; the first experiment is the hybrid point for level >3h and money >3h. Close when live v3 coverage holds 70-90% in the major buckets over at least 24 h of resolved outcomes."
 status: in-progress
 ```
 
@@ -74,8 +74,8 @@ detector: test
 recorded_in: "check-in attention (autopilot flags, game/agent/autopilot.js nodeOrderStep), data/aug-plan.txt node.source, CI test/node-targets.js"
 consumer: "supervisor routine and owner (attention); CI"
 proposed_fix: "Applied in this change (docs/specs/node-targets.md): setting node.targets (BitNode -> target SF level; default 3 for every node, 0 for BN12, so BN12 is never auto-picked and DEFAULT_BN_ORDER keeps its order); BN15 selectable (range 1..15, SF_MAX 3 verified at v3.0.1); 'every BitNode target is met' state with its own text and flag instead of 'autoSelect off'; early warning 'node.order running low' (2 or fewer destroys left). The BN2 reason text in recommendNextBn is still stale (cosmetic, not changed to keep the golden outputs byte-identical). Readiness specs for the nodes the bot cannot play: docs/specs/node-readiness.md, bn8-readiness.md, bn9-readiness.md."
-owner_decision: "Approved 2026-11-02: BN5 removed from node.order; BN12 left as is; BN15 out of scope (superseded by the 2026-11-14 request 'handle it'). Open: after merge, deploy, bb push and an autopilot restart the owner confirms the rollout and decides which readiness spec to build first (default: BN8), and whether BN8/9/13/14/15 get default target 0 until their modules exist."
-status: in-progress
+owner_decision: "Approved 2026-11-02 (BN5 removed, BN12 left as is) and the 2026-11-14 request handle it. Live 2026-11-14: #51 merged and pushed (7 game files), autopilot restarted, node.targets default (BN12 target 0), node.order=[2,3,11,6,7], node.fallback=stop. Follow-ups tracked in docs/specs/node-readiness.md: BN8 and BN9 readiness builds (owner picks which first)."
+status: closed
 ```
 
 ```yaml
@@ -170,8 +170,8 @@ detector: flag
 recorded_in: "check-in attention (server/drift.js) and GET /api/drift"
 consumer: "supervisor routine; whoever runs bb push"
 proposed_fix: "bb push AGENTS.txt (after this PR merges and deploys). A permanent flag trains readers to ignore attention items."
-owner_decision: "none"
-status: open
+owner_decision: "none. Resolved 2026-11-14: AGENTS.txt rewritten from main after each rollout; GET /api/drift shows 0 files differ."
+status: closed
 ```
 
 ```yaml
