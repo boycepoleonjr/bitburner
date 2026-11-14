@@ -313,8 +313,12 @@ export function applySnapshot(snap, s) {
   return { d, lo: d * Math.exp(qlo), hi: d * Math.exp(qhi), cell: bcell, pcell, model, weights, bucket, scale: +sc.toFixed(4), mem };
 }
 
-/** Replay samples in time order with no look-ahead. Each sample is predicted with only outcomes whose knownAt <= made. */
-export function replay(samples, opts = {}) {
+/**
+ * Replay samples in time order with no look-ahead. Each sample is predicted with only outcomes whose knownAt <= made.
+ * The final snapshot is stamped `now` when given (the in-game calibration time, so a quiet log never looks stale),
+ * else the last event time in the log.
+ */
+export function replay(samples, opts = {}, now = null) {
   const cal = createCalibrator(opts);
   const sorted = [...samples].filter((s) => s && fin(s.made)).sort((a, b) => a.made - b.made);
   const pending = sorted.filter((s) => fin(s.actualMs) && fin(s.knownAt)).sort((a, b) => a.knownAt - b.knownAt);
@@ -330,7 +334,7 @@ export function replay(samples, opts = {}) {
   }
   const end = sorted.length ? Math.max(sorted[sorted.length - 1].made, pending.length ? pending[pending.length - 1].knownAt : 0) : 0;
   while (j < pending.length) { const at = pending[j].knownAt, batch = []; while (j < pending.length && pending[j].knownAt === at) { const q = pending[j++]; batch.push([q, preds.get(q.id)]); } cal.observeBatch(batch); }
-  return { scored: out, calibrator: cal, snapshot: cal.snapshot(end), end };
+  return { scored: out, calibrator: cal, snapshot: cal.snapshot(fin(now) ? Math.max(now, end) : end), end };
 }
 
 /** Is a snapshot safe to use? Missing, wrong version, stale or malformed -> {ok:false, reason}. */

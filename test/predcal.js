@@ -284,6 +284,28 @@ test("predictor.txt tick() recalibrates when the v3 snapshot is missing, so a fr
   assert.ok(JSON.parse(g.files["/data/pred-calib.txt"]).v3, "calibrate() ran and wrote a v3 entry");
   assert.ok(Array.isArray(nx.attention));
 });
+test("in-game calibration is stamped with the calibration time: a log quiet for more than 6 h is not stale", () => {
+  const old = synth({ n: 200 }); // made around 1.79e12, i.e. long before Date.now()
+  assert.ok(PC.replay(old).snapshot.t < Date.now() - 6 * 3.6e6, "without now the stamp is the last log event");
+  const snap = PC.replay(old, {}, Date.now()).snapshot;
+  assert.equal(PC.validateSnapshot(snap, Date.now()).ok, true);
+  const lines = old.map((x) => [{ type: "p", id: x.id, made: x.made, lastAug: x.lastAug, spec: { kind: "rep" }, preds: x.preds, bucket: x.bucket, eta: x.made + x.preds.s45, lo: x.made + 1, hi: x.made + 2 * x.preds.s45 },
+    { type: "r", id: x.id, at: x.knownAt, actual: x.made + x.actualMs, inBand: true }]).flat();
+  const g = page({ settings: { "predictor.version": "v3" }, log: lines.map((o) => JSON.stringify(o)).join("\n") + "\n" });
+  g.window.__pred2.calibrate();
+  assert.deepEqual(g.window.__pred2.attentionOf().filter((a) => a.includes("calibration")), []);
+  assert.equal(g.window.__pred2.predict({ kind: "rep", faction: "X", target: 6000 }, { log: false }).v, "v3");
+});
+test("tick() backoff: an unusable but recent v3 snapshot does not re-run calibrate(); an old one does", () => {
+  const recent = { ...goodCal(), t: Date.now() - 60000, v3: { error: "boom" } };
+  const g = page({ settings: { "predictor.version": "v3" }, cal: recent });
+  g.window.__pred2.tick([]);
+  assert.equal(JSON.parse(g.files["/data/pred-calib.txt"]).t, recent.t, "no recalibration inside 30 min");
+  const old = { ...recent, t: Date.now() - 40 * 60000 };
+  const g2 = page({ settings: { "predictor.version": "v3" }, cal: old });
+  g2.window.__pred2.tick([]);
+  assert.ok(JSON.parse(g2.files["/data/pred-calib.txt"]).t > old.t, "recalibrated after 30 min");
+});
 test("checkin-lib forwards predictor attention and shows the active version in the Predictions row", () => {
   const src = fs.readFileSync(path.join(GAME, "agent/checkin-lib.txt"), "utf8");
   assert.ok(src.includes("for (const f of nx.attention || []) out.attention.push(f);"));

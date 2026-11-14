@@ -189,7 +189,7 @@
   // ---- v3 (lib/predcal.js): rolling-origin replay of the live log -> compact snapshot; validity; live coverage
   const v3calibrate = (logTxt) => {
     if (!PC) return { error: "lib/predcal.js not loadable: " + pcError };
-    return PC.replay(PC.samplesFromLog(logTxt).slice(-V3_REPLAY_MAX), V3_OPTS).snapshot;
+    return PC.replay(PC.samplesFromLog(logTxt).slice(-V3_REPLAY_MAX), V3_OPTS, Date.now()).snapshot; // stamped now: a quiet log is not stale
   };
   const v3State = (cal, nowMs) => {
     if (!PC) return { ok: false, code: "missing", reason: "lib/predcal.js not loadable: " + pcError };
@@ -275,8 +275,10 @@
   // check-in entry point: resolve, recalibrate if stale or new outcomes, then predict+log each spec; returns soonest
   const tick = (specs) => {
     const newly = resolve(); const cal = loadCal();
-    // also recalibrate when the v3 snapshot is missing or unusable (first run after an update, or a failed calibration)
-    if (!cal || newly.length || Date.now() - cal.t > 2 * 3.6e6 || (PC && !v3State(cal, Date.now()).ok)) calibrate();
+    // also recalibrate when the v3 snapshot is missing (first run after an update) at once, and when it is unusable at most
+    // every 30 min (an empty or broken log must not re-run the telemetry backtest on every check-in)
+    const v3bad = PC && cal && (!cal.v3 || (!v3State(cal, Date.now()).ok && Date.now() - cal.t > 30 * 6e4));
+    if (!cal || newly.length || Date.now() - cal.t > 2 * 3.6e6 || v3bad) calibrate();
     const attention = attentionOf();
     let best = null; const all = [];
     for (const s of specs) { const p = predict(s); if (p.done) return { min: 0, spec: s, all, attention, newlyResolved: newly.length }; if (p.eta) { all.push(p); const m = Math.max(0, Math.round((p.eta - Date.now()) / 6e4)); if (!best || m < best.min) best = { min: m, spec: s, rec: p }; } }
