@@ -105,9 +105,9 @@ signal: "a required or expected job concluding skipped, or a Dockerfile Node maj
 detector: test
 recorded_in: "CI test (new) comparing the Dockerfile FROM major with ci.yml node-version; skipped-job count in the routine report"
 consumer: "CI (red on mismatch); supervisor routine"
-proposed_fix: "Node part applied: ci.yml runs the parse check and npm test on Node 22 and Node 26 inside the single required job test; test/ci-node-versions.js fails CI if the Dockerfile's Node major is not tested. Still open: claude.yml should fail (exit 1) when its secret is missing, like claude-code-review.yml. Not applied."
-owner_decision: "Approved 2026-11-02: test Node 26 in CI (production already runs 26); do not pin the Dockerfile back to 22. Not yet decided: the claude.yml missing-secret skip."
-status: in-progress
+proposed_fix: "Applied: ci.yml runs the parse check and npm test on Node 22 and Node 26 inside the single required job test, and test/ci-node-versions.js fails CI if the Dockerfile's Node major is not tested; claude.yml now fails (::error:: and exit 1) when neither Claude secret is set, and test/workflow-fail-loud.js pins that. The deliberate skips in claude-code-review.yml (drafts, forks, bot authors) are unchanged."
+owner_decision: "Approved 2026-11-02: test Node 26 in CI, do not pin the Dockerfile back to 22. Approved 2026-11-14 (Aside, Boyce approved): claude.yml fails loudly when no Claude secret is set."
+status: closed
 ```
 
 ```yaml
