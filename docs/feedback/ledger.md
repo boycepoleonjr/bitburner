@@ -64,18 +64,18 @@ status: open
 
 ```yaml
 id: F-003
-title: "node.order tail: stale BN5, BN12 never maxes, BN15 and the all-maxed case are not handled"
+title: "node.order tail: BN12 never maxes, BN15 and the all-targets-met case are not handled, no early warning before node.order runs out"
 found: 2026-11-02
 severity: MED
 evidence: "game/lib/nodectl.js:35-36 (first available of node.order, else recommendation); game/lib/augplan.js:19 DEFAULT_BN_ORDER has 12 before 6,7,8,13,14; :20 SF_MAX(12)=Infinity; :286 bnAvailable requires n <= 14; nodectl.js:63 reports 'autoSelect off' when nextBn is null because every Source-File is maxed; GET /api/settings node.order=[5,10] with SF5 already 3"
 root_cause: "BN5 is dead in node.order. After SF10 reaches 3 the list falls through to the default order, where BN12 repeats forever and starves BN6, 7, 8, 13 and 14. BN15 is rejected. The dead-end message names the wrong cause. The recommendation text for BN2 is stale (the gang module shipped)."
-signal: "planned node chain (next three destroys) contains BN12, is empty, or starts with a maxed Source-File; node.order contains a maxed BitNode"
-detector: none
-recorded_in: "data/aug-plan.txt node.pendingChain (new) and a check-in attention flag"
-consumer: "supervisor routine; owner edits node.order"
-proposed_fix: "Owner removes 5 from node.order. game/lib/augplan.js: move 12 to the end of DEFAULT_BN_ORDER or cap it; add an all-maxed message in nodectl.js:63; update the BN2 reason. Tests in test/augplan.js."
-owner_decision: "Approved 2026-11-02: BN5 removed from node.order (settings-log rev 6, now [10,2,3,11]); BN12 left as is; BN15 out of scope. The remaining tail items are accepted, not fixed."
-status: wontfix
+signal: "attention flag 'node.order running low (N left: ...)' once node.order has 2 or fewer destroys left (autoSelect on); attention flag 'every BitNode target is met' and aug-plan node.source=all-targets-met when nothing is left to select; a node.order that contains a maxed BitNode is simply skipped"
+detector: test
+recorded_in: "check-in attention (autopilot flags, game/agent/autopilot.js nodeOrderStep), data/aug-plan.txt node.source, CI test/node-targets.js"
+consumer: "supervisor routine and owner (attention); CI"
+proposed_fix: "Applied in this change (docs/specs/node-targets.md): setting node.targets (BitNode -> target SF level; default 3 for every node, 0 for BN12, so BN12 is never auto-picked and DEFAULT_BN_ORDER keeps its order); BN15 selectable (range 1..15, SF_MAX 3 verified at v3.0.1); 'every BitNode target is met' state with its own text and flag instead of 'autoSelect off'; early warning 'node.order running low' (2 or fewer destroys left). The BN2 reason text in recommendNextBn is still stale (cosmetic, not changed to keep the golden outputs byte-identical). Readiness specs for the nodes the bot cannot play: docs/specs/node-readiness.md, bn8-readiness.md, bn9-readiness.md."
+owner_decision: "Approved 2026-11-02: BN5 removed from node.order; BN12 left as is; BN15 out of scope (superseded by the 2026-11-14 request 'handle it'). Open: after merge, deploy, bb push and an autopilot restart the owner confirms the rollout and decides which readiness spec to build first (default: BN8), and whether BN8/9/13/14/15 get default target 0 until their modules exist."
+status: in-progress
 ```
 
 ```yaml
