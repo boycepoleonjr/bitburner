@@ -169,9 +169,9 @@ signal: "drift attention item present for more than 24 h"
 detector: flag
 recorded_in: "check-in attention (server/drift.js) and GET /api/drift"
 consumer: "supervisor routine; whoever runs bb push"
-proposed_fix: "bb push AGENTS.txt (after this PR merges and deploys). A permanent flag trains readers to ignore attention items."
-owner_decision: "none"
-status: open
+proposed_fix: "Done: the in-game files were pushed after the merges (bb push); GET /api/drift on 2026-11-14 reported checked 89, differ [], sha dc9344f, attention null. The drift flag (server/drift.js) stays as the detector and will raise the item again if the game and the deployed repo differ."
+owner_decision: "Approved 2026-11-14 (Aside, Boyce approved): close F-009 now that the drift flag is clear."
+status: closed
 ```
 
 ```yaml
