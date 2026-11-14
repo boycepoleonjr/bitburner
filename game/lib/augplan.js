@@ -13,13 +13,24 @@ import { orderAugs, cfgFromSettings, isDefaultCfg, projectedCost, DEFAULT_ORDER_
 
 export const NFG = "NeuroFlux Governor";
 export const RED_PILL = "The Red Pill";
+export const ALL_MET = "every BitNode target is met"; // no BitNode is below its node.targets level (lib/nodectl.js flags it)
 export const READY_FLAG = "w0r1d_d43m0n READY — agent decides BitNode destruction"; // server/checkin.js OWNER_DECISION matches this
 export const PRICE_STEP = 1.9;          // each queued aug multiplies the next price (game constant, before BN mult)
 export const DAEDALUS = { money: 100e9, hack: 2500 };
 export const DEFAULT_RECOVERY_MIN = 60; // post-install recovery estimate when no install history exists
-/** Default next-BitNode preference (rationale: docs/specs/aug-planner.md "Recommended BitNode order"). */
-export const DEFAULT_BN_ORDER = [1, 4, 2, 5, 10, 9, 3, 11, 12, 6, 7, 8, 13, 14];
+/** Default next-BitNode preference (rationale: docs/specs/aug-planner.md "Recommended BitNode order").
+ * 12 stays in its place but has default target 0 (never auto-picked); 15 is last (v3.0.1 has BN1..BN15). docs/specs/node-targets.md */
+export const DEFAULT_BN_ORDER = [1, 4, 2, 5, 10, 9, 3, 11, 12, 6, 7, 8, 13, 14, 15];
+export const BN_MAX = 15;
+/** Hard Source-File cap per BitNode: 3, except BN12 (no cap in the game). Verified against bitburner-src v3.0.1 BitNode.tsx. */
 export const SF_MAX = (n) => (n === 12 ? Infinity : 3);
+/** Default target level when node.targets has no entry: SF_MAX, except BN12 = 0 (the owner opts in with an explicit target). */
+export const defaultTarget = (n) => (n === 12 ? 0 : SF_MAX(n));
+/** Target Source-File level of BitNode n. `targets` = node.targets ({"12":5}); anything that is not an integer >= 0 is ignored; capped at SF_MAX. */
+export function targetOf(n, targets) {
+  const v = targets && typeof targets === "object" ? targets[n] : undefined;
+  return Number.isInteger(v) && v >= 0 ? Math.min(v, SF_MAX(n)) : defaultTarget(n);
+}
 
 const HACK_KEYS = ["hacking", "hacking_exp", "hacking_speed", "hacking_money", "hacking_chance", "hacking_grow"];
 const fin = (n, d = 0) => (typeof n === "number" && Number.isFinite(n) ? n : d);
@@ -299,15 +310,16 @@ export function sfLevels(sourceFiles = [], currentBn = 0, destroying = true) {
   if (destroying && currentBn) lv[currentBn] = (lv[currentBn] || 0) + 1;
   return lv;
 }
-export const bnAvailable = (n, lv) => Number.isInteger(n) && n >= 1 && n <= 14 && (lv[n] || 0) < SF_MAX(n);
+/** BitNode 1..15 whose Source-File level (after this destroy) is below its target (node.targets; default SF_MAX, BN12 0). */
+export const bnAvailable = (n, lv, targets) => Number.isInteger(n) && n >= 1 && n <= BN_MAX && (lv[n] || 0) < targetOf(n, targets);
 
-/** First BitNode from `order` whose Source-File is not maxed (after this destroy). */
-export function firstAvailable(order, lv) { return (order || []).find((n) => bnAvailable(n, lv)) ?? null; }
+/** First BitNode from `order` that is still below its target (after this destroy). */
+export function firstAvailable(order, lv, targets) { return (order || []).find((n) => bnAvailable(n, lv, targets)) ?? null; }
 
-/** Planner recommendation (ignores node.order): DEFAULT_BN_ORDER filtered by SF levels. */
+/** Planner recommendation (ignores node.order): DEFAULT_BN_ORDER filtered by SF levels and node.targets. */
 export function recommendNextBn(snap, s = {}) {
   const lv = sfLevels(snap.sourceFiles, fin(snap.bn));
-  const bn = firstAvailable(DEFAULT_BN_ORDER, lv);
+  const bn = firstAvailable(DEFAULT_BN_ORDER, lv, s["node.targets"]);
   const reasons = {
     1: "BN1: fastest node, SF1 raises every multiplier",
     4: "BN4: SF4.2/4.3 cut Singularity RAM 16x -> 4x -> 1x, removing the 1 TB autopilot bootstrap wall",
@@ -317,7 +329,7 @@ export function recommendNextBn(snap, s = {}) {
     9: "BN9: hacknet servers",
     3: "BN3: corporations",
   };
-  return { bn, why: bn == null ? "every Source-File is maxed" : `${reasons[bn] || `BN${bn}: next in default order`} (SF${bn} ${lv[bn] || 0} -> ${(lv[bn] || 0) + 1})` };
+  return { bn, why: bn == null ? ALL_MET : `${reasons[bn] || `BN${bn}: next in default order`} (SF${bn} ${lv[bn] || 0} -> ${(lv[bn] || 0) + 1})` };
 }
 
 function fmt(n) { const a = Math.abs(n); return a >= 1e15 ? (a / 1e15).toFixed(2) + "q" : a >= 1e12 ? (a / 1e12).toFixed(2) + "t" : a >= 1e9 ? (a / 1e9).toFixed(2) + "b" : a >= 1e6 ? (a / 1e6).toFixed(1) + "m" : Math.round(a).toString(); }

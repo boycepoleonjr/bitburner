@@ -140,14 +140,15 @@ test("install timing: count vs eta policies", () => {
   // queued augs count toward the batch
   assert.equal(installDecision({ ...base, queued: 3, policy: "count", steps: [st("needRep", 30)] }).next.etaMin, 0);
 });
-test("next BitNode: SF levels after this destroy, maxed nodes skipped, BN12 never maxes", () => {
+test("next BitNode: SF levels after this destroy, maxed nodes skipped, BN12 needs an explicit target", () => {
   const lv = sfLevels([{ n: 1, lvl: 3 }, { n: 4, lvl: 2 }], 4);
   assert.deepEqual(lv, { 1: 3, 4: 3 });
   assert.equal(firstAvailable([1, 4, 2], lv), 2);
-  assert.equal(firstAvailable([12], { 12: 50 }), 12);
+  assert.equal(firstAvailable([12], { 12: 50 }), null, "BN12 default target is 0 (docs/specs/node-targets.md)");
+  assert.equal(firstAvailable([12], { 12: 50 }, { 12: 100 }), 12, "an explicit target makes BN12 available again");
   assert.equal(recommendNextBn({ bn: 5, sourceFiles: [{ n: 1, lvl: 1 }, { n: 4, lvl: 1 }] }).bn, 1);
   assert.equal(recommendNextBn({ bn: 1, sourceFiles: [{ n: 1, lvl: 2 }] }).bn, 4);
-  assert.deepEqual([...new Set(DEFAULT_BN_ORDER)].sort((a, b) => a - b), Array.from({ length: 14 }, (_, i) => i + 1));
+  assert.deepEqual([...new Set(DEFAULT_BN_ORDER)].sort((a, b) => a - b), Array.from({ length: 15 }, (_, i) => i + 1));
 });
 test("garbage-tolerant: empty snapshot does not throw", () => {
   const p = plan({}, S());

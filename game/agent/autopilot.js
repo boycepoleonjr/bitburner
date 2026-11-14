@@ -11,7 +11,7 @@
  *   `joinCity` factions auto-join and other city invites are flagged.
  */
 import { readSettings } from "lib/settings.js";
-import { decideNode, parseJson, REQUEST_FILE, ACK_FILE, DESTROY_SCRIPT, NO_RAM } from "lib/nodectl.js";
+import { decideNode, orderWarning, parseJson, REQUEST_FILE, ACK_FILE, DESTROY_SCRIPT, NO_RAM } from "lib/nodectl.js";
 import { gangPossible, gangFactionFromStatus, gangCrimeAction } from "lib/gangplan.js";
 import { orderAugs, cfgFromSettings, isDefaultCfg, pinnedBlocker, strictDecision, parseStrictState } from "lib/augorder.js";
 import { xpStarveCheck } from "lib/ramwatch.js";
@@ -54,6 +54,12 @@ export function xpStarveStep(sinceMs, statusRaw, now, flags) {
   const w = xpStarveCheck({ sinceMs, statusRaw, now });
   if (w.flag) flags.push(w.flag);
   return w.since;
+}
+/** Early warning that node.order is nearly used up (lib/nodectl.js orderWarning): pushes the flag into `flags`. Exported for tests. */
+export function nodeOrderStep(resetInfo, settings, flags) {
+  const w = orderWarning({ bn: resetInfo.currentNode, sourceFiles: [...(resetInfo.ownedSF || new Map())].map(([n, lvl]) => ({ n, lvl })) }, settings);
+  if (w) flags.push(w);
+  return w;
 }
 export const CITY_FACTIONS = new Set(["Sector-12", "Aevum", "Volhaven", "Chongqing", "New Tokyo", "Ishima"]);
 export const cityDone = (augsOf, owned, f) => augsOf(f).filter((a) => a !== NEUROFLUX).every((a) => owned.has(a));
@@ -340,6 +346,8 @@ export async function main(ns) {
             }
           }
         }
+        // 3c. early warning: node.order is nearly used up (lib/nodectl.js orderWarning; an owner decision like READY)
+        try { nodeOrderStep(ns.getResetInfo(), readSettings(ns), flags); } catch (e) { flags.push("node.order check failed: " + e); }
         // 4. Faction invitations (non-city auto; exhausted cities blocked; other cities joinCity-only, else flagged)
         if (c.joinFactions) {
           const ownedAll = new Set(S.getOwnedAugmentations(true));

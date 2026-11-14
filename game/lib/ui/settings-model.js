@@ -18,7 +18,7 @@ export function controlsFromSchema(schema, values = {}, overrides = {}, drafts =
     return {
       key: f.key, group: f.group, label: f.label, help: f.help, owner: f.owner, type: f.type,
       control: CONTROL_FOR_UI[f.ui] || "text",
-      value, shown: hasDraft ? drafts[f.key] : value, dirty: hasDraft,
+      value, shown: hasDraft ? drafts[f.key] : f.type === "intMap" ? JSON.stringify(value) : value, dirty: hasDraft,
       defaultValue: f.default,
       overridden: Object.prototype.hasOwnProperty.call(overrides || {}, f.key),
       differsFromDefault: JSON.stringify(value) !== JSON.stringify(f.default),

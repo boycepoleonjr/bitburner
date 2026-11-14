@@ -20,12 +20,12 @@ Tunables are spread across `lib/config.js` DEFAULTS + `data/config-overrides.txt
   - A corrupt file is never overwritten automatically (409, or `ok:false` in-game).
 
 ## Field metadata
-`key`, `group`, `type` (`bool|number|int|enum|string|intList|stringList`), `default`, `min`/`max`/`step`, `options`, `ends` (slider end labels), `label`, `help`, `ui` (`toggle|slider|number|select|text|list`), `owner` (the script that reads it). The dashboard renders its settings pane from this metadata alone.
+`key`, `group`, `type` (`bool|number|int|enum|string|intList|stringList|intMap`), `default`, `min`/`max`/`step`, `options`, `ends` (slider end labels), `label`, `help`, `ui` (`toggle|slider|number|select|text|list`), `owner` (the script that reads it). The dashboard renders its settings pane from this metadata alone.
 
 ## Initial keys (owner-mandated defaults in bold)
 | Group | Keys |
 |---|---|
-| BitNode | **node.autoSelect=false**, **node.autoDestroy=false**, node.backupBeforeDestroy=true, node.order=[], node.fallback=recommend (`recommend`\|`stop`; docs/specs/node-fallback.md) |
+| BitNode | **node.autoSelect=false**, **node.autoDestroy=false**, node.backupBeforeDestroy=true, node.order=[], node.fallback=recommend (`recommend`\|`stop`; docs/specs/node-fallback.md), node.targets={} (BitNode -> target Source-File level; docs/specs/node-targets.md) |
 | Strategy (0 = money, 1 = faction rep) | **strategy.early=0** (o--), **strategy.mid=0.5** (-o-), **strategy.late=1** (--o), strategy.phase.midAt=0.34, strategy.phase.lateAt=0.9 (phase = fl1ght.exe progress) |
 | RAM | ram.manager.enabled, ram.homeReserveGb=128, ram.cloud.*, ram.share.enabled, ram.xp.mode=auto, ram.xp.target, ram.targets.max=0, ram.batches.max=0, ram.resizeThreshold=0.1 |
 | Augmentations | augs.autoInstall, augs.installPolicy=eta, augs.installAt=6, augs.planner.goal=destroy, augs.donateAtFavor=150, augs.neuroFluxLast=true (informational), augs.order.* (sort=rep, pinned/last/exclude=[], strict=false, strictMaxWaitMin=120, drivesWork=false; docs/specs/aug-order.md) |
@@ -49,7 +49,7 @@ bb settings unset augs.order.sort augs.order.pinned augs.order.last augs.order.e
 The last command restores the default order exactly (rollback).
 
 ### node.fallback (enum recommend | stop)
-Only matters with `node.autoSelect=true`. `recommend` (default) is the old behavior: when no `node.order` entry is available (every listed Source-File maxed, or the list is empty) the planner recommendation is used. `stop` never picks outside `node.order`: `pickNextBn` returns `nextBn: null`, `source: "order-exhausted"`, the destroy is not requested, and the autopilot raises the attention flag `node.order exhausted (node.fallback=stop) — owner picks the next BitNode; recommended BN<n>: <why>` next to the READY flag. The flag is an owner decision (held back for `BB_READY_ESCALATE_MIN` like READY). BN12 never runs out (`SF_MAX(12)=Infinity`). Spec: `docs/specs/node-fallback.md`.
+Only matters with `node.autoSelect=true`. `recommend` (default) is the old behavior: when no `node.order` entry is available (every listed Source-File maxed, or the list is empty) the planner recommendation is used. `stop` never picks outside `node.order`: `pickNextBn` returns `nextBn: null`, `source: "order-exhausted"`, the destroy is not requested, and the autopilot raises the attention flag `node.order exhausted (node.fallback=stop) — owner picks the next BitNode; recommended BN<n>: <why>` next to the READY flag. The flag is an owner decision (held back for `BB_READY_ESCALATE_MIN` like READY). BN12 has default target 0 (`node.targets`), so it does not keep the list from running out unless the owner gives it an explicit target. Spec: `docs/specs/node-fallback.md`.
 ```
 bb settings set node.fallback=stop
 bb settings unset node.fallback      # rollback to recommend
@@ -68,3 +68,8 @@ Legacy override files keep working. Each consumer PR maps its keys: settings win
 ## Tests
 `test/settings.js` covers schema integrity, owner defaults, coercion and rejection, parse warnings, atomic patches, rev/409, unset, round-trip, the in-game lib with a fake ns, the server API with a fake rpc, and the CLI formatting. `test/smoke.js` covers the real server, the CLI `settings set/get`, 400 on invalid input, and the log line.
 `test/helpers/game-import.js` lets Node import in-game modules such as `lib/settings.js` (it maps Bitburner's `lib/...` import paths to `game/`). Follow-up PRs reuse it for daemon and autopilot tests.
+
+### node.targets
+Only matters for BitNode selection (`node.order`, the planner recommendation). A BitNode is picked while its Source-File level (after the destroy in progress) is below its target. Empty (default) = target 3 for every node, 0 for BN12 (never auto-picked). `bb settings set node.targets='{"12":5}'` or `12:5,3:0`; `0` switches a node off; values above 3 are rejected (BN12: 1000). Spec: `docs/specs/node-targets.md`.
+
+With `node.autoSelect` on, the autopilot also raises the attention flag `node.order running low (N left: BN7 x2) — ...` once `node.order` has 2 or fewer destroys left (counted after the destroy in progress; an empty order warns only with `node.fallback=stop`). It names what is left and the planner recommendation that takes over (or `every BitNode target is met`). It is an owner decision, held back like READY. A node block with `source: "all-targets-met"` and the flag `every BitNode target is met — nothing left to select ...` mean no BitNode is below its target.
