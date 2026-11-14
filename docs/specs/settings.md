@@ -29,7 +29,15 @@ Tunables are spread across `lib/config.js` DEFAULTS + `data/config-overrides.txt
 | Strategy (0 = money, 1 = faction rep) | **strategy.early=0** (o--), **strategy.mid=0.5** (-o-), **strategy.late=1** (--o), strategy.phase.midAt=0.34, strategy.phase.lateAt=0.9 (phase = fl1ght.exe progress) |
 | RAM | ram.manager.enabled, ram.homeReserveGb=128, ram.cloud.*, ram.share.enabled, ram.xp.mode=auto, ram.xp.target, ram.targets.max=0, ram.batches.max=0, ram.resizeThreshold=0.1 |
 | Augmentations | augs.autoInstall, augs.installPolicy=eta, augs.installAt=6, augs.planner.goal=destroy, augs.donateAtFavor=150, augs.neuroFluxLast=true (informational), augs.order.* (sort=rep, pinned/last/exclude=[], strict=false, strictMaxWaitMin=120, drivesWork=false; docs/specs/aug-order.md) |
+| Predictor | predictor.version=v2 (`v2`\|`v3`; docs/specs/predictor-v3.md), predictor.alertWindow=50, predictor.alertMinN=30 |
 | Dashboard | ui.refreshMs=1000, ui.historyMinutes=360, ui.telemetryRetentionDays=7 |
+
+### predictor.version (enum v2 | v3)
+Read by `agent/predictor.txt` at every check-in. `v2` (default) is the old behavior; v3 is still calibrated in shadow and written to `data/pred-calib.txt` (`v3`, `liveCoverage`). `v3` answers with `lib/predcal.js` (prequential ensemble + adaptive conformal 80% band) and keeps v2's answer in each record (`v2eta/v2lo/v2hi`, resolved as `v2inBand`). Missing, stale (>6 h) or invalid v3 calibration falls back to v2 per prediction and raises the attention flag `predictor v3 calibration <missing|stale|invalid>: answering with v2 ...`. `predictor.alertWindow` / `predictor.alertMinN`: the check-in flags `predictor <version> 80% band coverage outside 70-90% in <cells>` when a kind|bucket has at least alertMinN resolved predictions of the active version in its last alertWindow and its coverage is outside 70-90%.
+```
+bb settings set predictor.version=v3
+bb settings set predictor.version=v2    # rollback (or: bb settings unset predictor.version)
+```
 
 ### stringList (augs.order.pinned / last / exclude)
 Accepted input: an array; a string starting with `[` (JSON); otherwise a string split on `|` if it contains one, else on `,`. Entries are trimmed, at most 80 characters, unique, at most 200. Any entry starting with `NeuroFlux` is rejected, and `augs.order.exclude` also rejects `The Red Pill` (schema field `forbid`). Unknown aug names are accepted and shown as warnings in `data/aug-plan.txt` (`order.warnings`) and the dashboard.
