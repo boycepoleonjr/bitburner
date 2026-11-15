@@ -150,6 +150,11 @@ export const DEFAULTS = {
     minTrade: 50e6,
     /** true = sell everything and stop buying (set via overrides before installing augmentations). */
     liquidate: false,
+    /** How many access items (WSE, TIX API, 4S Market Data, 4S TIX API, in that order) the tool may buy outside BN8. 1 = only the WSE account; BN8 allows all (lib/stockaccess.js). */
+    accessOutsideBn8: 1,
+    /** In BN8, start the read-only spike logger tools/stock-spike.js once TIX API access exists and home has spikeMinFreeGb free beyond its RAM. */
+    spikeLogger: true,
+    spikeMinFreeGb: 64,
   },
 
   hooks: {
