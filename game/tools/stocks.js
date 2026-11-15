@@ -2,7 +2,9 @@
  * tools/stocks.js — stock market module (started and kept alive by the daemon's stocks hook).
  *
  * 1. Access: buys WSE account → TIX API → 4S Market Data → 4S TIX API, each once
- *    money >= cost / accessSpendFraction (achievement "4S").
+ *    money >= cost / accessSpendFraction (achievement "4S"). Outside BN8 only the first `accessOutsideBn8` items (default 1 = the WSE
+ *    account) are bought, so this tool never buys TIX or 4S there (lib/stockaccess.js); BN8 buys all of them as before. In BN8, once
+ *    TIX API access exists it also starts the read-only logger tools/stock-spike.js (config stocks.spikeLogger).
  * 2. Trading (needs 4S TIX API for forecasts): long-only (shorts need BitNode 8).
  *    - sell a position when its forecast drops below sellBelow
  *    - buy the strongest forecasts above buyAbove while holdings <= maxPortfolioFraction of equity
@@ -14,6 +16,9 @@
  * @param {NS} ns
  */
 import { loadConfig } from "lib/config.js";
+import { accessLimit, shouldStartSpike } from "lib/stockaccess.js";
+
+const SPIKE = "tools/stock-spike.js"; // read-only logger (docs/specs/bn8-spike.md), auto-started in BN8 only
 
 const DEFAULTS = {
   accessSpendFraction: 0.25,
@@ -42,10 +47,16 @@ export async function main(ns) {
       ["4S Market Data", st.has4SData, st.purchase4SMarketData, k.MarketData4SCost],
       ["4S TIX API", st.has4SDataTixApi, st.purchase4SMarketDataTixApi, k.MarketDataTixApi4SCost],
     ];
-    for (const [name, has, buy, cost] of access) {
+    const bn = ns.getResetInfo().currentNode, allowed = accessLimit(bn, c.accessOutsideBn8);
+    for (const [i, [name, has, buy, cost]] of access.entries()) {
       if (has()) continue;
+      if (i >= allowed) break; // not allowed in this BitNode; everything after the first missing item comes later in the order
       if (cash() * c.accessSpendFraction >= cost && buy()) ns.tprint(`[stocks] bought ${name} for $${f(cost)}`);
       break; // in order
+    }
+    if (shouldStartSpike({ bn, hasTix: st.hasTixApiAccess(), running: ns.isRunning(SPIKE, "home"), enabled: c.spikeLogger,
+      freeGb: ns.getServerMaxRam("home") - ns.getServerUsedRam("home"), needGb: ns.getScriptRam(SPIKE, "home"), minFreeGb: c.spikeMinFreeGb })) {
+      if (ns.run(SPIKE) > 0) ns.tprint(`[stocks] BN8: started ${SPIKE} (read-only price logger)`);
     }
 
     let holdings = 0;

@@ -253,9 +253,13 @@ test("logger is read-only: only whitelisted ns.stock getters, no order or purcha
 test("nothing in game/ imports the spike files, and lib/stockspike.js has no RAM-costing names, DOM globals or imports", () => {
   const costly = new Set(JSON.parse(fs.readFileSync(path.join(ROOT, "test/fixtures/ns-costly-names.json"), "utf8")));
   const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]));
-  for (const f of walk(GAME).filter((x) => !x.endsWith("stock-spike.js") && !x.endsWith("stockspike.js"))) {
+  // nothing may IMPORT the spike lib or the logger (an import would add its RAM to the importer); the logger is only ever started by name from
+  // tools/stocks.js (docs/specs/stocks-access-guard.md), and a few files may mention it in comments/config docs
+  const mayMention = new Set(["tools/stocks.js", "lib/config.js", "lib/stockaccess.js"].map((x) => path.join(GAME, x)));
+  for (const f of walk(GAME).filter((x) => x.endsWith(".js") && !x.endsWith("stock-spike.js") && !x.endsWith("stockspike.js"))) {
     const src = fs.readFileSync(f, "utf8");
-    assert.ok(!/stockspike|stock-spike/.test(src.replace(/\/\/.*$/gm, "")) || f.endsWith(".txt") || f.endsWith("README.txt"), `${f} references the spike files`);
+    assert.ok(!/from\s+["'][^"']*(stockspike|stock-spike)[^"']*["']|import\(["'][^"']*(stockspike|stock-spike)/.test(src), `${f} imports the spike files`);
+    if (!mayMention.has(f)) assert.ok(!/stockspike|stock-spike/.test(src.replace(/\/\/.*$/gm, "")), `${f} references the spike files`);
   }
   const lib = strip(fs.readFileSync(path.join(GAME, "lib/stockspike.js"), "utf8"));
   const ids = new Set(lib.match(/[A-Za-z_$][\w$]*/g));
