@@ -28,11 +28,11 @@ $100b and hack 2500 for the invite, then The Red Pill, then hack 3000. All of th
 |---|---|---|
 | Stock tick every 6 s (`msPerStockUpdate` 6e3, min 4e3); forecasts cycle every 75 ticks | `src/StockMarket/data/Constants.ts` | |
 | WSE $200m, TIX API $5b, 4S Market Data $1b, **4S TIX API $25b**, commission $100k per transaction | same | BN8 does not change the 4S multipliers (BN7 x2, BN9 x5/x4, BN11 x4, BN13 x10) |
-| Each tick: one shared `v = Math.random()`; a stock moves by `v * mv / 100` up with probability `forecast = (50 ± otlkMag)/100`, else down | `src/StockMarket/StockMarket.ts` `processStockPrices` (lines 260-290) | so the expected move per tick is about `(2f - 1) * mv / 200` (E[v] = 0.5) and every stock moves with the same `v` |
+| Each tick: one shared `v = Math.random()`; a stock moves by `v * mv / 100` up with probability `forecast = (50 ± otlkMag)/100`, else down | `src/StockMarket/StockMarket.ts` `processStockPrices` (lines 260-290) | `v` is shared (it scales the size of every stock's move) but each stock's direction is its own Bernoulli(`f`) draw. The expected move per tick is `(2f - 1) * getVolatility() / 2` (E[v] = 0.5); `getVolatility()` is `mv / 100`, a decimal (checked in `NetscriptFunctions/StockMarket.ts`, docs/specs/bn8-spike.md) |
 | A stock above its `cap` has up-probability forced to 0.1 | same | caps are random between 1e3 and 25e3 times the start price |
 | `getForecast` and `getVolatility` need the 4S TIX API; positions, prices and orders need the TIX API | NS docs | `ns.stock.getConstants()` already returns the costs (used in `game/tools/stocks.js`) |
-| Large trades move the price: `shareTxUntilMovement` | `src/StockMarket/Stock.ts` | the price impact of our own orders must be modeled (§4.3); not measured yet |
-| Whether stock positions or money survive an aug install in BN8 | `src/Prestige.ts` | **not verified**; `autopilot.js` already liquidates before installs (`cfg.stocks.liquidate`), the safe assumption |
+| **Our own orders do not move the price.** A transaction costs `shares * ask + commission`; it only lowers the stock's `otlkMag` by 0.006 per `shareTxForMovement` shares (12k to 216k, floor 5) | `StockMarketHelpers.ts`, `Stock.ts` | no impact model; the limits are the spread (0.1% to 2% each way), `getMaxShares`, and a slow forecast decay on stocks we trade a lot (§4.3). Verified, docs/specs/bn8-spike.md finding 1 |
+| **An aug install in BN8 sets money to exactly $250m and re-creates the market** (positions gone, forecasts re-rolled); a destroy does the same; SF8 re-grants WSE and TIX API | `Prestige.ts` `prestigeAugmentation` (161-171), `prestigeSourceFile` (302-331) | cash and positions earned before an install are lost: spend everything on augs/donations first (§5.5). Verified, finding 4 |
 
 ## 3. What exists
 - `game/tools/stocks.js`, kept alive by `hooks.stocksHook` in `game/lib/hooks.js`: buys WSE, TIX API, 4S, 4S TIX API in order when
@@ -58,16 +58,18 @@ Single instance on home; the tool is read-only toward everything except `ns.stoc
 | 2 data | 4S Market Data ($1b) is useful for the UI only; the API needs the **4S TIX API ($25b)** | save for the 25b item when equity (cash + positions) >= `cost / stocks.accessSpendFraction`; the owner can set the fraction higher in BN8 |
 | 3 informed | 4S TIX API owned | forecast-driven trading with the sizing below |
 
-The blind stage exists because $250m is 1% of the 25b item; it must make money without forecasts for a while. The estimator keeps a
-rolling window per symbol (price changes per tick over `stocks.window` ticks, default 40, about 4 min) and estimates `f` as the share of
-up-ticks, shrunk toward 0.5 by the standard error. Because every stock shares one random `v` per tick, a window of the market-wide
-average move is subtracted first so market noise does not look like an outlook. This is the least certain part of the design: it needs the
-spike in §7 before anyone relies on it.
+The blind stage exists because $250m is 1% of the 25b item; it must make money without forecasts for a while. The estimator keeps, per symbol, an
+exponentially weighted count of up and down ticks (`stocks.halfLife` ticks, default 20, about 2 min) and estimates `f` as the share of
+up-ticks, shrunk toward 0.5 (exponential weights, half-life 20 ticks, 8 pseudo-counts at 0.5; `lib/stockspike.js` `streamEstimator`). No
+market-wide correction is needed: the shared `v` scales the size of the moves, the direction of each stock is independent. On the simulated
+market of `test/helpers/stock-sim.js` (the game's real update rules) it reaches 77% of ticks within 0.10 of the true forecast and the correct side
+in 80% of ticks, and earns a small positive edge net of spread; whether the live market agrees is what the logger in `docs/specs/bn8-spike.md` measures
+(gates G1 to G5). This is still the least certain part of the design.
 
 ### 4.2 Edge model
-Per stock, with `f` = forecast (4S) or the shrunk estimate (blind) and `mv` = volatility in percent per tick:
+Per stock, with `f` = forecast (4S) or the shrunk estimate (blind) and `vol = ns.stock.getVolatility(sym)` (a decimal: the maximum per-tick move):
 ```
-edge_long  = (2f - 1) * mv / 200          expected fractional move per tick, long
+edge_long  = (2f - 1) * vol / 2            expected fractional move per tick, long
 edge_short = -edge_long                   short profits from the opposite
 cost_round = 2 * commission / position    round trip, as a fraction of the position
 ```
@@ -76,13 +78,13 @@ and `getBidPrice` are already read in `tools/stocks.js`) and `|f - 0.5| >= stock
 Forecast cycles every 75 ticks flip some stocks, so `expectedHoldTicks` is capped at 75 and the position is re-evaluated every tick.
 
 ### 4.3 Position sizing
-- Fractional Kelly on the per-tick edge: `frac = clamp(kellyScale * edge / variance, 0, maxPerStock)` with `variance = (mv/100)^2 / 3`
+- Fractional Kelly on the per-tick edge: `frac = clamp(kellyScale * edge / variance, 0, maxPerStock)` with `variance = vol^2 / 3`
   (uniform `v`) and `kellyScale = 0.25` (quarter Kelly, `stocks.kellyScale`).
 - Hard caps: `stocks.maxPerStock` (default 0.2 of equity), `stocks.maxExposure` (default 0.9 of equity in total, longs plus shorts),
   `stocks.maxShortFraction` (default 0.4 of equity short), never more than `getMaxShares - owned`.
-- Market impact: do not trade more shares than `shareTxUntilMovement` per order without re-reading the price (each order moves the price
-  once the counter is exhausted); split large orders over ticks. `stocks.impactSafety` (default 0.5) scales it. Real numbers come from
-  the spike.
+- No price impact (verified): do not model one. Track the shares traded per stock instead: every `shareTxForMovement` shares lower that stock's
+  forecast magnitude by 0.006 (floor 5), so a stock we churn loses edge slowly. Cap per-stock turnover with `stocks.maxTurnover` (shares per
+  `shareTxForMovement` window, default 2) and let the edge model see the erosion through the live `getForecast`.
 - Minimum trade `max(stocks.minTrade, 100 * commission)` so commissions stay below 1%.
 
 ### 4.4 Risk limits
@@ -107,8 +109,8 @@ does not earn).
 ### 4.6 Settings (schema group `stocks`, owner `stocks`)
 `stocks.enabled` (true), `stocks.dryRun` (false), `stocks.accessSpendFraction` (0.25), `stocks.minEdge` (0.08), `stocks.kellyScale`
 (0.25), `stocks.maxPerStock` (0.2), `stocks.maxExposure` (0.9), `stocks.maxShortFraction` (0.4), `stocks.stopLoss` (0.08),
-`stocks.maxDrawdown` (0.25), `stocks.cooldownMin` (30), `stocks.blindFraction` (0.2), `stocks.window` (40), `stocks.minTrade` (50e6),
-`stocks.impactSafety` (0.5). The old `cfg.stocks` keys in `lib/config.js` are read as fallbacks for one release, then removed.
+`stocks.maxDrawdown` (0.25), `stocks.cooldownMin` (30), `stocks.blindFraction` (0.2), `stocks.halfLife` (20), `stocks.minTrade` (50e6),
+`stocks.maxTurnover` (2). The old `cfg.stocks` keys in `lib/config.js` are read as fallbacks for one release, then removed.
 
 ## 5. BN8 bootstrap and planner changes
 1. **No hacking income.** `daemon.js` and `agent/daemon-lite.js` must not spend RAM on hack/grow/weaken for money in BN8. `ram.*` settings
@@ -122,8 +124,11 @@ does not earn).
    `augs.donateAtFavor` becomes `min(setting, game value)` when the game value is below it). One-line change plus test.
 4. **Planner money input.** `plan()` uses `snap.income` ($/s from scripts). In BN8 `sl-plan.js` must pass the stock module's
    `incomePerMin / 60` instead.
-5. **Install timing.** An install resets money; positions must be closed first (see §4.4). The planner's install ETA must include the
-   time to liquidate (one tick) and the commission.
+5. **Install timing.** An install **sets money to $250m and wipes the market** (verified, `Prestige.ts`): anything above $250m not spent
+   before the install is lost, and so are positions. The BN8 planner therefore buys the whole affordable aug batch, donates what it can,
+   then liquidates and installs; the next batch is rebuilt from $250m (the module's "stage 1/3" restarts, with SF8 owned WSE and TIX API
+   come back automatically). The install ETA must include the liquidation tick and commissions, and the 30-aug Daedalus count means several
+   such resets: the plan's cost is "$250m start per batch", not one long climb.
 6. **BN8 target setting.** `node.targets={"8":0}` keeps the bot out of BN8 until the module exists; once built the default order
    (`DEFAULT_BN_ORDER`) already contains BN8 after BN6 and BN7.
 
@@ -135,12 +140,14 @@ Highest risk: the blind-stage estimator losing the $250m. Mitigation: `blindFrac
 
 ## 7. Spikes (measure before building the module)
 Each is a read-only script or a log run on the live game; none changes game state.
-1. Price impact: log `shareTxUntilMovement` and the price after a 10-share buy/sell on one cheap stock (any node with TIX API).
+1. ~~Price impact~~ closed by the source (no price impact; forecast erosion only), docs/specs/bn8-spike.md finding 1.
 2. Blind estimator: record 24 h of price ticks for all stocks (cheap: `ns.stock.getPrice` per tick) and back-test the estimator against
    the ground truth `getForecast` once 4S is owned; the estimator must reach `|f_hat - f| < 0.1` on at least 70% of stocks, else the
    blind stage is replaced by "sit in cash until 4S" (slower but safe).
-3. Prestige behavior: does an aug install keep stock positions or cash? (`src/Prestige.ts` and one controlled test in a non-BN8 node.)
-4. Hash/`getVolatility` units (fraction or percent) on the live API.
+3. ~~Prestige behavior~~ closed by the source: money is reset to $250m and the market re-created on install and destroy (finding 4).
+4. ~~`getVolatility` units~~ closed by the source: a decimal fraction (finding 2); the logger still checks it live (gate G3).
+
+Items 2 (and the live confirmation of 4) are what `tools/stock-spike.js` + `server/stockspike-report.js` measure (PR: docs/specs/bn8-spike.md).
 
 ## 8. Tests (plain Node, `test/stockplan.js`)
 Pure planner: stage selection, edge sign for long/short, cost threshold, Kelly sizing and every cap, drawdown stop and cooldown, stop loss,

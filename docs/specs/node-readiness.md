@@ -88,4 +88,4 @@ order, BN8 is after BN6 and BN7, BN9 is sixth): the defaults are unchanged in `n
 1. Do labs 1 and 2 in `labyrinth.ts` (`manual: true`) block scripts? (decides BN15)
 2. Is the SF9.2 128 GB start enough to make the BN9 bootstrap bearable at SF4.1? (measure in the first BN9 run with the dry-run module)
 3. Do stock positions survive an install in BN8? (docs/specs/bn8-readiness.md §7)
-4. Live Source-File levels and the exact remaining destroys: read `GET /api/plan` after merge.
+4. ~~Live Source-File levels and remaining destroys~~ read back by the audit session on 2026-11-14: SF1, SF2, SF4, SF5, SF10 at 3, no SF8, no SF9, in BN3; `node.targets={"8":0,"9":0,"15":0}`; 11 destroys left in `node.order=[2,3,11,6,7]` (BN3 x2, BN11 x3, BN6 x3, BN7 x3), early warning not fired. BN8/BN9 are therefore far away, which is why the BN8 spike runs in the current node (docs/specs/bn8-spike.md §1b).
