@@ -90,6 +90,11 @@ existing script, which a test asserts, so no existing script's RAM changes.
 None for the game: the logger cannot trade (static test on the source) and only writes `data/stock-spike.txt`. Its cost is home RAM while running and a few MB of file; the
 default cap keeps the file under about 4 MB. The estimator is an experiment: it only becomes live code in PR 2 if the gates pass.
 
+## 8a. Owner decision 2026-11-15: run it in BN8
+The owner chose to wait for BN8 rather than buy WSE + TIX API (about $5.2b, roughly 7 h of income, which the autopilot spends first) in BN3. The logger stays deployed and not running. In BN8 it starts by itself:
+`tools/stocks.js` starts it once TIX API access exists (BN8 grants it) when home has room, and the daemon hook restarts that tool after every install (docs/specs/stocks-access-guard.md). Until then nothing
+buys TIX or 4S outside BN8. Manual start stays as described below.
+
 ## 8. How the owner runs it
 1. After merge and deploy, `bb push tools/stock-spike.js` (the pure lib is only needed by the Node report, not in game).
 2. In the current node (BN3 per the readback), once WSE + TIX API are owned (check `data/stocks.txt`; the logger never buys them): `run tools/stock-spike.js` on home and leave it for 8 h (5000 ticks, the default cap) for a decisive G5.
