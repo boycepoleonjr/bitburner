@@ -11,7 +11,7 @@ Autonomous Bitburner agent (see Vision and Mission below; README.md has the arch
 
 <!-- conventions:begin agents-core -->
 
-## Shared rules (conventions v1.9.2)
+## Shared rules (conventions v1.9.3)
 
 - Read this file, the README, `package.json` or equivalent, and `.github/workflows/` before changing code. Use the repo's real commands.
 - One branch per task (`<type>/<slug>`), Conventional Commits, minimal diffs: no refactors or unrelated edits in a fix PR.
@@ -25,7 +25,7 @@ Autonomous Bitburner agent (see Vision and Mission below; README.md has the arch
 - No AI attribution in commits, PR bodies or comments.
 - Never commit secrets, real customer data or `.env` files. Use synthetic data in tests and fixtures.
 - Deploy secrets (cloud tokens, account ids) live only in GitHub Environments restricted to specific branches (plus required reviewers where the plan allows), never as repository or organization secrets. Every job that reads them declares `environment:`; a new deploy branch is added to the environment's branch rule by an owner first; never reference them from `pull_request_target` or at workflow level.
-- Standard: https://github.com/boycepoleonjr/conventions/blob/v1.9.2/STANDARD.md
+- Standard: https://github.com/boycepoleonjr/conventions/blob/v1.9.3/STANDARD.md
 
 <!-- conventions:end agents-core -->
 
