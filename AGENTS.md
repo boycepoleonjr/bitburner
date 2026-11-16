@@ -11,20 +11,21 @@ Autonomous Bitburner agent (see Vision and Mission below; README.md has the arch
 
 <!-- conventions:begin agents-core -->
 
-## Shared rules (conventions v1.9.2)
+## Shared rules (conventions v1.9.3)
 
 - Read this file, the README, `package.json` or equivalent, and `.github/workflows/` before changing code. Use the repo's real commands.
 - One branch per task (`<type>/<slug>`), Conventional Commits, minimal diffs: no refactors or unrelated edits in a fix PR.
 - Open the PR non-draft (ready for review) so AI reviews run on every push. Run every command below and keep CI green before each push. Never merge.
 - PR description follows `.github/pull_request_template.md`: what, why, every command run with its real pass/fail, risk, and decisions needed.
 - Bug fixes add regression tests for every path of the fix (empty, invalid, valid input, and any guard you add), not just the reported repro. See `.claude/skills/fix-with-regression-tests`.
+- Files managed by conventions sync are tested upstream in boycepoleonjr/conventions; sync-only PRs should not be asked to add repo-level tests for them.
 - Dependency changes are declared openly in the manifest. Never hide a version change in `overrides` or `resolutions` while the manifest claims a different range. See `.claude/skills/dependency-update`.
 - Do not pin or cap versions to satisfy conventions or to avoid work; the lockfile and Dependabot own versions. Pin or set a floor only for a documented major security issue, and declare it in the manifest.
 - Non-trivial work gets a plan in `docs/specs/` first. End each session with a handoff in `docs/handoffs/YYYY-MM-DD-<topic>.md`.
 - No AI attribution in commits, PR bodies or comments.
 - Never commit secrets, real customer data or `.env` files. Use synthetic data in tests and fixtures.
 - Deploy secrets (cloud tokens, account ids) live only in GitHub Environments restricted to specific branches (plus required reviewers where the plan allows), never as repository or organization secrets. Every job that reads them declares `environment:`; a new deploy branch is added to the environment's branch rule by an owner first; never reference them from `pull_request_target` or at workflow level.
-- Standard: https://github.com/boycepoleonjr/conventions/blob/v1.9.2/STANDARD.md
+- Standard: https://github.com/boycepoleonjr/conventions/blob/v1.9.3/STANDARD.md
 
 <!-- conventions:end agents-core -->
 
@@ -49,6 +50,7 @@ Also check:
 - Stale closures in React effects, intervals and handlers; missing cleanup.
 - Bug fixes without a regression test for each path of the fix.
 - Non-trivial features without a plan in `docs/specs/`.
+- In a workflow that runs `anthropics/claude-code-action`, an `actions/checkout` step without `persist-credentials: false`. Any checkout version is fine; flag the missing setting, not the version.
 
 Do not flag behavior-preserving refactors (renames, function style, reordering).
 

@@ -1,4 +1,4 @@
-# Synced from boycepoleonjr/conventions v1.9.2 (CI-7).
+# Synced from boycepoleonjr/conventions v1.9.3 (CI-7).
 # Fails a PR, loudly, when a commit in it is authored or committed by an AI coding agent (Claude, Codex, Cursor Agent, Copilot, Jules,
 # Gemini: by name, login or email), has a Co-Authored-By trailer naming one, or has a Claude-Session trailer.
 # Dependabot, github-actions[bot] and GitHub's own merge commits are ignored. Read-only: it never edits anything.
