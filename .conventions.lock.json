@@ -3,13 +3,15 @@
     ".claude/skills/dependency-update/SKILL.md": "4bafcf9e0850a31b",
     ".claude/skills/fix-with-regression-tests/SKILL.md": "348b4366f1c1dbcb",
     ".claude/skills/open-pr/SKILL.md": "6e4693febb68f3c6",
-    ".github/workflows/claude-code-review.yml": "6de78a6b80206f51",
-    ".github/workflows/conventions-check.yml": "708c6c435c233bd8",
-    ".github/workflows/conventions-sync-check.yml": "602a400a98843507",
-    ".github/workflows/deploy-secrets-lint.yml": "a43cbcdf3d30c993",
-    "AGENTS.md": "8e56a1ba496ae970",
+    ".github/workflows/ai-attribution-check.yml": "7678303040c974ed",
+    ".github/workflows/ai-attribution-scrub.yml": "1ff37f5ba885eb4b",
+    ".github/workflows/claude-code-review.yml": "e521fe134c70bd25",
+    ".github/workflows/conventions-check.yml": "802d34c104341633",
+    ".github/workflows/conventions-sync-check.yml": "b3e8de605cffe7f2",
+    ".github/workflows/deploy-secrets-lint.yml": "4459d5f77f244950",
+    "AGENTS.md": "1aa9d4822ad5f3e9",
     "CLAUDE.md": "5288a96a7600cdf8"
   },
   "profile": "generic",
-  "version": "1.8.1"
+  "version": "1.9.3"
 }
