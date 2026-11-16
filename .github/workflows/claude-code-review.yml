@@ -1,4 +1,4 @@
-# Synced from boycepoleonjr/conventions v1.9.3 (CI-4). Edit there. Repo-specific review focus goes in "claude_review.focus" in .conventions.json; opt out by adding "claude-review" to "skip".
+# Synced from boycepoleonjr/conventions v1.9.2 (CI-4). Edit there. Repo-specific review focus goes in "claude_review.focus" in .conventions.json; opt out by adding "claude-review" to "skip".
 # Action refs (uses: ...@<sha>) are repo-owned after the first sync and kept current by Dependabot (SUP-7).
 name: Claude Code Review
 
