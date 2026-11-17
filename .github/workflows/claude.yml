@@ -44,7 +44,7 @@ jobs:
           echo "::error::Neither CLAUDE_CODE_OAUTH_TOKEN nor ANTHROPIC_API_KEY is set, so @claude cannot run. Add one under Settings > Secrets and variables > Actions (run 'claude setup-token' for the OAuth token)."
           exit 1
       # persist-credentials: false so no checkout token stays in git config while Claude runs.
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: env.HAS_CLAUDE_AUTH == 'true'
         with:
           fetch-depth: 1
