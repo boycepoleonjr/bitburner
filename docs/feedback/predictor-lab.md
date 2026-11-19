@@ -143,3 +143,81 @@ going early since ~2026-11-16 (outcomes arrive far sooner than any model predict
 the 50-outcome window). Donations are not the cause (last `donate` in audit.txt: 2026-11-12 12:55 UTC). To check
 next: a work switch or a jump in share RAM that raised the rep rate after the predictions were made. Next backlog item: (c) install-aware censoring; a rep-jump-aware
 member (donation / work-switch flag) deserves its own pre-registration.
+
+---
+
+## Run 2026-11-19 — experiment (c): install-aware censoring
+
+Data: snapshot 2026-11-19 ~13:15 UTC. `pred2.txt` tail (2 MB cap; `POST /api/ro/read` without `tailLines`, since
+`tailLines` is capped at 5,000 lines): 3,972 predictions (first 2026-10-15 02:55 UTC), 2,344 resolved, 1,608 voided by
+an install; `install-log.txt` 168 installs. New since the 2026-11-17 run: 180 resolved outcomes (resolved at or after
+2026-11-17 13:15 UTC), 162 of them made after it. No lab run was logged for 2026-11-18.
+
+### Pre-registration (written before the experiment ran)
+- Hypothesis: 41% of predictions (1,608; 84% of them in money >3h and rep >3h) are voided by an install and never reach
+  the calibrator. The resolved long-horizon outcomes it does see come from cycles that lasted long enough, so they lean
+  early. Treating a voided prediction as right-censored at its install (actual > censor time) and feeding that to the
+  band brings back the information on the late side. Expected: fewer censored definite misses, coverage toward 80% in
+  the >3h cells, and a lower interval score.
+- Candidate (pure predcal.js change; point and ensemble weights untouched, they still learn from resolved outcomes only):
+  - `censor: "aci"`: when the install voids a prediction, its band's per-edge ACI step uses the expected miss
+    indicators given actual > c (redistribution to the right under the band's own piecewise-lognormal distribution,
+    10% / 50% / 90% at lo / d / hi): late = 1 if c >= hi else S(hi) / S(c); early = 0 if c >= lo else
+    (F(lo) - F(c)) / S(c). Scaled by a censored weight `cw`.
+  - `censor: "km"`: as "aci", and the band quantiles of each cell also take censored residuals ln(c / d) through a
+    Kaplan-Meier (redistribution-to-the-right) estimate of the residual distribution, with weight `cw`; mass left
+    after the last resolved residual sits at the largest censored residual.
+  - The censor time is known only at the install (the void record's `at`); it is fed in time order like any outcome
+    (no look-ahead).
+- Windows: tuning = made before the snapshot's median made time (2026-11-08 03:39 UTC; 1,122 resolved); held-out = made
+  at or after it (1,222 resolved, 29 install cycles, 746 censored). Replay is rolling-origin over the whole snapshot.
+  Also reported on rows made after 2026-11-17 13:15 UTC (never seen by any lab run).
+- Tuning (tuning half only): `censor` in {aci, km} x `cw` in {0.5, 1}, chosen by the backtest objective (interval score
+  + coverage penalty). Frozen before held-out rows are scored.
+- Metric: held-out interval score (log space, alpha 0.2) on resolved outcomes, paired difference candidate − v3 with a
+  95% block bootstrap over install cycles (2,000 resamples, seed 7); secondary: median |log error| per kind x bucket,
+  coverage, censored definite misses (band ends before the install).
+- Acceptance: the standing rule above. Caveat stated in advance: the primary metric is scored on resolved outcomes only,
+  which is the selection this experiment corrects, so a candidate can improve censored misses and still fail the rule.
+  The rule is applied as written.
+
+### Baseline backtest (shipped v3 `DEFAULTS`, this snapshot; 95% block-bootstrap CIs over install cycles)
+| window | n | cycles | v2 coverage | v3 coverage [CI] | v2 IS | v3 IS | v2 median log err | v3 median log err | paired v3 − v2 IS [CI] |
+|---|---|---|---|---|---|---|---|---|---|
+| this run's held-out (made ≥ 11-08 03:39) | 1,222 | 29 | 0.623 | 0.789 [0.665, 0.869] | 3.59 | 3.12 | 0.161 | 0.115 | −0.47 [−1.52, +0.16] |
+| new since 2026-11-17 run (made ≥ 11-17 13:15) | 162 | 3 | 0.759 | 0.864 [0.316, 0.984] | 5.30 | 3.60 | 0.033 | 0.046 | −1.69 [−14.8, +0.50] |
+| whole snapshot (rolling origin) | 2,291 | 71 | 0.567 | 0.778 [0.709, 0.836] | 3.75 | 3.14 | 0.170 | 0.110 | −0.61 [−1.43, +0.04] |
+
+Censored definite misses: held-out v2 12.3%, v3 12.1% (746 censored; money >3h 25.7% of 210, money 1-3h 21.6%);
+whole snapshot v2 17.1%, v3 6.1%. Held-out cells with n >= 30 outside 70-90%: level >3h 0.585 (n 53), money <20m 0.645
+(n 31), rep 20-60m 0.909 (n 132). Calibration replay of 3,972 predictions: 3.2 s (candidate 3.3 s).
+
+### Result
+Tuning half: every candidate was worse than shipped v3 (objective: v3 3.308; aci/0.5 3.726, aci/1 3.749, km/0.5 3.897,
+km/1 4.054; coverage fell 0.765 → 0.72-0.74). The rule picks the best grid point, aci with cw 0.5, frozen before scoring
+held-out rows. A check run with `censor: "none"` reproduced the shipped scores exactly.
+
+| held-out (made ≥ 11-08 03:39) | v3 | censored ACI (cw 0.5) | change |
+|---|---|---|---|
+| interval score | 3.122 | 2.952 | −5.4%, paired CI [−0.399, +0.052] (includes 0) |
+| coverage | 0.789 | 0.767 | away from 80% |
+| early / late | 0.120 / 0.091 | 0.156 / 0.077 | more early misses |
+| censored definite misses | 12.1% | 12.1% | unchanged |
+| rep >3h (n 292): coverage, IS | 0.760, 4.15 | 0.671, 3.47 | narrower band, coverage out of 70-90% |
+| money >3h (n 211): coverage, IS | 0.735, 4.07 | 0.749, 3.95 | slightly better |
+| median log err, every bucket | — | — | unchanged (the point is untouched) |
+| new rows (made ≥ 11-17 13:15), IS | 3.602 | 3.506 | −2.7%, paired CI [−0.110, 0.000] (3 cycles) |
+
+Verdict: **rejected.** The interval score falls 5.4%, but the CI includes 0, coverage moves away from 80%, and the
+tuning half preferred shipped v3 over every censoring variant.
+
+Learned: censored rows mostly carry lower-edge information. Most voids happen after the band's lower edge, which
+counts as "not early" and narrows the lower edge, so early misses rise (rep >3h coverage 0.76 → 0.67). On the upper edge
+the late signal is real: the live snapshot has the upper ACI alpha pinned at its 0.25 ceiling (narrowest band) in money
+>3h, rep >3h, level >3h and money 1-3h, because late outcomes are voided and never seen as resolved. The candidate drives
+money >3h's upper alpha to the 0.01 floor, but the censored definite misses do not move (25.7%). The 99th percentile of
+resolved residuals still ends before the install, because resolved residuals never include the long-late tail. ACI
+cannot widen past data it has not seen. Kaplan-Meier residuals should fix that in principle, but were the worst on the
+tuning half, because the censoring is not independent of the residual (cycles end when the augs are bought). A fair test of
+censoring needs a metric that also scores voided rows (for example a censored interval score). The standing rule scores
+resolved rows only, so it cannot reward this fix. Next backlog item: (d) cycle-phase cells with shrinkage.
