@@ -221,3 +221,77 @@ cannot widen past data it has not seen. Kaplan-Meier residuals should fix that i
 tuning half, because the censoring is not independent of the residual (cycles end when the augs are bought). A fair test of
 censoring needs a metric that also scores voided rows (for example a censored interval score). The standing rule scores
 resolved rows only, so it cannot reward this fix. Next backlog item: (d) cycle-phase cells with shrinkage.
+
+## Run 2026-11-22 — experiment (b): regime-aware reset prior
+
+Data: snapshot 2026-11-22 ~13:07 UTC. `pred2.txt` tail (2,000,000 bytes, truncated): 3,845 predictions (first
+2026-10-26 18:48 UTC, last 2026-11-22 12:51 UTC), 2,122 resolved, 1,701 voided by an install, 60 install cycles;
+`install-log.txt` 172 installs. New since the last run (2026-11-16 13:15 UTC): 923 resolved outcomes. 1,894 of the
+2,122 resolved outcomes (89%) resolve inside the install cycle they were made in, so within-cycle data exists for
+every bucket except level >3h (92 of 159).
+
+### Pre-registration (written before the experiment ran)
+- Hypothesis: v3 pools the last `maxObs` outcomes of a cell with equal weight, so right after an install its bias
+  corrections, member weights, band residuals and ACI alphas are those of the end of the previous cycle (a different
+  regime: fresh augs, reset money and RAM, new faction work). Treating earlier cycles as a prior with a bounded
+  pseudo-count, and letting outcomes of the current cycle take over as they arrive, lowers the interval score.
+- Candidate (pure predcal.js option, no new ns calls): `cyclePrior = K`. When the calibrator predicts for install
+  cycle C (the sample's `lastAug`), each cell is fitted with weight 1 for outcomes made in cycle C and weight
+  min(1, K / n_prior) for outcomes of earlier cycles (their total weight is capped at K). Weights apply to the bias
+  correction, the prequential member losses and the band residual quantiles. `aciReset`: at the first prediction of
+  a new cycle every kind|bucket ACI alpha restarts from that cell's mean alpha over all earlier steps (the prior)
+  instead of carrying its last value. K = infinity is v3 as shipped.
+- Windows: tuning = predictions made before the median `made` of the snapshot (2026-11-15 19:29 UTC; 1,035
+  resolved); held-out = made at or after it (1,087 resolved). Rolling-origin replay over the whole snapshot (no
+  look-ahead); only the configuration choice is fit, on tuning rows only.
+- Tuning grid (6 configs): K in {20, 50, 150} x aciReset in {false, true}, all other options = shipped `DEFAULTS`.
+  Choose the config with the lowest `objective()` of scripts/predictor-backtest.js (interval score + 10 x coverage
+  distance beyond 0.02) on the tuning half. That one config is scored on the held-out half once, whatever its
+  tuning rank against v3.
+- Metric: held-out interval score (log space, alpha 0.2), paired difference candidate - v3 with a 95% block
+  bootstrap over install cycles (2,000 resamples, seed 7); secondary: median |log error| per kind x bucket,
+  coverage, censored definite misses, replay time.
+- Acceptance: the standing rule above.
+
+### Baseline backtest (shipped v3 `DEFAULTS`, lab snapshot; 95% block-bootstrap CIs over install cycles)
+| window | n | cycles | v2 coverage | v3 coverage [CI] | v2 IS | v3 IS [CI] | v2 median log err | v3 median log err [CI] |
+|---|---|---|---|---|---|---|---|---|
+| lab held-out (made ≥ 11-15 19:29) | 1,087 | 11 | 0.629 | 0.742 [0.611, 0.841] | 3.43 | 3.23 [2.06, 5.04] | 0.170 | 0.163 [0.066, 0.260] |
+| new since last run (made ≥ 11-16 13:15) | 914 | 10 | 0.632 | 0.718 [0.570, 0.824] | 3.76 | 3.33 [2.00, 5.50] | 0.181 | 0.157 [0.064, 0.315] |
+| whole snapshot | 2,117 | 44 | 0.577 | 0.736 [0.625, 0.828] | 3.89 | 3.79 [2.62, 5.34] | 0.196 | 0.180 [0.091, 0.266] |
+
+Paired v3 − v2 interval score: lab held-out [−1.27, +0.33], new data [−1.74, +0.07] (both contain 0). Censored
+definite misses, lab held-out: v2 10.4%, v3 7.6%. Last run's held-out (v3 coverage 0.811, IS 2.91, median 0.147) was
+better than the new week: coverage drifted down to 0.72-0.74. Held-out cells outside 70-90%: rep >3h 0.661 (n 369,
+CI 0.34-0.85), level >3h 0.467 (n 45, 5 cycles); live liveCoverage agrees (rep >3h 0.48, level >3h 0.54, last 50).
+Both miss mostly early (outcome before the band): rep >3h early 24% / late 10%, median log bias −0.16; level >3h
+early 40% / late 13%, bias −0.54; money >3h early 17% / late 7%, bias −0.56. Long horizons are reached sooner than
+predicted. Calibration replay of 3,845 predictions: 1.6 s.
+
+### Result
+Tuning half (objective = IS + coverage penalty; v3 4.889): K 20 4.919, K 20 + reset 5.482, **K 50 4.857**, K 50 +
+reset 5.427, K 150 4.875, K 150 + reset 5.473. Chosen: `cyclePrior 50, aciReset false` (0.7% better than v3 on
+tuning). The scratch implementation with both options off reproduced v3 exactly (0 differing predictions).
+
+| held-out | v3 | cycle prior K=50 | change |
+|---|---|---|---|
+| interval score | 3.226 | 3.316 | +2.8% (worse), paired CI [+0.002, +0.216] |
+| coverage | 0.742 | 0.745 | +0.003 toward 80% |
+| median log err, all | 0.163 | 0.162 | −0.6% |
+| median log err, buckets with n ≥ 30 | — | — | all within ±1% |
+| interval score, rep >3h (n 369) | 4.178 | 4.384 | +4.9% |
+| interval score, money >3h (n 178) | 3.799 | 3.908 | +2.9% |
+| censored definite misses | 7.6% | 8.4% | worse |
+| new data only: interval score | 3.327 | 3.429 | +3.1% (worse), paired CI [+0.007, +0.226] |
+| replay time | 1.60 s | 1.54 s | same |
+
+Verdict: **rejected.** Interval score is worse, and the paired CI excludes 0 on the wrong side. Point error is
+unchanged (within 1% on every bucket), so the limit holds, but the main rule fails.
+
+Learned: earlier cycles are not a stale regime to be discounted; consecutive install cycles in one BitNode look
+alike, and the outcomes inside one cycle are few and strongly autocorrelated (lag-1 ACF 0.65-0.84 on long buckets),
+so up-weighting them adds noise. Resetting ACI at each install was clearly harmful on tuning (+11-12% objective):
+the carried alpha is useful information. What the misses show instead is a one-sided bias: long horizons arrive
+early (bias −0.16 to −0.56 in log), so the rate-extrapolating base models miss in-cycle acceleration (growing income,
+rep multipliers, RAM). That points at (e) quantile regression on time-since-install / rates or (f) a trend model,
+not at re-weighting. Found after looking at held-out data: a hypothesis for a later pre-registration, not a result.
