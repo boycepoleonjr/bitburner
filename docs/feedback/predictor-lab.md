@@ -77,3 +77,70 @@ tuning and 54% worse held-out; level >3h 65% better, then 2% worse). The prequen
 The one ranking that held in all three windows is money >3h → v2's point (tuning −24%, held-out −25%, new −32%).
 That was found after looking at held-out data, so it is a hypothesis, not a result. If it is tested, it gets its own
 pre-registration and only data made after 2026-11-16 13:15 UTC counts as held-out.
+
+---
+
+## Run 2026-11-23 — experiment (b): regime-aware reset prior (within-cycle offset)
+
+Data: snapshot 2026-11-23 ~13:15 UTC. `pred2.txt` tail (2 MB cap): 3,807 predictions (first 2026-10-31 02:52 UTC),
+2,167 resolved with their prediction present, 1,602 voided by an install; `install-log.txt` 173 installs. New since
+the 2026-11-16 run (made >= 11-16 13:15 UTC): 1,037 resolved outcomes in 11 install cycles. The snapshot now starts
+after the 2026-11-16 one, so the replay starts cold on 2026-10-31 for every candidate.
+
+### Pre-registration (written before the experiment ran)
+- Hypothesis: v3 carries the state of earlier cycles straight into each new install cycle; nothing in it knows that
+  outcomes from the current cycle share one regime (faction, rep multiplier, RAM, spend pattern; lag-1 autocorrelation
+  0.6-0.8 in the long buckets). Treat the pooled cross-cycle v3 model as the prior every cycle starts from, and learn a
+  per-cycle log offset from the honest residuals ln(actual / v3 point) of outcomes in the SAME install cycle (same
+  `lastAug`) and kind that were known before the prediction was made: offset = median(residuals) x n / (n + K). At a
+  reset n = 0, so the cycle starts exactly at the prior (no extrapolation from the previous cycle's tail). The offset
+  shifts the point and both band edges (band width unchanged). This should cut point error and the interval score in
+  the long buckets, where one cycle's bias dominates.
+- Grid (tuning half only): K in {5, 15, 40} x scope in {kind, kind x bucket}. Pick the lowest tuning interval score;
+  frozen before held-out rows are scored.
+- Windows: the backtest's own split. Tuning = predictions made before 2026-11-16 08:43 UTC (the median `made` time of
+  the snapshot); held-out = made at or after it. The held-out half is almost entirely data no earlier experiment saw.
+  Replay is rolling-origin (the offset only uses outcomes with knownAt <= made).
+- Metric: held-out interval score (log space, alpha 0.2), paired difference candidate - v3 with a 95% block bootstrap
+  over install cycles (2,000 resamples, seed 7); secondary: median |log error| per kind x bucket, coverage.
+- Acceptance: the standing rule above.
+
+### Baseline backtest (shipped v3 `DEFAULTS`, 2026-11-23 snapshot; 95% block-bootstrap CIs over install cycles)
+| window | n | cycles | v2 coverage [CI] | v3 coverage [CI] | v2 IS | v3 IS [CI] | v2 median log err | v3 median log err [CI] |
+|---|---|---|---|---|---|---|---|---|
+| before the 11-16 run (made < 11-16 13:15) | 1,084 | 33 | 0.585 [0.48, 0.67] | 0.773 [0.65, 0.85] | 3.27 | 3.33 [2.52, 4.39] | 0.179 | 0.143 [0.07, 0.24] |
+| new since the 11-16 run | 1,037 | 11 | 0.631 [0.51, 0.73] | 0.721 [0.59, 0.82] | 3.61 | 3.19 [2.01, 4.91] | 0.169 | 0.127 [0.07, 0.24] |
+| lab held-out (made >= 11-16 08:43) | 1,073 | 12 | 0.634 [0.52, 0.73] | 0.721 [0.59, 0.81] | 3.54 | 3.14 [2.00, 4.72] | 0.167 | 0.120 [0.07, 0.23] |
+
+Paired v3 − v2 interval score: held-out −0.40 [−1.50, +0.11]; new data −0.42 [−1.68, +0.11] (not significant).
+Compared with the 2026-11-16 log, v3's coverage on new data fell from 0.865 (6 cycles) to 0.721 (11 cycles), while
+point error improved (0.161 → 0.127). Held-out v3 by bucket (n >= 30): rep >3h 0.584 [0.32, 0.77] (n 320), level >3h
+0.535 [0.05, 1.00] (n 43, 4 cycles), money >3h 0.698 [0.53, 0.81], money 1-3h 0.739, rep <20m 0.833, rep 20-60m 0.856,
+rep 1-3h 0.869. Live liveCoverage (last 50 per cell, 2026-11-23 12:46 UTC) flags the same cells: rep >3h 0.40,
+money >3h 0.50, level >3h 0.54, money 1-3h 0.68. Censored definite misses held-out: v2 10.7%, v3 8.9%. Replay of
+3,807 predictions: about 1.5 s per candidate.
+
+### Result
+Chosen on the tuning half: K = 15, scope = kind (tuning interval score 3.380 → 3.281, −2.9%).
+
+| held-out | v3 | candidate (b) | change |
+|---|---|---|---|
+| interval score | 3.141 | 3.224 | +2.6% (worse), paired CI [+0.008, +0.156] |
+| coverage | 0.721 | 0.651 | away from 80% |
+| median log err, rep >3h (n 320) | 0.111 | 0.153 | +38% |
+| median log err, rep 1-3h (n 191) | 0.007 | 0.020 | +186% |
+| median log err, rep 20-60m (n 104) | 0.011 | 0.020 | +82% |
+| median log err, rep <20m (n 60) | 0.030 | 0.062 | +107% |
+| median log err, money >3h (n 182) | 0.630 | 0.629 | 0% |
+| median log err, money 1-3h (n 88) | 0.594 | 0.606 | +2% |
+| median log err, level >3h (n 43) | 0.899 | 0.905 | +1% |
+
+Verdict: **rejected.** The held-out interval score is significantly worse (the CI excludes 0 on the wrong side),
+every rep bucket loses far more than 10% point accuracy, and coverage moves away from 80%. No grid point beat v3 on
+the held-out half either (3.154 to 3.322 vs 3.141; reported, not used for selection).
+
+Learned: the same-cycle residual is not a usable regime signal. The tuning-half gain (−2.9%) reversed out of sample,
+as in experiment (a). Pooling by kind lets the large >3h residuals shift the already accurate short rep points; the
+per-bucket scope has too few same-cycle outcomes before the long targets resolve. The live problem is now
+under-coverage in the long buckets (rep >3h, level >3h, money >3h), which a point shift does not fix. The next
+backlog items that target it directly are (c) install-aware censoring and (d) cycle-phase cells with shrinkage.
