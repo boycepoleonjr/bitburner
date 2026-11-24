@@ -11,6 +11,9 @@ Standing acceptance rule (every experiment): held-out interval score improves by
 held-out kind x bucket with n >= 30; overall 80%-band coverage moves toward 80%; RAM/CPU limits of
 docs/specs/predictor-v3.md hold (pure predcal.js, no new ns calls, calibration time about the same).
 
+PR policy (owner, 2026-11-24): every run opens its own non-draft PR for its log entry, any day of the week, changing
+only this file. This replaces "Mondays only" in the routine prompt. Never leave a lab branch without a PR.
+
 ## Snapshot limits (read before comparing runs)
 `/api/ro/read` returns at most the last 2,000,000 bytes of `data/pred2.txt`, so a lab snapshot starts later than the
 v3 PR's full-file snapshot (first prediction 2026-09-27). Lab numbers are recomputed on the lab snapshot for both the
