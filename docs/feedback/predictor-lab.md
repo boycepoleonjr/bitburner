@@ -400,3 +400,52 @@ resolved outcomes (200 made after it, 3 install cycles). No lab run was logged f
   over install cycles (2,000 resamples, seed 7); secondary: median |log error| per kind x bucket, coverage per bucket,
   censored definite misses, replay time.
 - Acceptance: the standing rule above. Point error should be unchanged by construction; a change there is a bug.
+
+### Baseline backtest (shipped v3 `DEFAULTS`, 2026-11-25 snapshot; 95% block-bootstrap CIs over install cycles)
+| window | n | cycles | v2 coverage [CI] | v3 coverage [CI] | v2 IS [CI] | v3 IS [CI] | v2 median log err | v3 median log err [CI] |
+|---|---|---|---|---|---|---|---|---|
+| before the 11-23 run (made < 11-23 13:15) | 1,956 | 37 | 0.622 [0.54, 0.69] | 0.716 [0.62, 0.79] | 3.36 [2.37, 4.93] | 3.39 [2.56, 4.57] | 0.168 | 0.154 [0.09, 0.20] |
+| new since the 11-23 run | 200 | 3 | 0.715 [0.00, 0.92] | 0.840 [0.17, 0.97] | 3.68 [0.29, 23.0] | 3.74 [1.34, 15.5] | 0.094 | 0.072 [0.07, 1.39] |
+| lab held-out (made >= 11-17 16:50) | 1,050 | 11 | 0.643 [0.51, 0.74] | 0.747 [0.63, 0.83] | 3.62 [2.13, 6.43] | 3.45 [2.30, 5.30] | 0.145 | 0.121 [0.07, 0.24] |
+| whole snapshot | 2,156 | 39 | 0.630 [0.55, 0.70] | 0.728 [0.64, 0.79] | 3.39 [2.41, 4.88] | 3.42 [2.62, 4.51] | 0.158 | 0.142 [0.09, 0.20] |
+
+Paired v3 − v2 interval score: held-out −0.17 [−1.27, +0.45], new data +0.06 [−7.4, +1.0], whole +0.01 [−0.49, +0.37]
+(all contain 0). Against the 2026-11-23 log (held-out ≥ 11-16 08:43: v3 coverage 0.721, IS 3.14, median 0.120), this
+held-out has coverage up (0.747) and median error flat (0.121); IS is higher (3.45), driven by level >3h (IS 13.0,
+coverage 0.423, n 52, 6 cycles). Held-out cells with n >= 30 outside 70-90%: level >3h 0.423, money >3h 0.698, rep >3h
+0.704 (edge). Censored definite misses held-out: v2 12.6%, v3 10.5%. Replay of 3,783 predictions: 1.2 s.
+
+### Result
+Tuning half (objective; v3 4.083, IS 3.383, coverage 0.710): A/10 4.779, A/30 4.518, A/100 4.463, A/300 4.162,
+B/10 4.551, B/30 4.388, B/100 4.129, **B/300 4.008** (IS 3.298, coverage 0.709). Chosen and frozen: scheme B (< 3h,
+3-9h, >= 9h), cycleK 300. The scratch implementation with `cycleBand: false` reproduced shipped v3 exactly (0 differing
+predictions).
+
+| held-out (made >= 11-17 16:50) | v3 | cycle-phase band B/300 | change |
+|---|---|---|---|
+| interval score | 3.454 | 3.434 | −0.6%, paired CI [−0.131, +0.081] (includes 0) |
+| coverage | 0.747 | 0.725 | away from 80% |
+| early / late | 0.109 / 0.145 | 0.112 / 0.163 | more late misses |
+| median log err, every bucket | — | — | identical (the point is untouched, as designed) |
+| rep >3h (n 297): coverage, IS | 0.704, 4.43 | 0.640, 4.42 | coverage leaves 70-90% |
+| money >3h (n 212): coverage, IS | 0.698, 3.59 | 0.698, 3.49 | −2.6% IS |
+| level >3h (n 52): coverage, IS | 0.423, 13.01 | 0.423, 12.99 | unchanged |
+| rep, phase < 3h (n 92): coverage, IS | 0.500, 3.24 | 0.554, 2.95 | better early in the cycle |
+| rep, phase >= 9h (n 333): coverage, IS | 0.850, 2.69 | 0.781, 2.74 | narrower late, slightly worse |
+| censored definite misses | 10.5% | 2.4% | much fewer bands end before the install |
+| new rows (made >= 11-23 13:15), IS | 3.740 | 3.797 | +1.5% (worse), paired CI [−0.069, +0.161] (3 cycles) |
+| replay time | 1.20 s | 1.89 s | +58% (still about 2 s for the whole log) |
+
+Verdict: **rejected.** The interval score improves 0.6%, not 5%, its CI includes 0, and coverage moves away from 80%.
+Point error is unchanged by construction. No grid point would have passed on held-out either (3.36 to 3.51 vs 3.45;
+diagnostic only, not used for selection).
+
+Learned: the phase effect is real but small and one-sided. Early in a cycle the band is too narrow (rep < 3h coverage
+0.50) and phase cells widen it; late in a cycle they narrow it, and with ACI levels shared per kind x bucket the
+narrowing outweighs, so overall coverage falls. The tuning half preferred the strongest shrinkage (K 300, i.e. barely
+split), which already said the split carries little signal at this data size (phase cells have 10-140 tuning outcomes).
+A side effect worth noting: censored definite misses fall from 10.5% to 2.4%, because early-phase long-horizon bands
+widen past the next install. That is the same signal experiment (c) was after, and the standing rule (resolved rows
+only) cannot score it. The biggest single contributor to the interval score is now level >3h (IS 13, coverage 0.42,
+point error 0.68): a point problem, not a band problem. Next backlog item: (e) quantile regression on features
+(phase, time since install, RAM, income rate, rep rate, hack level) with conformal correction.
