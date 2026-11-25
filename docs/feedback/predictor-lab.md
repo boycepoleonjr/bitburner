@@ -365,3 +365,38 @@ as in experiment (a). Pooling by kind lets the large >3h residuals shift the alr
 per-bucket scope has too few same-cycle outcomes before the long targets resolve. The live problem is now
 under-coverage in the long buckets (rep >3h, level >3h, money >3h), which a point shift does not fix. The next
 backlog items that target it directly are (c) install-aware censoring and (d) cycle-phase cells with shrinkage.
+
+---
+
+## Run 2026-11-25 — experiment (d): cycle-phase band cells with shrinkage
+
+Data: snapshot 2026-11-25 ~13:15 UTC. `pred2.txt` tail (2 MB cap): 3,783 predictions (first 2026-11-05 20:59 UTC,
+last 2026-11-25 12:52 UTC), 2,167 resolved with their prediction present, 1,439 voided by an install, 177 open;
+`install-log.txt` 174 installs (last 2026-11-24 07:57 UTC). New since the last logged run (2026-11-23 13:15 UTC): 238
+resolved outcomes (200 made after it, 3 install cycles). No lab run was logged for 2026-11-24.
+
+### Pre-registration (written before the experiment ran)
+- Hypothesis: v3 sizes the band of a kind x bucket cell from one pool of residuals, but the error depends on where in
+  the install cycle a prediction is made: early in a cycle money, RAM and faction work are still changing (a 4h horizon
+  made 30 min after an install crosses the purchases that follow it), late in a cycle the regime is settled. One pooled
+  band is then too narrow early and too wide late, which fits the live flags in both directions (level >3h 0.52,
+  money >3h 0.94, rep 1-3h 0.96). Splitting the BAND (not the point) by cycle phase, shrunk toward the kind x bucket
+  band, lowers the interval score. The existing `useCycle` (point and band both split, fixed shrinkK 30) is a different
+  candidate: the shipped backtest already shows it worse, and it is not re-tested here.
+- Candidate (pure predcal.js option, no new ns calls): `cycleBand: true`. Outcomes are also kept in
+  kind|bucket|phase cells; the point, its ensemble weights and the bias corrections still come from kind|bucket (and
+  its parents) exactly as shipped; the band quantiles come from the phase cell, shrunk toward the already-shrunk
+  kind|bucket quantiles by nr / (nr + cycleK). ACI alphas stay per kind|bucket (one level pair shared by its phases).
+  `cycleBand: false` must reproduce shipped v3 exactly.
+- Phase schemes: A = shipped `CYCLES` (< 1h, 1-4h, >= 4h since install); B = tuning-half terciles of time since
+  install over all predictions (2.8h and 9.1h, rounded to < 3h, 3-9h, >= 9h).
+- Grid (tuning half only, 8 configs): phase scheme {A, B} x cycleK {10, 30, 100, 300}; everything else = shipped
+  `DEFAULTS`. Choose the lowest `objective()` of scripts/predictor-backtest.js (interval score + 10 x coverage
+  distance beyond 0.02) on tuning rows; frozen before held-out rows are scored, whatever its rank against v3.
+- Windows: the backtest's own split. Tuning = made before 2026-11-17 16:50 UTC (the snapshot's median made time;
+  1,117 resolved); held-out = made at or after it (1,050 resolved, 11 install cycles). Rolling-origin replay over the
+  whole snapshot (no look-ahead). Also reported on rows made after 2026-11-23 13:15 UTC (never seen by a lab run).
+- Metric: held-out interval score (log space, alpha 0.2), paired difference candidate − v3 with a 95% block bootstrap
+  over install cycles (2,000 resamples, seed 7); secondary: median |log error| per kind x bucket, coverage per bucket,
+  censored definite misses, replay time.
+- Acceptance: the standing rule above. Point error should be unchanged by construction; a change there is a bug.
