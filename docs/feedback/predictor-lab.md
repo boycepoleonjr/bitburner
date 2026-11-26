@@ -365,3 +365,93 @@ as in experiment (a). Pooling by kind lets the large >3h residuals shift the alr
 per-bucket scope has too few same-cycle outcomes before the long targets resolve. The live problem is now
 under-coverage in the long buckets (rep >3h, level >3h, money >3h), which a point shift does not fix. The next
 backlog items that target it directly are (c) install-aware censoring and (d) cycle-phase cells with shrinkage.
+
+---
+
+## Run 2026-11-26 — experiment (d): cycle-phase cells for the band, with shrinkage
+
+Data: snapshot 2026-11-26 ~13:08 UTC. `pred2.txt` tail (2 MB cap): 3,726 predictions (first 2026-11-10 05:45 UTC, last
+2026-11-26 13:07 UTC), 2,110 resolved with their prediction present, 1,503 voided by an install, 36 install cycles;
+`install-log.txt` 176 installs. New since the 2026-11-23 run (known at or after 2026-11-23 13:15 UTC): 395 resolved
+outcomes, 357 of them made after it (5 install cycles). No runs were logged on 2026-11-24 and 2026-11-25.
+
+### Pre-registration (written before the experiment ran)
+- Hypothesis: errors depend strongly on the cycle phase (time since the last install; v3 spec D-cycle: money median log
+  error 1.04 in the first hour vs 0.51 after 4 h, rep 0.175 vs 0.020), but v3's band uses one residual distribution
+  per kind x bucket for the whole cycle. The shipped `useCycle` option split point AND band by phase and lost (PR #52
+  R1 (c): too sparse). This candidate splits only the band: band quantiles come from kind x bucket x phase cells (c0
+  < 1 h, c1 1-4 h, c2 >= 4 h since install, the existing `CYCLES`), shrunk toward the kind x bucket band with their own
+  pseudo-count `Kc` (lambda = n / (n + Kc)); the point keeps the kind x bucket ensemble unchanged. Expected: wider
+  bands early in a cycle, narrower late, a lower interval score at about the same coverage.
+- Candidate (pure predcal.js option, no new ns calls): `cycleBand = Kc` (0 = off = v3 as shipped) and `cycleAci`
+  (false: the phase cells use the kind x bucket ACI levels; true: each phase cell also runs its own per-edge ACI and the
+  kind x bucket levels keep running as before).
+- Windows: tuning = predictions made before the snapshot's median `made` time (2026-11-20 01:44 UTC; 1,140 resolved);
+  held-out = made at or after it (970 resolved, 10 install cycles, 780 voided). Rolling-origin replay over the whole
+  snapshot (no look-ahead); only the configuration choice is fit, on tuning rows only. Also reported on rows made after
+  2026-11-23 13:15 UTC (never seen by any lab run).
+- Tuning grid (6 configs): Kc in {30, 100, 300} x cycleAci in {false, true}, all other options = shipped `DEFAULTS`.
+  Choose the lowest `objective()` of scripts/predictor-backtest.js (interval score + 10 x coverage distance beyond
+  0.02) on the tuning half; that one config is scored on the held-out half once, whatever its tuning rank against v3.
+- Metric: held-out interval score (log space, alpha 0.2), paired difference candidate − v3 with a 95% block bootstrap
+  over install cycles (2,000 resamples, seed 7); secondary: median |log error| per kind x bucket (the point is
+  unchanged by construction, so this must stay identical), coverage per bucket and per phase, censored definite misses,
+  replay time.
+- Acceptance: the standing rule above. Caveat stated in advance: the held-out half has only 10 install cycles, so the
+  bootstrap CI will be wide; the rule is applied as written.
+
+### Baseline backtest (shipped v3 `DEFAULTS`, 2026-11-26 snapshot; 95% block-bootstrap CIs over install cycles, 2,000 resamples, seed 7)
+| window | n | cycles | v2 coverage [CI] | v3 coverage [CI] | v2 IS | v3 IS [CI] | v2 median log err | v3 median log err [CI] | paired v3 − v2 IS [CI] |
+|---|---|---|---|---|---|---|---|---|---|
+| this run's held-out (made >= 11-20 01:44) | 970 | 10 | 0.600 [0.46, 0.71] | 0.757 [0.66, 0.83] | 2.86 | 3.10 [2.37, 4.25] | 0.164 | 0.139 [0.08, 0.24] | +0.24 [−0.21, +0.61] |
+| 2026-11-23 held-out window (made >= 11-16 08:43) | 1,468 | 16 | 0.626 [0.52, 0.72] | 0.743 [0.66, 0.81] | 3.39 | 3.27 [2.32, 4.63] | 0.153 | 0.112 [0.08, 0.20] | −0.12 [−0.81, +0.33] |
+| new since the 11-23 run (made >= 11-23 13:15) | 357 | 5 | 0.563 [0.35, 0.85] | 0.857 [0.69, 0.94] | 3.24 | 3.35 [1.86, 5.62] | 0.114 | 0.069 [0.05, 0.35] | +0.11 [−0.83, +0.64] |
+| whole snapshot (rolling origin) | 2,086 | 32 | 0.628 [0.55, 0.70] | 0.737 [0.65, 0.80] | 3.14 | 3.31 [2.52, 4.31] | 0.154 | 0.126 [0.08, 0.19] | +0.17 [−0.47, +0.80] |
+
+Same window as the 2026-11-23 log (made >= 11-16 08:43): coverage 0.721 → 0.743, interval score 3.14 → 3.27, median
+log error 0.120 → 0.112 (the snapshot lost its oldest ten days to the 2 MB cap, so the replay starts colder). For the
+first time v2's interval score is lower than v3's on a lab window (held-out 2.86 vs 3.10), but the paired CI contains 0
+and v2 covers only 60%: v2's bands are narrow and miss often, v3's are wide in the money buckets. Held-out v3 cells with
+n >= 30 outside 70-90%: money >3h 0.645 (n 211, late 25%), money 1-3h 0.691 (n 81), money 20-60m 0.674 (n 43). Live
+`liveCoverage` (last 50, 2026-11-26 13:08 UTC) now flags the other side: rep 1-3h 0.96 and rep >3h 0.98 (over-cover);
+money >3h 0.74, money 1-3h 0.74, money 20-60m 0.72 are inside but near the edge. Censored definite misses held-out:
+v2 3.7%, v3 3.5%. Replay of 3,726 predictions: about 1.2 s.
+`node scripts/predictor-backtest.js` on this snapshot (2 min 43 s) reproduces shipped v3 as `ens_conformal` (held-out IS
+3.096, coverage 0.757); its own grid re-tune on this tuning half picks the median point + cluster-robust batched ACI
+(held-out coverage 0.805, IS 3.204: covers better but scores worse than shipped; reported, not adopted).
+
+### Result
+Tuning half (objective = IS + coverage penalty; v3 4.098): **Kc 30 + cycleAci 3.880**, Kc 100 + cycleAci 4.040, Kc 300 +
+cycleAci 4.073, Kc 300 4.087, Kc 100 4.139, Kc 30 4.157. Chosen: `cycleBand 30, cycleAci true` (5.3% better than v3 on
+tuning). The scratch implementation with `cycleBand 0` reproduced v3 exactly (0 differing predictions).
+
+| held-out (made >= 11-20 01:44) | v3 | phase band (Kc 30, own ACI) | change |
+|---|---|---|---|
+| interval score | 3.096 | 3.045 | −1.7%, paired CI [−0.254, +0.177] (includes 0) |
+| coverage | 0.757 | 0.765 | toward 80% |
+| early / late | 0.096 / 0.147 | 0.104 / 0.131 | |
+| median log err, every bucket | — | — | identical (point unchanged, as designed) |
+| money >3h (n 211): coverage, IS | 0.645, 3.78 | 0.739, 3.31 | −12% |
+| money 1-3h (n 81): coverage, IS | 0.691, 3.68 | 0.753, 3.50 | −5% |
+| money 20-60m (n 43): coverage, IS | 0.674, 3.93 | 0.721, 3.44 | −12% |
+| rep >3h (n 286): coverage, IS | 0.762, 3.67 | 0.787, 3.99 | +9% (worse) |
+| rep 1-3h (n 134): coverage, IS | 0.881, 0.41 | 0.746, 0.49 | +21% (worse) |
+| level >3h (n 45): coverage, IS | 0.800, 5.64 | 0.711, 5.47 | −3% |
+| by phase, coverage: rep c0 / c1 / c2 | 0.52 / 0.60 / 0.87 | 0.74 / 0.69 / 0.80 | toward 80% in every rep phase |
+| by phase, coverage: money c0 / c1 / c2 | 0.58 / 0.65 / 0.68 | 0.75 / 0.69 / 0.75 | toward 80% in every money phase |
+| censored definite misses | 3.5% | 2.7% | better |
+| new rows (made >= 11-23 13:15), IS | 3.349 | 3.316 | −1.0%, paired CI [−0.521, +0.395] (5 cycles) |
+| whole snapshot, IS | 3.311 | 3.160 | −4.6%, paired CI [−0.379, +0.021] |
+| replay time | 1.12 s | 1.50 s | +33% (about 0.4 s more per calibration) |
+
+Verdict: **rejected.** Interval score improves 1.7%, not 5%, and the CI includes 0. Coverage moves toward 80% and
+point error is unchanged, so only the main rule fails.
+
+Learned: the phase split does what it was meant to do: the early-cycle phases (c0, c1) were under-covered (rep c0 0.52,
+money c0 0.58) and late rep (c2 0.87) over-covered, and the phase cells pull all six kind x phase cells toward 80%.
+It earns its keep in money (IS −5% to −12% in the three money buckets with n >= 30, coverage +5 to +9 points) and costs
+it in rep (rep 1-3h and >3h IS +9% to +21%: the late-cycle rep band, now its own cell, narrows and is scored against
+very small residuals, so every miss is expensive). The two cancel overall. Found after looking at held-out data, so a
+hypothesis, not a result: phase bands for money only (`cycleBand` scoped by kind). If tested, it gets its own
+pre-registration and only rows made after 2026-11-26 13:08 UTC count as held-out. Next backlog item: (e) quantile
+regression on features with conformal correction.
