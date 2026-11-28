@@ -454,3 +454,96 @@ asked for ("update `DEFAULTS` only through the tuning split"). It still needs it
 made after this snapshot (2026-11-27 13:01 UTC) as the held-out half, before any default changes.
 Next backlog item: (e) quantile regression on features with conformal correction. A retune of `DEFAULTS` and a
 money-only phase band each deserve their own pre-registration.
+
+## Run 2026-11-28 — experiment (e): quantile regression on features + conformal correction
+
+Data: snapshot 2026-11-28 ~13:00 UTC (BN3, install #180). `pred2.txt` tail (`tailLines` is now capped at 5,000 lines,
+about 1.4 MB): 2,502 predictions (first 2026-11-19 18:09 UTC, last 2026-11-28 12:54 UTC), 1,445 resolved, 1,013
+voided by an install, 44 open, 13 install cycles; `install-log.txt` 179 lines (2 installs since the last run). New since
+the 2026-11-27 run (resolved at or after 2026-11-27 13:10 UTC): 151 resolved outcomes (107 made after its snapshot,
+3 cycles).
+
+### Pre-registration (written before the experiment ran)
+- Hypothesis: v3's band is a cell constant (kind x bucket quantiles of the honest residual), but the residual's
+  spread and skew depend on features known at prediction time: how far into the install cycle the prediction is made
+  (run 11-27: money >3h made in the first 4 h lands early 41-44% of the time vs 6% later), the horizon itself, how much
+  the base models disagree, and how far v3's point sits from v2's. Linear quantile regression of the honest residual
+  r = ln(actual / v3 point) on those features gives a per-prediction 10% / 90% edge; a conformal correction on top
+  (asymmetric CQR, Romano et al. 2019: per-edge scores E_lo = q10(x) - r, E_hi = r - q90(x), their empirical quantile
+  per kind x bucket, shrunk toward the kind cell, with the shipped per-edge ACI) keeps coverage honest. This should
+  lower the interval score without touching the point.
+- Candidate (scratch, would be a pure predcal.js option `bandModel: "qr"`, off by default, no new ns calls): the point
+  is v3's as shipped (median error therefore unchanged by construction). Per kind (rep, money, level), a linear QR at
+  tau 0.1 and 0.9 is refitted on that kind's last W resolved outcomes (knownAt <= made only) after every resolution
+  batch, by IRLS on the pinball loss with standardised features and a small ridge (1e-3). Until a kind has 60
+  outcomes, its predictions use v3's band unchanged. Conformal scores use the last 400 per kind x bucket, shrinkK 30,
+  ACI gamma 0.1 per edge (the shipped values).
+- Features: F1 = intercept, ln(1 + hours since install), ln(v3 point in hours); F2 = F1 + base-model dispersion (sd of
+  ln predictions) + ln(v2 point / v3 point) (0 when v2 is missing). Deviation from the backlog text, stated in advance:
+  RAM, income rate, rep rate and hack level are not in `pred2.txt` records, so they are not available to the backtest;
+  testing them needs new logging first.
+- Grid (tuning half only, 4 configs): feature set {F1, F2} x W {400, 1000}. Choose the lowest `objective()` of
+  scripts/predictor-backtest.js (interval score + 10 x coverage distance beyond 0.02) on the tuning half; that one
+  config is scored on the held-out half once, whatever its tuning rank against v3.
+- Windows: tuning = predictions made before the snapshot's median `made` (2026-11-24 02:04 UTC; 748 resolved);
+  held-out = made at or after it (697 resolved, 8 install cycles). Rolling-origin replay over the whole snapshot (no
+  look-ahead). Also reported on rows made after 2026-11-27 13:01 UTC (never seen by any lab run).
+- Metric: held-out interval score (log space, alpha 0.2), paired difference candidate - v3 with a 95% block bootstrap
+  over install cycles (2,000 resamples, seed 7); secondary: coverage, early / late, per-bucket coverage and IS,
+  censored definite misses, replay time.
+- Acceptance: the standing rule above. Caveat stated in advance: 8 held-out cycles, so the bootstrap CI will be wide;
+  the snapshot is shorter than earlier runs (5,000-line cap), so the QR's early fits run on little data.
+
+### Baseline backtest (shipped v3 `DEFAULTS`, 2026-11-28 snapshot; 95% block-bootstrap CIs over install cycles)
+| window | n | cycles | v2 coverage [CI] | v3 coverage [CI] | v2 IS | v3 IS | v2 median log err | v3 median log err | paired v3 − v2 IS [CI] |
+|---|---|---|---|---|---|---|---|---|---|
+| this run's held-out (made ≥ 11-24 02:04) | 697 | 8 | 0.554 [0.39, 0.70] | 0.747 [0.60, 0.87] | 3.07 | 3.00 | 0.130 | 0.090 | −0.07 [−0.46, +0.16] |
+| new since the 11-27 run (made ≥ 11-27 13:01) | 107 | 3 | 0.813 [0.66, 0.98] | 0.841 [0.71, 0.88] | 2.00 | 1.59 | 0.107 | 0.034 | −0.41 [−0.76, −0.01] |
+| 11-27 run's held-out window (made ≥ 11-21 00:26) | 1,232 | 11 | 0.618 [0.49, 0.72] | 0.758 [0.63, 0.85] | 2.71 | 3.08 | 0.126 | 0.124 | +0.37 [−0.18, +0.77] |
+| new since the 11-23 run (made ≥ 11-23 13:15) | 770 | 8 | 0.590 [0.43, 0.75] | 0.770 [0.64, 0.90] | 2.82 | 2.85 | 0.110 | 0.088 | +0.04 [−0.38, +0.33] |
+| whole snapshot | 1,445 | 13 | 0.598 [0.48, 0.70] | 0.757 [0.64, 0.83] | 2.99 | 3.45 | 0.146 | 0.157 | +0.47 [−0.06, +0.94] |
+
+Against the 11-27 log on the same window (made ≥ 11-23 13:15; this snapshot starts 11-19, the last one 11-13): v3
+coverage 0.756 → 0.770, interval score 2.98 → 2.85, median log error 0.082 → 0.088. On the newest rows (3 cycles) v3
+beats v2 on interval score with a CI that just excludes 0 (only 3 cycles, so weak evidence), and its point error is a
+third of v2's. Held-out v3 cells with n >= 30 outside 70-90%: money >3h 0.657 [0.38, 0.81] (n 105; early 33% / late 1%),
+rep >3h 0.667 [0.46, 0.90] (n 273; early 26% / late 8%), rep 20-60m 0.945 (n 55), rep 1-3h 0.907 (n 107). Live:
+liveCoverage (last 50) flags money >3h 0.64 only; `predCoverage` (last 200 resolutions) also shows rep >3h 38/74 = 0.51,
+driven by one batch (The Black Hand 150k, 2026-11-27 13:37 UTC: 20 of 22 predictions early). No v3 → v2 fallback.
+Censored definite misses, held-out: v2 3.9%, v3 4.3%. Replay of 2,502 predictions: 0.6 s.
+
+### Result
+Tuning half (objective; v3 4.019, coverage 0.765): F1 W 400 7.228, F1 W 1000 7.223, F2 W 400 6.681,
+**F2 W 1000 6.680** (coverage 0.566). Chosen by the rule: F2, W 1000, although it is far worse than v3 on tuning.
+Implementation checks before scoring held-out: the IRLS fitter recovers known 10% / 90% quantiles on synthetic
+heteroscedastic data (0.101 / 0.900 below); on tuning, the raw QR band covers 0.61 out of sample and the conformal layer
+pulls the lower edge in (median correction −0.14), because the scores it learns from come from the regime before the
+2026-11-21 break (QR rows made on 11-21 cover 0.23).
+
+| held-out (made ≥ 11-24 02:04) | v3 | QR + CQR (F2, W 1000) | change |
+|---|---|---|---|
+| interval score | 3.003 | 3.084 | +2.7%, paired CI [−0.107, +0.454] (includes 0; 8 cycles) |
+| coverage | 0.747 | 0.737 | −0.010, away from 80% |
+| early / late | 0.189 / 0.063 | 0.198 / 0.065 | slightly worse |
+| median log err, every bucket | — | — | unchanged (the point is untouched) |
+| money >3h (n 105): coverage, IS | 0.657, 3.60 | 0.733, 2.69 | −25% IS, coverage toward 80% |
+| money 1-3h (n 44): coverage, IS | 0.773, 3.17 | 0.886, 3.19 | +1% IS |
+| rep >3h (n 273): coverage, IS | 0.667, 4.12 | 0.659, 4.52 | +10% IS |
+| rep 1-3h (n 107): coverage, IS | 0.907, 0.19 | 0.766, 0.50 | +157% IS |
+| rep 20-60m (n 55): coverage, IS | 0.945, 0.42 | 0.836, 0.57 | +35% IS |
+| censored definite misses | 4.3% | 3.1% | better |
+| new rows (made ≥ 11-27 13:01), IS | 1.589 | 1.946 | +22.5%, paired CI [−0.01, +0.74] (3 cycles) |
+| whole snapshot, IS | 3.450 | 3.835 | +11.2%, paired CI [−0.15, +1.22] |
+| replay time | 0.6 s | +0.65 s | about double (a QR refit per resolution batch) |
+
+Verdict: **rejected.** The interval score gets worse, not 5% better, and coverage moves away from 80%. Point error is
+unchanged by construction.
+
+Learned: a linear model of the band on phase, horizon, dispersion and the v2/v3 gap helps money >3h again (−25% IS,
+the same early-cycle effect the 11-27 run found with phase cells) but hurts the short rep buckets, where v3's cell
+quantiles are already tight (rep 1-3h median error 0.008) and a pooled per-kind regression spreads the long-horizon
+spread onto them. The conformal layer cannot rescue it across a regime break because its scores resolve hours later.
+Twice now the money >3h band has improved with phase information while every pooled change hurts rep; the cleanest
+remaining test is a money-only phase band (pre-register separately). Features the backlog named (RAM, income rate, rep
+rate, hack level) are not logged in `pred2.txt`; logging them is a prerequisite for a fair (e). Next backlog item:
+(f) local-linear-trend / change-point base model.
